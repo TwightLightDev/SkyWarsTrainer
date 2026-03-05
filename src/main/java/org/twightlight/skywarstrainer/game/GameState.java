@@ -1,7 +1,6 @@
 package org.twightlight.skywarstrainer.game;
 
 import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
-import org.twightlight.skywarstrainer.util.TickTimer;
 
 import javax.annotation.Nonnull;
 

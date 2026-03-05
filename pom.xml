@@ -59,6 +59,13 @@
             <type>jar</type>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>org.twightlight</groupId>
+            <artifactId>LostSkyWars</artifactId>
+            <version>2.5.00</version>
+            <type>jar</type>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <build>
