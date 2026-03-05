@@ -10,13 +10,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.twightlight.skywars.arena.Arena;
 import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
-import org.twightlight.skywarstrainer.awareness.ChestLocator;
-import org.twightlight.skywarstrainer.awareness.FallDamageEstimator;
-import org.twightlight.skywarstrainer.awareness.IslandGraph;
-import org.twightlight.skywarstrainer.awareness.LavaDetector;
-import org.twightlight.skywarstrainer.awareness.MapScanner;
-import org.twightlight.skywarstrainer.awareness.ThreatMap;
-import org.twightlight.skywarstrainer.awareness.VoidDetector;
+import org.twightlight.skywarstrainer.awareness.*;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.util.PacketUtil;
@@ -997,6 +991,10 @@ public class TrainerBot {
     @Nullable
     public GamePhaseTracker getGamePhaseTracker() {
         return gamePhaseTracker;
+    }
+
+    public SkyWarsTrainerPlugin getPlugin() {
+        return plugin;
     }
 
     /**
