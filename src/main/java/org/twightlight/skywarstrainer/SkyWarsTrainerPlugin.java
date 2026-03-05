@@ -3,10 +3,6 @@ package org.twightlight.skywarstrainer;
 import org.twightlight.skywarstrainer.bot.BotManager;
 import org.twightlight.skywarstrainer.config.ConfigManager;
 import org.twightlight.skywarstrainer.config.DifficultyConfig;
-import org.twightlight.skywarstrainer.game.GameState;
-import org.twightlight.skywarstrainer.game.PlayerTracker;
-
-import net.citizensnpcs.api.CitizensAPI;
 
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -45,12 +41,6 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
 
     /** Manages bot spawning, despawning, pooling, and per-bot tick distribution. */
     private BotManager botManager;
-
-    /** Tracks players alive/dead and kill feed within the current game. */
-    private PlayerTracker playerTracker;
-
-    /** Tracks the current SkyWars game phase (pre-game, grace, active, deathmatch, end). */
-    private GameState gameState;
 
     /** The main repeating task ID for the bot tick loop. -1 if not running. */
     private int mainTickTaskId = -1;
@@ -92,17 +82,9 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
             return;
         }
 
-        // 5. Initialize game state tracker
-        this.gameState = new GameState(this);
-
-        // 6. Initialize player tracker
-        this.playerTracker = new PlayerTracker(this);
 
         // 7. Initialize bot manager (handles NPC creation via Citizens)
         this.botManager = new BotManager(this);
-
-        // 8. Register event listeners
-        Bukkit.getPluginManager().registerEvents(this.playerTracker, this);
 
         // 9. Start the main bot tick loop
         startTickLoop();
@@ -242,25 +224,5 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
     @Nonnull
     public BotManager getBotManager() {
         return botManager;
-    }
-
-    /**
-     * Returns the player tracker for the current game.
-     *
-     * @return the player tracker
-     */
-    @Nonnull
-    public PlayerTracker getPlayerTracker() {
-        return playerTracker;
-    }
-
-    /**
-     * Returns the current game state tracker.
-     *
-     * @return the game state
-     */
-    @Nonnull
-    public GameState getGameState() {
-        return gameState;
     }
 }

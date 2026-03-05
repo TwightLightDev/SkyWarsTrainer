@@ -8,10 +8,10 @@ import org.bukkit.Location;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.twightlight.skywars.arena.Arena;
 import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
 import org.twightlight.skywarstrainer.awareness.ChestLocator;
 import org.twightlight.skywarstrainer.awareness.FallDamageEstimator;
-import org.twightlight.skywarstrainer.awareness.GamePhaseTracker;
 import org.twightlight.skywarstrainer.awareness.IslandGraph;
 import org.twightlight.skywarstrainer.awareness.LavaDetector;
 import org.twightlight.skywarstrainer.awareness.MapScanner;
@@ -65,6 +65,8 @@ import java.util.logging.Level;
 public class TrainerBot {
 
     private final SkyWarsTrainerPlugin plugin;
+
+    private final Arena<?> arena;
 
     /** The unique identifier for this bot instance. */
     private final UUID botId;
@@ -135,7 +137,7 @@ public class TrainerBot {
     /** Estimates fall damage from current and hypothetical positions. */
     private FallDamageEstimator fallDamageEstimator;
 
-    /** Tracks the strategic game phase (early/mid/late) for decision making. */
+    /** Tracks the strategic game phase (early/mid/late) for decision-making. */
     private GamePhaseTracker gamePhaseTracker;
 
     // ═════════════════════════════════════════════════════════════
@@ -181,7 +183,7 @@ public class TrainerBot {
      * @param profile the bot's profile
      * @param skin    the skin to apply
      */
-    public TrainerBot(@Nonnull SkyWarsTrainerPlugin plugin, @Nonnull BotProfile profile, @Nonnull BotSkin skin) {
+    public TrainerBot(@Nonnull SkyWarsTrainerPlugin plugin, @Nonnull Arena<?> arena , @Nonnull BotProfile profile, @Nonnull BotSkin skin) {
         this.plugin = plugin;
         this.botId = UUID.randomUUID();
         this.profile = profile;
@@ -190,6 +192,7 @@ public class TrainerBot {
         this.destroyed = false;
         this.localTickCount = 0;
         this.staggerOffset = 0;
+        this.arena = arena;
 
         // Initialize the mistake timer based on difficulty
         int mistakeIntervalTicks = profile.getDifficultyProfile().getMistakeIntervalTicks();
@@ -827,6 +830,16 @@ public class TrainerBot {
     @Nonnull
     public String getName() {
         return skin.getDisplayName();
+    }
+
+    /**
+     * Returns the bot's arena.
+     *
+     * @return the arena
+     */
+    @Nonnull
+    public Arena<?> getArena() {
+        return arena;
     }
 
     /**
