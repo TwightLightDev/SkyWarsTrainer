@@ -5,6 +5,7 @@ import net.citizensnpcs.api.npc.NPC;
 import net.citizensnpcs.api.npc.NPCRegistry;
 
 import org.bukkit.Location;
+import org.twightlight.skywars.arena.Arena;
 import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
 import org.twightlight.skywarstrainer.config.DifficultyConfig;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
@@ -92,7 +93,7 @@ public class BotManager {
      * @return the spawned TrainerBot, or null if spawning failed
      */
     @Nullable
-    public TrainerBot spawnBot(@Nonnull Location location, @Nonnull Difficulty difficulty,
+    public TrainerBot spawnBot(Arena<?> arena, @Nonnull Location location, @Nonnull Difficulty difficulty,
                                @Nonnull List<String> personalities, @Nullable String name) {
         // Check bot count limit
         int maxBots = plugin.getConfigManager().getMaxBotsPerGame();
@@ -127,7 +128,7 @@ public class BotManager {
         }
 
         // Create and spawn the bot
-        TrainerBot bot = new TrainerBot(plugin, profile, skin);
+        TrainerBot bot = new TrainerBot(plugin, arena, profile, skin);
         bot.setStaggerOffset(staggerCounter % Math.max(1, activeBots.size() + 1));
         staggerCounter++;
 
@@ -142,7 +143,7 @@ public class BotManager {
 
         // Register with player tracker so the game tracks this bot as a "player"
         if (bot.getLivingEntity() != null) {
-            plugin.getPlayerTracker().registerAlive(bot.getLivingEntity().getUniqueId(), displayName);
+
         }
 
         plugin.getLogger().info("Spawned bot: " + displayName
@@ -159,13 +160,13 @@ public class BotManager {
      * @return the spawned bot, or null on failure
      */
     @Nullable
-    public TrainerBot spawnBot(@Nonnull Location location) {
+    public TrainerBot spawnBot(Arena<?> arena, @Nonnull Location location) {
         String defaultDiff = plugin.getConfigManager().getDefaultDifficulty();
         Difficulty difficulty = Difficulty.fromString(defaultDiff);
         if (difficulty == null) {
             difficulty = Difficulty.MEDIUM;
         }
-        return spawnBot(location, difficulty, Collections.emptyList(), null);
+        return spawnBot(arena, location, difficulty, Collections.emptyList(), null);
     }
 
     // ─── Removal ────────────────────────────────────────────────
@@ -181,7 +182,7 @@ public class BotManager {
         if (removed != null) {
             botsByName.remove(removed.getName().toLowerCase());
             if (removed.getLivingEntity() != null) {
-                plugin.getPlayerTracker().unregister(removed.getLivingEntity().getUniqueId());
+
             }
             removed.destroy();
             return true;
@@ -234,10 +235,6 @@ public class BotManager {
         if (activeBots.isEmpty()) return;
 
         long budgetNanos = maxMsPerTick * 1_000_000L;
-        long globalTick = plugin.getGameState().getGlobalTickCount();
-
-        // Tick the game state first
-        plugin.getGameState().tick();
 
         // Clean up any dead bots
         cleanupDeadBots();
@@ -387,11 +384,11 @@ public class BotManager {
      * @param personalities optional personality names
      * @return the number of bots successfully spawned
      */
-    public int fillWithBots(@Nonnull Location location, int count, @Nonnull Difficulty difficulty,
+    public int fillWithBots(Arena<?> arena, @Nonnull Location location, int count, @Nonnull Difficulty difficulty,
                             @Nonnull List<String> personalities) {
         int spawned = 0;
         for (int i = 0; i < count; i++) {
-            TrainerBot bot = spawnBot(location, difficulty, personalities, null);
+            TrainerBot bot = spawnBot(arena, location, difficulty, personalities, null);
             if (bot != null) {
                 spawned++;
             }
