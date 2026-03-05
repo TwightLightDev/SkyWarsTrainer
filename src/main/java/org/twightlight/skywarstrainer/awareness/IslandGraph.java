@@ -375,6 +375,53 @@ public class IslandGraph {
         return ((long) (x & 0x1FFFFF) << 30) | ((long) (y & 0x1FF) << 21) | (z & 0x1FFFFF);
     }
 
+    /**
+     * Checks if a given location is on the mid island.
+     *
+     * @param loc the location to check
+     * @return true if the location is on the mid island
+     */
+    public boolean isOnMidIsland(@Nonnull Location loc) {
+        if (midIsland == null) return false;
+
+        double dist = MathUtil.horizontalDistance(loc, midIsland.center);
+        return dist < 30; // same heuristic used for island detection
+    }
+
+    /**
+     * Checks if there is a bridge from the island containing the given location
+     * to the mid-island.
+     *
+     * @param loc the location to evaluate from
+     * @return true if a bridge exists to mid
+     */
+    public boolean hasBridgeToMid(@Nonnull Location loc) {
+        if (midIsland == null) return false;
+
+        Island fromIsland = null;
+        double nearestDist = Double.MAX_VALUE;
+
+        for (Island island : islands) {
+            double dist = MathUtil.horizontalDistance(loc, island.center);
+            if (dist < nearestDist && dist < 30) {
+                nearestDist = dist;
+                fromIsland = island;
+            }
+        }
+
+        if (fromIsland == null) return false;
+        if (fromIsland == midIsland) return true;
+
+        for (Bridge bridge : bridges) {
+            if ((bridge.islandA == fromIsland && bridge.islandB == midIsland) ||
+                    (bridge.islandB == fromIsland && bridge.islandA == midIsland)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // ═════════════════════════════════════════════════════════════
     //  INNER: Island
     // ═════════════════════════════════════════════════════════════
