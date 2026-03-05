@@ -1,0 +1,113 @@
+# ═══════════════════════════════════════════════════════════
+# SkyWarsTrainer — Main Configuration
+# ═══════════════════════════════════════════════════════════
+
+general:
+  # Maximum number of bots allowed in a single game
+  max-bots-per-game: 8
+  # How often the main bot loop runs (1 = every server tick, i.e. 20 TPS)
+  bot-tick-rate: 1
+  # Ticks between utility AI re-evaluations (10 = every 0.5 seconds)
+  decision-interval: 10
+  # Ticks between full map scans
+  map-scan-interval: 50
+  # Default difficulty for bots when none is specified
+  default-difficulty: MEDIUM
+  # Default number of random personalities assigned to new bots (1-3)
+  default-personality-count: 2
+  # Whether bots send fake chat messages
+  enable-chat: true
+  # Whether bots use randomized player skins
+  enable-skins: true
+  # Debug mode: logs AI decisions, BT traversal, utility scores
+  debug-mode: false
+
+performance:
+  # Maximum milliseconds per tick allowed for pathfinding calculations
+  max-pathfinding-ms-per-tick: 2
+  # Distribute bot tick processing across server ticks to avoid lag spikes
+  stagger-bot-ticks: true
+  # Cache map scan results to avoid redundant block lookups
+  cache-map-scan: true
+  # Maximum milliseconds per tick for total bot processing
+  max-total-ms-per-tick: 8
+
+game-hook:
+  # Which SkyWars plugin to hook into.
+  # Options: auto, skywarsreloaded, skywars-daboross, generic
+  plugin: "auto"
+
+skins:
+  # Use randomly selected skins from the list below
+  use-random-skins: true
+  # Pool of skin usernames to apply to bots
+  skin-list:
+    - "Steve"
+    - "Alex"
+    - "Dinnerbone"
+    - "Grumm"
+    - "Notch"
+    - "jeb_"
+    - "MHF_Pig"
+    - "MHF_Cow"
+    - "MHF_Chicken"
+    - "MHF_Villager"
+    - "MHF_Golem"
+    - "MHF_Enderman"
+    - "MHF_Blaze"
+    - "MHF_Spider"
+    - "MHF_CaveSpider"
+    - "MHF_Skeleton"
+    - "MHF_Zombie"
+    - "MHF_Creeper"
+    - "MHF_Slime"
+    - "MHF_Ghast"
+
+# Random name generation pool for bots without specified names
+random-names:
+  prefixes:
+    - "xX_"
+    - ""
+    - "Pro"
+    - "The"
+    - "Mr"
+    - "Its"
+    - "Not"
+    - "Ez"
+    - "PvP"
+    - ""
+  roots:
+    - "Player"
+    - "Gamer"
+    - "Warrior"
+    - "Shadow"
+    - "Dragon"
+    - "Phoenix"
+    - "Storm"
+    - "Blaze"
+    - "Frost"
+    - "Wolf"
+    - "Ninja"
+    - "Sniper"
+    - "Legend"
+    - "Noob"
+    - "King"
+    - "Dark"
+    - "Fire"
+    - "Ice"
+    - "Sky"
+    - "Star"
+  suffixes:
+    - "_Xx"
+    - ""
+    - "HD"
+    - "YT"
+    - "PvP"
+    - "123"
+    - "69"
+    - "420"
+    - "MC"
+    - "XD"
+    - ""
+    - "God"
+    - "_"

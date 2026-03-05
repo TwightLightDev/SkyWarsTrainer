@@ -1,0 +1,215 @@
+# ═══════════════════════════════════════════════════════════
+# SkyWarsTrainer — Difficulty Configuration
+# ═══════════════════════════════════════════════════════════
+# Each difficulty level defines numeric parameters that every
+# subsystem reads. Do NOT use if/else per difficulty; subsystems
+# read these parameters and scale smoothly.
+
+difficulties:
+  BEGINNER:
+    # Reaction time range in milliseconds
+    reactionTimeMin: 600
+    reactionTimeMax: 1200
+    # Aim accuracy from 0.0 (terrible) to 1.0 (perfect)
+    aimAccuracy: 0.3
+    # Maximum degrees the bot can rotate per tick toward a target
+    aimSpeedDegPerTick: 3.0
+    # Clicks per second for melee attacks
+    maxCPS: 5
+    # Variance in CPS (actual CPS = random in [maxCPS - variance, maxCPS])
+    cpsVariance: 3.0
+    # Probability of performing a sprint-reset on each hit
+    sprintResetChance: 0.0
+    # Efficiency of W-tap timing (0 = never, 1 = frame-perfect)
+    wTapEfficiency: 0.0
+    # How aggressively the bot strafes during combat (0 = stationary)
+    strafeIntensity: 0.1
+    # How unpredictable strafe patterns are (0 = simple L-R)
+    strafeUnpredictability: 0.0
+    # Probability of block-hitting between melee swings
+    blockHitChance: 0.0
+    # Accuracy for projectile aiming (snowball, bow, egg, rod)
+    projectileAccuracy: 0.15
+    # Blocks placed per second while bridging
+    bridgeSpeed: 1.5
+    # Highest bridge technique the bot can attempt
+    # Options: NORMAL, SPEED, NINJA, MOONWALK, GOD
+    bridgeMaxType: "NORMAL"
+    # Probability of a bridging mistake per block placed
+    bridgeFailRate: 0.15
+    # Multiplier on how fast the bot loots chests
+    lootSpeedMultiplier: 0.5
+    # How well the bot decides which items to take (0 = random, 1 = optimal)
+    lootDecisionQuality: 0.3
+    # Skill at managing inventory (equip speed, organization)
+    inventoryManageSkill: 0.2
+    # How well the hotbar is organized (0 = chaotic, 1 = perfect layout)
+    hotbarOrganization: 0.1
+    # Overall quality of strategic decisions (noise reduction in utility AI)
+    decisionQuality: 0.3
+    # Block radius the bot can detect enemies, chests, terrain
+    awarenessRadius: 15
+    # HP fraction below which the bot considers fleeing
+    fleeHealthThreshold: 0.15
+    # Skill with ender pearl usage (0 = won't use, 1 = clutch pearls)
+    pearlUsageIQ: 0.0
+    # Skill with potion usage (timing, type selection)
+    potionUsageIQ: 0.0
+    # Average maximum combo length the bot can sustain
+    comboLength: 1
+    # Skill with fishing rod (aim, timing, combo follow-up)
+    rodUsageSkill: 0.0
+    # Chance to place blocks tactically during combat
+    blockPlaceChance: 0.05
+    # How aggressively the bot places blocks to break enemy combos
+    comboBreakPriority: 0.1
+    # Percentage of incoming knockback the bot can reduce via movement countering
+    antiKBReduction: 0.0
+    # Success chance for water bucket MLG when falling
+    waterBucketMLG: 0.0
+    # Number of intentional mistakes per minute (makes bot feel human)
+    mistakeFrequency: 12.0
+    # Constant subtle head movement noise when idle (degrees)
+    headMovementNoise: 0.3
+    # Chance to panic-drop items when near death
+    itemDropOnDeathPanic: 0.4
+
+  EASY:
+    reactionTimeMin: 400
+    reactionTimeMax: 800
+    aimAccuracy: 0.5
+    aimSpeedDegPerTick: 5.0
+    maxCPS: 7
+    cpsVariance: 2.0
+    sprintResetChance: 0.15
+    wTapEfficiency: 0.1
+    strafeIntensity: 0.3
+    strafeUnpredictability: 0.2
+    blockHitChance: 0.05
+    projectileAccuracy: 0.3
+    bridgeSpeed: 2.5
+    bridgeMaxType: "NORMAL"
+    bridgeFailRate: 0.08
+    lootSpeedMultiplier: 0.7
+    lootDecisionQuality: 0.5
+    inventoryManageSkill: 0.4
+    hotbarOrganization: 0.3
+    decisionQuality: 0.5
+    awarenessRadius: 25
+    fleeHealthThreshold: 0.2
+    pearlUsageIQ: 0.1
+    potionUsageIQ: 0.2
+    comboLength: 2
+    rodUsageSkill: 0.1
+    blockPlaceChance: 0.2
+    comboBreakPriority: 0.3
+    antiKBReduction: 0.0
+    waterBucketMLG: 0.0
+    mistakeFrequency: 8.0
+    headMovementNoise: 0.2
+    itemDropOnDeathPanic: 0.25
+
+  MEDIUM:
+    reactionTimeMin: 250
+    reactionTimeMax: 500
+    aimAccuracy: 0.7
+    aimSpeedDegPerTick: 10.0
+    maxCPS: 10
+    cpsVariance: 1.5
+    sprintResetChance: 0.5
+    wTapEfficiency: 0.4
+    strafeIntensity: 0.5
+    strafeUnpredictability: 0.4
+    blockHitChance: 0.2
+    projectileAccuracy: 0.5
+    bridgeSpeed: 4.0
+    bridgeMaxType: "NINJA"
+    bridgeFailRate: 0.03
+    lootSpeedMultiplier: 1.0
+    lootDecisionQuality: 0.7
+    inventoryManageSkill: 0.6
+    hotbarOrganization: 0.6
+    decisionQuality: 0.7
+    awarenessRadius: 40
+    fleeHealthThreshold: 0.3
+    pearlUsageIQ: 0.4
+    potionUsageIQ: 0.5
+    comboLength: 3
+    rodUsageSkill: 0.3
+    blockPlaceChance: 0.3
+    comboBreakPriority: 0.5
+    antiKBReduction: 0.15
+    waterBucketMLG: 0.2
+    mistakeFrequency: 4.0
+    headMovementNoise: 0.12
+    itemDropOnDeathPanic: 0.1
+
+  HARD:
+    reactionTimeMin: 150
+    reactionTimeMax: 300
+    aimAccuracy: 0.85
+    aimSpeedDegPerTick: 18.0
+    maxCPS: 13
+    cpsVariance: 1.0
+    sprintResetChance: 0.8
+    wTapEfficiency: 0.7
+    strafeIntensity: 0.75
+    strafeUnpredictability: 0.6
+    blockHitChance: 0.45
+    projectileAccuracy: 0.7
+    bridgeSpeed: 6.0
+    bridgeMaxType: "NINJA"
+    bridgeFailRate: 0.01
+    lootSpeedMultiplier: 1.3
+    lootDecisionQuality: 0.85
+    inventoryManageSkill: 0.8
+    hotbarOrganization: 0.85
+    decisionQuality: 0.85
+    awarenessRadius: 60
+    fleeHealthThreshold: 0.35
+    pearlUsageIQ: 0.7
+    potionUsageIQ: 0.8
+    comboLength: 5
+    rodUsageSkill: 0.6
+    blockPlaceChance: 0.45
+    comboBreakPriority: 0.7
+    antiKBReduction: 0.3
+    waterBucketMLG: 0.6
+    mistakeFrequency: 2.0
+    headMovementNoise: 0.07
+    itemDropOnDeathPanic: 0.02
+
+  EXPERT:
+    reactionTimeMin: 80
+    reactionTimeMax: 150
+    aimAccuracy: 0.95
+    aimSpeedDegPerTick: 25.0
+    maxCPS: 16
+    cpsVariance: 0.5
+    sprintResetChance: 0.95
+    wTapEfficiency: 0.92
+    strafeIntensity: 0.9
+    strafeUnpredictability: 0.85
+    blockHitChance: 0.7
+    projectileAccuracy: 0.88
+    bridgeSpeed: 9.0
+    bridgeMaxType: "GOD"
+    bridgeFailRate: 0.002
+    lootSpeedMultiplier: 1.6
+    lootDecisionQuality: 0.95
+    inventoryManageSkill: 0.95
+    hotbarOrganization: 0.98
+    decisionQuality: 0.95
+    awarenessRadius: 80
+    fleeHealthThreshold: 0.4
+    pearlUsageIQ: 0.9
+    potionUsageIQ: 0.95
+    comboLength: 8
+    rodUsageSkill: 0.9
+    blockPlaceChance: 0.7
+    comboBreakPriority: 0.95
+    antiKBReduction: 0.45
+    waterBucketMLG: 0.9
+    mistakeFrequency: 0.5
+    headMovementNoise: 0.03
+    itemDropOnDeathPanic: 0.0

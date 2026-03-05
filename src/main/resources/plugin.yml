@@ -1,0 +1,60 @@
+name: SkyWarsTrainer
+version: '${project.version}'
+main: org.twightlight.skywarstrainer.SkyWarsTrainerPlugin
+description: Intelligent SkyWars practice bots with personality-driven AI.
+author: Twightlight
+depend: [Citizens]
+softdepend: [LostSkyWars]
+
+commands:
+  swt:
+    description: SkyWars Trainer Bot management commands
+    usage: /<command> <subcommand> [args...]
+    permission: skywarstrainer.spawn
+    aliases: [skywarstrainer, trainer]
+
+permissions:
+  skywarstrainer.*:
+    description: All SkyWarsTrainer permissions
+    default: op
+    children:
+      skywarstrainer.spawn: true
+      skywarstrainer.remove: true
+      skywarstrainer.list: true
+      skywarstrainer.modify: true
+      skywarstrainer.stats: true
+      skywarstrainer.debug: true
+      skywarstrainer.preset: true
+      skywarstrainer.fill: true
+      skywarstrainer.control: true
+      skywarstrainer.teleport: true
+  skywarstrainer.spawn:
+    description: Spawn trainer bots
+    default: op
+  skywarstrainer.remove:
+    description: Remove trainer bots
+    default: op
+  skywarstrainer.list:
+    description: List active trainer bots
+    default: op
+  skywarstrainer.modify:
+    description: Change bot difficulty and personality
+    default: op
+  skywarstrainer.stats:
+    description: View bot statistics
+    default: op
+  skywarstrainer.debug:
+    description: Toggle debug mode for bots
+    default: op
+  skywarstrainer.preset:
+    description: Save and load bot presets
+    default: op
+  skywarstrainer.fill:
+    description: Fill a SkyWars game with bots
+    default: op
+  skywarstrainer.control:
+    description: Pause and resume bot AI
+    default: op
+  skywarstrainer.teleport:
+    description: Teleport to a bot
+    default: op
