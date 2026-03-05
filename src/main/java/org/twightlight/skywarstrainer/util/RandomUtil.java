@@ -128,7 +128,7 @@ public final class RandomUtil {
      */
     public static double gaussianClamped(double mean, double stdDev, double min, double max) {
         double value = gaussian(mean, stdDev);
-        return com.twightlight.skywarstrainer.util.MathUtil.clamp(value, min, max);
+        return MathUtil.clamp(value, min, max);
     }
 
     /**

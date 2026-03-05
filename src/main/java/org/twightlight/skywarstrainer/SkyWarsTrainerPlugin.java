@@ -1,10 +1,10 @@
-package com.twightlight.skywarstrainer;
+package org.twightlight.skywarstrainer;
 
-import com.twightlight.skywarstrainer.bot.BotManager;
-import com.twightlight.skywarstrainer.config.ConfigManager;
-import com.twightlight.skywarstrainer.config.DifficultyConfig;
-import com.twightlight.skywarstrainer.game.GameState;
-import com.twightlight.skywarstrainer.game.PlayerTracker;
+import org.twightlight.skywarstrainer.bot.BotManager;
+import org.twightlight.skywarstrainer.config.ConfigManager;
+import org.twightlight.skywarstrainer.config.DifficultyConfig;
+import org.twightlight.skywarstrainer.game.GameState;
+import org.twightlight.skywarstrainer.game.PlayerTracker;
 
 import net.citizensnpcs.api.CitizensAPI;
 
