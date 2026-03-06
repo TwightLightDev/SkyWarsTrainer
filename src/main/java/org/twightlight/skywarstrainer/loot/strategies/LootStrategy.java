@@ -1,28 +1,22 @@
-// ═══════════════════════════════════════════════════════════════════
-// File: src/main/java/org/twightlight/skywarstrainer/loot/strategies/LootStrategy.java
-// ═══════════════════════════════════════════════════════════════════
 package org.twightlight.skywarstrainer.loot.strategies;
 
-import org.bukkit.Location;
+import org.bukkit.block.Chest;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 
 import javax.annotation.Nonnull;
 
 /**
- * Interface for all chest looting strategies.
+ * Interface for all looting strategies.
  *
- * <p>Each strategy defines a specific approach to looting chests:
- * how the bot opens/breaks the chest, which items to take, and how
- * fast the looting proceeds. The LootEngine selects the appropriate
- * strategy based on personality and difficulty.</p>
- *
- * <p>Strategies are stateful and maintain per-loot-action state (current
- * chest, items taken, tick counter). They are reset between chest interactions.</p>
+ * <p>A LootStrategy defines how a bot interacts with a chest to acquire items.
+ * Different strategies trade off speed, thoroughness, and enemy denial. The
+ * {@link org.twightlight.skywarstrainer.loot.LootEngine} selects the appropriate
+ * strategy based on the bot's personality and difficulty.</p>
  */
 public interface LootStrategy {
 
     /**
-     * Returns the unique name of this loot strategy.
+     * Returns the human-readable name of this strategy.
      *
      * @return the strategy name
      */
@@ -30,49 +24,46 @@ public interface LootStrategy {
     String getName();
 
     /**
-     * Initializes this strategy for looting a specific chest.
+     * Initializes the strategy for looting a specific chest.
+     * Must be called before the first {@link #tick(TrainerBot)}.
      *
-     * @param bot           the bot performing the loot
-     * @param chestLocation the location of the chest to loot
+     * @param bot   the bot performing the loot
+     * @param chest the chest to loot
      */
-    void initialize(@Nonnull TrainerBot bot, @Nonnull Location chestLocation);
+    void initialize(@Nonnull TrainerBot bot, @Nonnull Chest chest);
 
     /**
-     * Ticks one frame of the looting process. Called each tick while the
-     * bot is actively looting a chest.
+     * Performs one tick of the looting sequence.
      *
-     * @param bot the bot
+     * @param bot the bot performing the loot
      * @return the result of this tick
      */
     @Nonnull
     LootTickResult tick(@Nonnull TrainerBot bot);
 
     /**
-     * Resets the strategy's internal state. Called when looting ends or
-     * is interrupted.
+     * Resets all internal state for reuse.
      */
     void reset();
 
     /**
-     * Returns the number of items taken from the current chest.
+     * Returns true if this strategy is finished (all items processed or chest empty).
      *
-     * @return items taken count
+     * @return true if looting is complete
      */
-    int getItemsTaken();
+    boolean isComplete();
 
     /**
-     * Result of a single loot tick.
+     * Result of a single tick of loot execution.
      */
     enum LootTickResult {
-        /** Walking toward the chest. */
-        APPROACHING,
-        /** Opening the chest / breaking it. */
-        OPENING,
-        /** Taking items from the chest. */
-        LOOTING,
-        /** Finished looting this chest. */
+        /** An item was taken this tick. */
+        ITEM_TAKEN,
+        /** The strategy is in progress (approaching, opening, selecting). */
+        IN_PROGRESS,
+        /** Looting is complete — chest fully processed. */
         COMPLETE,
-        /** Loot failed (chest gone, inventory full, interrupted). */
+        /** Looting failed (chest destroyed, inventory full, interrupted). */
         FAILED
     }
 }

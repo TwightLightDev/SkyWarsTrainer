@@ -222,6 +222,97 @@ public class ThreatMap {
     }
 
     /**
+     * Returns the nearest visible enemy as a Bukkit Player entity.
+     *
+     * <p>This is a convenience method for systems (like BridgePathPlanner) that
+     * need a direct Player reference rather than a ThreatEntry. It resolves the
+     * nearest ThreatEntry to its actual Player object by searching nearby entities.</p>
+     *
+     * @return the nearest visible enemy Player, or null if none found
+     */
+    @Nullable
+    public Player getNearestEnemy() {
+        ThreatEntry nearest = getNearestThreat();
+        if (nearest == null) return null;
+
+        // Resolve the UUID to an actual Player entity
+        LivingEntity botEntity = bot.getLivingEntity();
+        if (botEntity == null) return null;
+
+        // Search nearby entities for the matching player UUID
+        double awarenessRadius = bot.getDifficultyProfile().getAwarenessRadius();
+        for (Entity entity : botEntity.getNearbyEntities(awarenessRadius, awarenessRadius, awarenessRadius)) {
+            if (entity instanceof Player && entity.getUniqueId().equals(nearest.playerId)) {
+                return (Player) entity;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Returns all currently visible enemies as Bukkit Player entities.
+     *
+     * <p>Resolves each visible ThreatEntry to its actual Player object.
+     * Entries that cannot be resolved (player logged off, too far) are excluded.</p>
+     *
+     * @return list of visible enemy Players (never null, may be empty)
+     */
+    @Nonnull
+    public List<Player> getVisibleEnemyPlayers() {
+        List<Player> result = new ArrayList<>();
+        LivingEntity botEntity = bot.getLivingEntity();
+        if (botEntity == null) return result;
+
+        double awarenessRadius = bot.getDifficultyProfile().getAwarenessRadius();
+        List<ThreatEntry> visible = getVisibleThreats();
+        if (visible.isEmpty()) return result;
+
+        // Build a set of visible UUIDs for quick lookup
+        java.util.Set<UUID> visibleIds = new java.util.HashSet<>();
+        for (ThreatEntry entry : visible) {
+            visibleIds.add(entry.playerId);
+        }
+
+        // Single pass over nearby entities to resolve all visible threats
+        for (Entity entity : botEntity.getNearbyEntities(awarenessRadius, awarenessRadius, awarenessRadius)) {
+            if (entity instanceof Player && visibleIds.contains(entity.getUniqueId())) {
+                result.add((Player) entity);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Returns the nearest enemy Player to a specific location.
+     * Useful for checking threats near a bridge destination or other point of interest.
+     *
+     * @param location the reference location
+     * @return the nearest visible enemy Player to that location, or null
+     */
+    @Nullable
+    public Player getNearestEnemyTo(@Nonnull Location location) {
+        List<Player> enemies = getVisibleEnemyPlayers();
+        if (enemies.isEmpty()) return null;
+
+        Player nearest = null;
+        double nearestDistSq = Double.MAX_VALUE;
+
+        for (Player enemy : enemies) {
+            if (enemy.isDead() || !enemy.isValid()) continue;
+            double distSq = location.distanceSquared(enemy.getLocation());
+            if (distSq < nearestDistSq) {
+                nearestDistSq = distSq;
+                nearest = enemy;
+            }
+        }
+
+        return nearest;
+    }
+
+
+    /**
      * Returns the heat level at a given location. Higher heat means more
      * enemy activity in the area.
      *
@@ -341,6 +432,8 @@ public class ThreatMap {
             this.isVisible = false;
             this.visibleThisTick = false;
         }
+
+
 
         /**
          * Returns the distance from this threat to a location.

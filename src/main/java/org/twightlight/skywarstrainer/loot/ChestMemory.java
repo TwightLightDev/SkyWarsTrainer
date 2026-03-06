@@ -1,222 +1,137 @@
-// ═══════════════════════════════════════════════════════════════════
-// File: src/main/java/org/twightlight/skywarstrainer/loot/ChestMemory.java
-// ═══════════════════════════════════════════════════════════════════
 package org.twightlight.skywarstrainer.loot;
 
 import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-import org.twightlight.skywarstrainer.bot.TrainerBot;
-import org.twightlight.skywarstrainer.awareness.ChestLocator;
-import org.twightlight.skywarstrainer.util.MathUtil;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Per-bot memory of chest locations and their looted states.
+ * Per-bot memory of chest locations and their looted state.
  *
- * <p>ChestMemory extends beyond ChestLocator by storing the bot's subjective
- * knowledge about chests: what items were found, which chests enemies looted,
- * and inferences about enemy gear based on observations.</p>
- *
- * <p>This allows the bot to make intelligent looting decisions:
- * <ul>
- *   <li>Skip chests it already looted</li>
- *   <li>Skip chests it saw enemies loot</li>
- *   <li>Infer enemy chest quality from observed enemy gear</li>
- *   <li>Prioritize chests that likely haven't been looted</li>
- * </ul></p>
+ * <p>Tracks which chests the bot has discovered, whether they've been looted,
+ * and the quality of items found. This enables intelligent loot routing —
+ * the bot can skip chests it already looted and prioritize unvisited ones.</p>
  */
 public class ChestMemory {
 
-    private final TrainerBot bot;
+    /** Chest records keyed by block position encoded as a long. */
+    private final Map<Long, ChestRecord> records;
 
-    /** Extended chest data keyed by block position string. */
-    private final Map<String, ChestRecord> records;
-
-    /** Islands inferred to have been looted by enemies. */
-    private final Set<String> enemyLootedIslands;
-
-    /**
-     * Creates a new ChestMemory for the given bot.
-     *
-     * @param bot the owning trainer bot
-     */
-    public ChestMemory(@Nonnull TrainerBot bot) {
-        this.bot = bot;
+    public ChestMemory() {
         this.records = new HashMap<>();
-        this.enemyLootedIslands = new HashSet<>();
     }
 
     /**
-     * Records the bot's observation of a chest.
+     * Records a chest at the given location.
      *
-     * @param location the chest location
-     * @param looted   whether the chest was looted
-     * @param quality  quality rating of items found (0-10, or -1 if unknown)
-     * @param items    items found in the chest (can be empty)
+     * @param location the chest block location
      */
-    public void recordChest(@Nonnull Location location, boolean looted, int quality,
-                            @Nonnull List<ItemStack> items) {
-        String key = locationKey(location);
-        ChestRecord record = records.computeIfAbsent(key, k -> new ChestRecord(location.clone()));
-        record.isLooted = looted;
-        record.lootedByBot = looted;
-        record.qualityRating = quality;
-        record.lastVisitTick = bot.getLocalTickCount();
-        record.itemsFound.clear();
-        record.itemsFound.addAll(items);
+    public void recordChest(@Nonnull Location location) {
+        long key = encodeLocation(location);
+        if (!records.containsKey(key)) {
+            records.put(key, new ChestRecord(location.clone()));
+        }
     }
 
     /**
-     * Records that an enemy was seen looting a chest at this location.
+     * Marks a chest as looted by this bot.
+     *
+     * @param location the chest location
+     * @param quality  the item quality rating (0-10)
+     */
+    public void markLooted(@Nonnull Location location, double quality) {
+        long key = encodeLocation(location);
+        ChestRecord record = records.get(key);
+        if (record == null) {
+            record = new ChestRecord(location.clone());
+            records.put(key, record);
+        }
+        record.looted = true;
+        record.itemQuality = quality;
+    }
+
+    /**
+     * Marks a chest as looted by an enemy (observed).
      *
      * @param location the chest location
      */
-    public void recordEnemyLooted(@Nonnull Location location) {
-        String key = locationKey(location);
-        ChestRecord record = records.computeIfAbsent(key, k -> new ChestRecord(location.clone()));
-        record.isLooted = true;
+    public void markLootedByEnemy(@Nonnull Location location) {
+        long key = encodeLocation(location);
+        ChestRecord record = records.get(key);
+        if (record == null) {
+            record = new ChestRecord(location.clone());
+            records.put(key, record);
+        }
         record.lootedByEnemy = true;
     }
 
     /**
-     * Infers that an island has been looted based on observing an enemy's gear.
-     * If we see an enemy with diamond gear, their island's chests likely had
-     * good loot and have been emptied.
-     *
-     * @param enemyPlayer the observed enemy
-     */
-    public void inferEnemyIslandLooted(@Nonnull Player enemyPlayer) {
-        // Check enemy equipment quality
-        int gearScore = 0;
-        if (enemyPlayer.getInventory().getHelmet() != null) {
-            gearScore += getArmorTierScore(enemyPlayer.getInventory().getHelmet().getType());
-        }
-        if (enemyPlayer.getInventory().getChestplate() != null) {
-            gearScore += getArmorTierScore(enemyPlayer.getInventory().getChestplate().getType());
-        }
-        if (enemyPlayer.getInventory().getItemInHand() != null
-                && LootPriorityTable.isSword(enemyPlayer.getInventory().getItemInHand().getType())) {
-            gearScore += 3;
-        }
-
-        // If enemy has decent gear, assume their island's chests are looted
-        if (gearScore >= 5) {
-            String islandKey = "enemy_island_" + enemyPlayer.getName();
-            enemyLootedIslands.add(islandKey);
-        }
-    }
-
-    /**
-     * Returns the record for a chest at the given location.
+     * Returns the chest record for a location, or null if unknown.
      *
      * @param location the chest location
-     * @return the record, or null if unknown
+     * @return the record, or null
      */
     @Nullable
     public ChestRecord getRecord(@Nonnull Location location) {
-        return records.get(locationKey(location));
+        return records.get(encodeLocation(location));
     }
 
     /**
-     * Returns whether the bot knows this chest has been looted.
+     * Returns true if the chest at the given location has been looted.
      *
      * @param location the chest location
-     * @return true if known to be looted
+     * @return true if looted by this bot
      */
-    public boolean isKnownLooted(@Nonnull Location location) {
-        ChestRecord record = records.get(locationKey(location));
-        return record != null && record.isLooted;
+    public boolean isLooted(@Nonnull Location location) {
+        ChestRecord record = records.get(encodeLocation(location));
+        return record != null && record.looted;
     }
 
     /**
-     * Returns all unlooted chests from memory, sorted by distance.
+     * Returns the number of unlooted chests in memory.
      *
-     * @return list of unlooted chest records, nearest first
+     * @return unlooted chest count
      */
-    @Nonnull
-    public List<ChestRecord> getUnlootedChests() {
-        Location botLoc = bot.getLocation();
-        List<ChestRecord> unlooted = new ArrayList<>();
-        for (ChestRecord record : records.values()) {
-            if (!record.isLooted) {
-                unlooted.add(record);
-            }
+    public int getUnlootedCount() {
+        int count = 0;
+        for (ChestRecord r : records.values()) {
+            if (!r.looted && !r.lootedByEnemy) count++;
         }
-        if (botLoc != null) {
-            unlooted.sort(Comparator.comparingDouble(
-                    r -> MathUtil.horizontalDistance(botLoc, r.location)));
-        }
-        return unlooted;
-    }
-
-    /**
-     * Syncs chest data from the ChestLocator awareness system.
-     *
-     * @param locator the chest locator
-     */
-    public void syncFromLocator(@Nonnull ChestLocator locator) {
-        for (ChestLocator.ChestInfo info : locator.getAllChests()) {
-            String key = locationKey(info.location);
-            ChestRecord record = records.computeIfAbsent(key,
-                    k -> new ChestRecord(info.location.clone()));
-            if (info.isLooted && !record.isLooted) {
-                record.isLooted = true;
-                record.lootedByEnemy = info.lootedByEnemy;
-                record.lootedByBot = info.lootedByBot;
-            }
-        }
+        return count;
     }
 
     /** Clears all memory. */
     public void clear() {
         records.clear();
-        enemyLootedIslands.clear();
     }
 
-    /** @return total number of remembered chests */
-    public int size() { return records.size(); }
-
-    private int getArmorTierScore(@Nonnull Material mat) {
-        String name = mat.name();
-        if (name.startsWith("DIAMOND")) return 4;
-        if (name.startsWith("IRON")) return 3;
-        if (name.startsWith("CHAINMAIL")) return 2;
-        if (name.startsWith("GOLD")) return 1;
-        return 0;
+    private static long encodeLocation(@Nonnull Location loc) {
+        int x = loc.getBlockX();
+        int y = loc.getBlockY();
+        int z = loc.getBlockZ();
+        return ((long) (x & 0x3FFFFFF) << 38) | ((long) (y & 0xFFF) << 26) | (z & 0x3FFFFFF);
     }
 
-    @Nonnull
-    private static String locationKey(@Nonnull Location loc) {
-        return loc.getBlockX() + "," + loc.getBlockY() + "," + loc.getBlockZ();
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  Inner: ChestRecord
-    // ═══════════════════════════════════════════════════════════════
-
-    /** Extended chest data with bot-specific observations. */
+    /**
+     * Record of a single chest's state in memory.
+     */
     public static class ChestRecord {
-        public final Location location;
-        public boolean isLooted;
-        public boolean lootedByBot;
+        /** The chest block position. */
+        public final Location position;
+        /** Whether this bot has looted this chest. */
+        public boolean looted;
+        /** Whether an enemy was observed looting this chest. */
         public boolean lootedByEnemy;
-        public int qualityRating; // 0-10, -1 if unknown
-        public long lastVisitTick;
-        public final List<ItemStack> itemsFound;
+        /** Quality rating of items found (0-10), or -1 if unknown. */
+        public double itemQuality;
 
-        public ChestRecord(@Nonnull Location location) {
-            this.location = location;
-            this.isLooted = false;
-            this.lootedByBot = false;
+        public ChestRecord(@Nonnull Location position) {
+            this.position = position;
+            this.looted = false;
             this.lootedByEnemy = false;
-            this.qualityRating = -1;
-            this.lastVisitTick = 0;
-            this.itemsFound = new ArrayList<>();
+            this.itemQuality = -1;
         }
     }
 }

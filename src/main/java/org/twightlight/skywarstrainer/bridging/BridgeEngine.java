@@ -1,6 +1,3 @@
-// ═══════════════════════════════════════════════════════════════════
-// File: src/main/java/org/twightlight/skywarstrainer/bridging/BridgeEngine.java
-// ═══════════════════════════════════════════════════════════════════
 package org.twightlight.skywarstrainer.bridging;
 
 import org.bukkit.Location;
@@ -24,15 +21,29 @@ import java.util.logging.Level;
  * Manages all bridge construction for a single bot.
  *
  * <p>BridgeEngine selects the appropriate bridge strategy based on the bot's
- * difficulty, personality, and current situation. It then delegates per-tick
- * block placement to the selected strategy, handling interruptions, block
- * counting, and state transitions.</p>
+ * difficulty, personality, current situation, and the vertical relationship
+ * between the bot and the destination. It delegates per-tick block placement
+ * to the selected strategy, handling interruptions, block counting, and
+ * state transitions.</p>
+ *
+ * <p>The engine supports three modes of bridging:</p>
+ * <ul>
+ *   <li><b>Flat bridging</b>: destination is at roughly the same Y level (±2 blocks).
+ *       Uses standard strategies (Normal, Speed, Ninja, God, Moonwalk, Diagonal).</li>
+ *   <li><b>Ascending bridging</b>: destination is significantly higher (>2 blocks above).
+ *       Uses AscendingBridge to build a staircase upward, optionally transitioning to
+ *       flat bridging once the target height is reached.</li>
+ *   <li><b>Descending bridging</b>: destination is lower. The bot bridges flat and lets
+ *       gravity handle the descent, or builds a gentle descending slope.</li>
+ * </ul>
  *
  * <p>The engine runs when the bot's state machine is in the BRIDGING state.
  * It is ticked by the behavior tree's bridging action nodes.</p>
  *
  * <h3>Strategy Selection Logic:</h3>
  * <ol>
+ *   <li>Check vertical difference between bot and destination</li>
+ *   <li>If ascending (>2 blocks up): use AscendingBridge first, then switch to flat</li>
  *   <li>Read bot's bridgeMaxType from DifficultyProfile</li>
  *   <li>Filter available strategies to those at or below the max type</li>
  *   <li>Select the fastest strategy the bot can use reliably</li>
@@ -43,8 +54,11 @@ public class BridgeEngine {
 
     private final TrainerBot bot;
 
-    /** All registered bridge strategies, ordered from slowest to fastest. */
-    private final List<BridgeStrategy> strategies;
+    /** All registered flat bridge strategies, ordered from slowest to fastest. */
+    private final List<BridgeStrategy> flatStrategies;
+
+    /** The ascending bridge strategy instance. */
+    private final AscendingBridge ascendingStrategy;
 
     /** The currently active bridge strategy, or null if not bridging. */
     private BridgeStrategy activeStrategy;
@@ -68,6 +82,16 @@ public class BridgeEngine {
     private static final int MAX_BRIDGE_TICKS = 600; // 30 seconds
 
     /**
+     * Whether we are in the ascending phase of a multi-phase bridge.
+     * After ascending completes, we switch to flat bridging for the remaining
+     * horizontal distance.
+     */
+    private boolean inAscendingPhase;
+
+    /** The height difference the bot needs to ascend. */
+    private int heightDifference;
+
+    /**
      * Strategy type hierarchy for difficulty gating.
      * Maps bridge type names to their required skill level (ordinal).
      * Higher ordinal = more advanced technique.
@@ -89,26 +113,31 @@ public class BridgeEngine {
      */
     public BridgeEngine(@Nonnull TrainerBot bot) {
         this.bot = bot;
-        this.strategies = new ArrayList<>();
+        this.flatStrategies = new ArrayList<>();
+        this.ascendingStrategy = new AscendingBridge();
         this.bridging = false;
         this.activeStrategy = null;
         this.bridgeTicks = 0;
         this.maxBlocks = 64;
+        this.inAscendingPhase = false;
+        this.heightDifference = 0;
 
-        // Register all bridge strategies in order from slowest to fastest
-        strategies.add(new NormalBridge());
-        strategies.add(new SpeedBridge());
-        strategies.add(new DiagonalBridge());
-        strategies.add(new NinjaBridge());
-        strategies.add(new MoonwalkBridge());
-        strategies.add(new GodBridge());
+        // Register all flat bridge strategies in order from slowest to fastest
+        flatStrategies.add(new NormalBridge());
+        flatStrategies.add(new SpeedBridge());
+        flatStrategies.add(new DiagonalBridge());
+        flatStrategies.add(new NinjaBridge());
+        flatStrategies.add(new MoonwalkBridge());
+        flatStrategies.add(new GodBridge());
     }
 
     /**
      * Starts a bridge from the bot's current position toward the given destination.
      *
-     * <p>Selects the best strategy, calculates the direction, and initializes
-     * the strategy for block-by-block construction.</p>
+     * <p>Analyzes the vertical difference between the bot and destination to decide
+     * whether to use ascending bridging, flat bridging, or a combination. Selects
+     * the best strategy, calculates the direction, and initializes the strategy
+     * for block-by-block construction.</p>
      *
      * @param destination the target location to bridge toward
      * @param maxBlocks   the maximum number of blocks to place (0 = unlimited up to 64)
@@ -139,28 +168,71 @@ public class BridgeEngine {
                 destination.getZ() - botLoc.getZ()
         );
         if (bridgeDirection.lengthSquared() < 0.01) {
-            // Destination is too close horizontally
-            return false;
+            // Destination is directly above/below — use a default forward direction
+            double yawRad = Math.toRadians(botLoc.getYaw());
+            bridgeDirection = new Vector(-Math.sin(yawRad), 0, Math.cos(yawRad));
         }
         bridgeDirection.normalize();
 
-        // Check if this is a diagonal bridge (angle not aligned to axis)
-        boolean isDiagonal = isDiagonalDirection(bridgeDirection);
+        // Calculate vertical difference
+        this.heightDifference = destination.getBlockY() - botLoc.getBlockY();
 
-        // Select the best strategy for this bot
-        activeStrategy = selectStrategy(isDiagonal);
+        // Decide bridging mode based on height difference
+        if (heightDifference > 2) {
+            // Need to ascend — start with ascending bridge
+            return startAscendingBridge(botLoc);
+        } else {
+            // Flat or descending — use standard flat bridge
+            return startFlatBridge(botLoc);
+        }
+    }
+
+    /**
+     * Starts an ascending bridge sequence. The bot will build a staircase
+     * upward until reaching the destination's Y level, then optionally
+     * switch to flat bridging for remaining horizontal distance.
+     *
+     * @param botLoc the bot's current location
+     * @return true if ascending bridge started successfully
+     */
+    private boolean startAscendingBridge(@Nonnull Location botLoc) {
+        ascendingStrategy.initialize(bot, botLoc, bridgeDirection);
+        ascendingStrategy.setTargetY(destination.getBlockY());
+
+        activeStrategy = ascendingStrategy;
+        inAscendingPhase = true;
+        bridging = true;
+
+        if (bot.getProfile().isDebugMode()) {
+            bot.getPlugin().getLogger().info("[DEBUG] " + bot.getName()
+                    + " starting ASCENDING bridge (+" + heightDifference + " blocks) toward "
+                    + formatLoc(destination));
+        }
+
+        return true;
+    }
+
+    /**
+     * Starts a flat bridge using the best available strategy.
+     *
+     * @param botLoc the bot's current location
+     * @return true if flat bridge started successfully
+     */
+    private boolean startFlatBridge(@Nonnull Location botLoc) {
+        boolean isDiagonal = isDiagonalDirection(bridgeDirection);
+        activeStrategy = selectFlatStrategy(isDiagonal);
         if (activeStrategy == null) {
             bot.getPlugin().getLogger().warning("No suitable bridge strategy for " + bot.getName());
             return false;
         }
 
-        // Initialize the strategy
         activeStrategy.initialize(bot, botLoc, bridgeDirection);
+        inAscendingPhase = false;
         bridging = true;
 
         if (bot.getProfile().isDebugMode()) {
             bot.getPlugin().getLogger().info("[DEBUG] " + bot.getName()
-                    + " starting bridge with " + activeStrategy.getName()
+                    + " starting FLAT bridge with " + activeStrategy.getName()
                     + " toward " + formatLoc(destination)
                     + " (maxBlocks=" + this.maxBlocks + ")");
         }
@@ -189,7 +261,7 @@ public class BridgeEngine {
         }
 
         // Check if we've placed enough blocks
-        if (activeStrategy.getBlocksPlaced() >= maxBlocks) {
+        if (getTotalBlocksPlaced() >= maxBlocks) {
             stopBridge();
             return BridgeTickResult.COMPLETE;
         }
@@ -201,11 +273,12 @@ public class BridgeEngine {
             return BridgeTickResult.OUT_OF_BLOCKS;
         }
 
-        // Check if we've reached the destination (close enough horizontally)
+        // Check if we've reached the destination (close enough horizontally and vertically)
         Location botLoc = bot.getLocation();
         if (botLoc != null && destination != null) {
-            double dist = MathUtil.horizontalDistance(botLoc, destination);
-            if (dist < 2.0) {
+            double horizDist = MathUtil.horizontalDistance(botLoc, destination);
+            double vertDist = Math.abs(botLoc.getY() - destination.getY());
+            if (horizDist < 2.0 && vertDist < 2.0) {
                 stopBridge();
                 return BridgeTickResult.COMPLETE;
             }
@@ -221,9 +294,17 @@ public class BridgeEngine {
                 case MOVING:
                     return BridgeTickResult.IN_PROGRESS;
                 case FAILED:
+                    // If ascending failed, try to recover with flat bridging
+                    if (inAscendingPhase) {
+                        return handleAscendingFailure();
+                    }
                     stopBridge();
                     return BridgeTickResult.FAILED;
                 case COMPLETE:
+                    // If ascending is complete, transition to flat bridging
+                    if (inAscendingPhase) {
+                        return transitionToFlatBridge();
+                    }
                     stopBridge();
                     return BridgeTickResult.COMPLETE;
                 default:
@@ -238,6 +319,99 @@ public class BridgeEngine {
     }
 
     /**
+     * Transitions from ascending bridge to flat bridge once the target height
+     * has been reached. Calculates remaining horizontal distance and starts
+     * a flat bridge to cover it.
+     *
+     * @return the bridge tick result for this transition tick
+     */
+    @Nonnull
+    private BridgeTickResult transitionToFlatBridge() {
+        Location botLoc = bot.getLocation();
+        if (botLoc == null) {
+            stopBridge();
+            return BridgeTickResult.COMPLETE;
+        }
+
+        double remainingHorizDist = MathUtil.horizontalDistance(botLoc, destination);
+        if (remainingHorizDist < 2.0) {
+            // Close enough horizontally — we're done
+            stopBridge();
+            return BridgeTickResult.COMPLETE;
+        }
+
+        // Recalculate direction from current position
+        bridgeDirection = new Vector(
+                destination.getX() - botLoc.getX(),
+                0,
+                destination.getZ() - botLoc.getZ()
+        ).normalize();
+
+        // Switch to flat bridging
+        boolean isDiagonal = isDiagonalDirection(bridgeDirection);
+        activeStrategy = selectFlatStrategy(isDiagonal);
+        if (activeStrategy == null) {
+            stopBridge();
+            return BridgeTickResult.COMPLETE;
+        }
+
+        activeStrategy.initialize(bot, botLoc, bridgeDirection);
+        inAscendingPhase = false;
+
+        if (bot.getProfile().isDebugMode()) {
+            bot.getPlugin().getLogger().info("[DEBUG] " + bot.getName()
+                    + " transitioned from ascending to flat bridge with "
+                    + activeStrategy.getName() + " (" + String.format("%.1f", remainingHorizDist)
+                    + " blocks remaining)");
+        }
+
+        return BridgeTickResult.IN_PROGRESS;
+    }
+
+    /**
+     * Handles ascending bridge failure by attempting to switch to flat bridging
+     * if possible, or failing the entire bridge operation.
+     *
+     * @return the bridge tick result
+     */
+    @Nonnull
+    private BridgeTickResult handleAscendingFailure() {
+        Location botLoc = bot.getLocation();
+        if (botLoc == null) {
+            stopBridge();
+            return BridgeTickResult.FAILED;
+        }
+
+        // If we gained some height, try continuing with flat bridging
+        double horizDist = MathUtil.horizontalDistance(botLoc, destination);
+        if (horizDist > 2.0) {
+            bridgeDirection = new Vector(
+                    destination.getX() - botLoc.getX(),
+                    0,
+                    destination.getZ() - botLoc.getZ()
+            ).normalize();
+
+            boolean isDiagonal = isDiagonalDirection(bridgeDirection);
+            BridgeStrategy flatStrategy = selectFlatStrategy(isDiagonal);
+            if (flatStrategy != null) {
+                activeStrategy = flatStrategy;
+                activeStrategy.initialize(bot, botLoc, bridgeDirection);
+                inAscendingPhase = false;
+
+                if (bot.getProfile().isDebugMode()) {
+                    bot.getPlugin().getLogger().info("[DEBUG] " + bot.getName()
+                            + " ascending failed, falling back to flat bridge");
+                }
+
+                return BridgeTickResult.IN_PROGRESS;
+            }
+        }
+
+        stopBridge();
+        return BridgeTickResult.FAILED;
+    }
+
+    /**
      * Stops the current bridge, resetting strategy state and sneaking.
      */
     public void stopBridge() {
@@ -246,14 +420,18 @@ public class BridgeEngine {
         }
         activeStrategy = null;
         bridging = false;
+        inAscendingPhase = false;
         destination = null;
         bridgeDirection = null;
         bridgeTicks = 0;
+        heightDifference = 0;
 
         // Stop sneaking when bridge ends
         MovementController mc = bot.getMovementController();
         if (mc != null) {
             mc.setSneaking(false);
+            mc.setMovingBackward(false);
+            mc.setMovingForward(false);
         }
 
         if (bot.getProfile().isDebugMode()) {
@@ -262,21 +440,21 @@ public class BridgeEngine {
     }
 
     /**
-     * Selects the best bridge strategy for the current bot based on difficulty
+     * Selects the best flat bridge strategy for the current bot based on difficulty
      * and whether the bridge direction is diagonal.
      *
      * @param isDiagonal whether the bridge is at a diagonal angle
      * @return the selected strategy, or null if none available
      */
     @Nullable
-    private BridgeStrategy selectStrategy(boolean isDiagonal) {
+    private BridgeStrategy selectFlatStrategy(boolean isDiagonal) {
         DifficultyProfile diff = bot.getDifficultyProfile();
         String maxType = diff.getBridgeMaxType();
         int maxLevel = BRIDGE_TYPE_LEVELS.getOrDefault(maxType, 0);
 
         // If diagonal, prefer diagonal bridge strategy if available
         if (isDiagonal) {
-            for (BridgeStrategy strat : strategies) {
+            for (BridgeStrategy strat : flatStrategies) {
                 if (strat.getName().equals("DiagonalBridge")) {
                     String reqType = strat.getRequiredBridgeType();
                     int reqLevel = BRIDGE_TYPE_LEVELS.getOrDefault(reqType, 0);
@@ -289,7 +467,7 @@ public class BridgeEngine {
 
         // Filter strategies by what the bot can handle
         List<BridgeStrategy> available = new ArrayList<>();
-        for (BridgeStrategy strat : strategies) {
+        for (BridgeStrategy strat : flatStrategies) {
             if (strat.getName().equals("DiagonalBridge") && !isDiagonal) continue;
             String reqType = strat.getRequiredBridgeType();
             int reqLevel = BRIDGE_TYPE_LEVELS.getOrDefault(reqType, 0);
@@ -387,6 +565,9 @@ public class BridgeEngine {
     /** @return true if the engine is currently bridging */
     public boolean isBridging() { return bridging; }
 
+    /** @return true if currently in the ascending phase of a bridge */
+    public boolean isAscending() { return inAscendingPhase; }
+
     /** @return the currently active strategy, or null */
     @Nullable
     public BridgeStrategy getActiveStrategy() { return activeStrategy; }
@@ -395,7 +576,16 @@ public class BridgeEngine {
     @Nullable
     public Location getDestination() { return destination; }
 
-    /** @return the number of blocks placed in the current bridge */
+    /**
+     * Returns the total number of blocks placed across all phases (ascending + flat).
+     *
+     * @return total blocks placed
+     */
+    public int getTotalBlocksPlaced() {
+        return activeStrategy != null ? activeStrategy.getBlocksPlaced() : 0;
+    }
+
+    /** @return the number of blocks placed by the current active strategy */
     public int getBlocksPlaced() {
         return activeStrategy != null ? activeStrategy.getBlocksPlaced() : 0;
     }
@@ -407,10 +597,13 @@ public class BridgeEngine {
     @Nullable
     public Vector getBridgeDirection() { return bridgeDirection; }
 
-    /** @return all registered strategies (read-only) */
+    /** @return the height difference between bot and destination */
+    public int getHeightDifference() { return heightDifference; }
+
+    /** @return all registered flat strategies (read-only) */
     @Nonnull
     public List<BridgeStrategy> getStrategies() {
-        return Collections.unmodifiableList(strategies);
+        return Collections.unmodifiableList(flatStrategies);
     }
 
     /**
@@ -419,9 +612,9 @@ public class BridgeEngine {
      * @param strategy the strategy to register
      */
     public void registerStrategy(@Nonnull BridgeStrategy strategy) {
-        strategies.add(strategy);
+        flatStrategies.add(strategy);
         // Re-sort by base speed
-        strategies.sort(Comparator.comparingDouble(BridgeStrategy::getBaseSpeed));
+        flatStrategies.sort(Comparator.comparingDouble(BridgeStrategy::getBaseSpeed));
     }
 
     private static String formatLoc(Location loc) {

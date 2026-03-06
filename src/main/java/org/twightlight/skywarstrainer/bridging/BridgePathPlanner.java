@@ -1,6 +1,3 @@
-// ═══════════════════════════════════════════════════════════════════
-// File: src/main/java/org/twightlight/skywarstrainer/bridging/BridgePathPlanner.java
-// ═══════════════════════════════════════════════════════════════════
 package org.twightlight.skywarstrainer.bridging;
 
 import org.bukkit.Location;
@@ -29,6 +26,7 @@ import java.util.List;
  *   <li>Height advantage (bridging upward vs downward vs same level)</li>
  *   <li>Available blocks (can we actually reach the target?)</li>
  *   <li>Flanking routes (for STRATEGIC/TRICKSTER personalities)</li>
+ *   <li>Vertical distance — ascending bridges cost roughly 2x blocks per height gained</li>
  * </ul></p>
  */
 public class BridgePathPlanner {
@@ -91,10 +89,10 @@ public class BridgePathPlanner {
             targetEdge = midIsland.center.clone();
         }
 
-        double distance = MathUtil.horizontalDistance(botLoc, targetEdge);
-        int blocksNeeded = (int) Math.ceil(distance) + 2; // +2 safety margin
+        int blocksNeeded = estimateBlocksNeeded(botLoc, targetEdge);
 
-        return new BridgePlan(targetEdge, blocksNeeded, BridgeGoal.TO_MID, estimateRisk(targetEdge));
+        return new BridgePlan(targetEdge, blocksNeeded, BridgeGoal.TO_MID,
+                estimateRisk(targetEdge), estimateHeightDiff(botLoc, targetEdge));
     }
 
     /**
@@ -105,7 +103,7 @@ public class BridgePathPlanner {
         ThreatMap threatMap = bot.getThreatMap();
         if (threatMap == null) return null;
 
-        // Get the nearest enemy
+        // Get the nearest enemy — uses the new getNearestEnemy() method
         Player nearest = threatMap.getNearestEnemy();
         if (nearest == null) return null;
 
@@ -126,8 +124,9 @@ public class BridgePathPlanner {
             bridgeTarget = targetLoc.clone();
         }
 
-        int blocksNeeded = (int) Math.ceil(MathUtil.horizontalDistance(botLoc, bridgeTarget)) + 2;
-        return new BridgePlan(bridgeTarget, blocksNeeded, BridgeGoal.TO_PLAYER, estimateRisk(bridgeTarget));
+        int blocksNeeded = estimateBlocksNeeded(botLoc, bridgeTarget);
+        return new BridgePlan(bridgeTarget, blocksNeeded, BridgeGoal.TO_PLAYER,
+                estimateRisk(bridgeTarget), estimateHeightDiff(botLoc, bridgeTarget));
     }
 
     /**
@@ -159,10 +158,10 @@ public class BridgePathPlanner {
             targetEdge = target.center.clone();
         }
 
-        double distance = MathUtil.horizontalDistance(botLoc, targetEdge);
-        int blocksNeeded = (int) Math.ceil(distance) + 2;
+        int blocksNeeded = estimateBlocksNeeded(botLoc, targetEdge);
 
-        return new BridgePlan(targetEdge, blocksNeeded, BridgeGoal.TO_ISLAND, estimateRisk(targetEdge));
+        return new BridgePlan(targetEdge, blocksNeeded, BridgeGoal.TO_ISLAND,
+                estimateRisk(targetEdge), estimateHeightDiff(botLoc, targetEdge));
     }
 
     /**
@@ -179,7 +178,7 @@ public class BridgePathPlanner {
             double angle = Math.toRadians(RandomUtil.nextDouble() * 360.0);
             Location target = botLoc.clone().add(
                     Math.cos(angle) * 20.0, 0, Math.sin(angle) * 20.0);
-            return new BridgePlan(target, 20, BridgeGoal.ESCAPE, 0.3);
+            return new BridgePlan(target, 20, BridgeGoal.ESCAPE, 0.3, 0);
         }
 
         // Bridge in the direction opposite to the threat
@@ -192,7 +191,48 @@ public class BridgePathPlanner {
         Location target = botLoc.clone().add(
                 (dx / dist) * 25.0, 0, (dz / dist) * 25.0);
 
-        return new BridgePlan(target, 25, BridgeGoal.ESCAPE, estimateRisk(target));
+        return new BridgePlan(target, 25, BridgeGoal.ESCAPE, estimateRisk(target), 0);
+    }
+
+    /**
+     * Estimates the total blocks needed to bridge from one location to another,
+     * accounting for both horizontal distance and vertical ascent.
+     *
+     * <p>Ascending requires roughly 2 blocks per block of height gained
+     * (one forward block + one pillar block per step).</p>
+     *
+     * @param from the starting location
+     * @param to   the destination location
+     * @return the estimated number of blocks needed
+     */
+    private int estimateBlocksNeeded(@Nonnull Location from, @Nonnull Location to) {
+        double horizDist = MathUtil.horizontalDistance(from, to);
+        int heightDiff = to.getBlockY() - from.getBlockY();
+
+        int flatBlocks = (int) Math.ceil(horizDist) + 2; // +2 safety margin
+
+        if (heightDiff > 0) {
+            // Ascending: ~2 blocks per height level (1 forward + 1 pillar), plus the
+            // remaining horizontal distance after ascending
+            int ascendBlocks = heightDiff * 2;
+            // The horizontal distance covered during ascent (~1 block per step)
+            double remainingHorizDist = Math.max(0, horizDist - heightDiff);
+            int remainingFlatBlocks = (int) Math.ceil(remainingHorizDist) + 2;
+            return ascendBlocks + remainingFlatBlocks;
+        }
+
+        return flatBlocks;
+    }
+
+    /**
+     * Estimates the height difference between two locations.
+     *
+     * @param from the starting location
+     * @param to   the destination
+     * @return the height difference (positive = ascending, negative = descending)
+     */
+    private int estimateHeightDiff(@Nonnull Location from, @Nonnull Location to) {
+        return to.getBlockY() - from.getBlockY();
     }
 
     /**
@@ -213,7 +253,10 @@ public class BridgePathPlanner {
         double newDz = dx * sinA + dz * cosA;
 
         // Place the flank point roughly 2/3 of the way to the target
-        return from.clone().add(newDx * 0.66, 0, newDz * 0.66);
+        Location flank = from.clone().add(newDx * 0.66, 0, newDz * 0.66);
+        // Preserve target's Y for height-aware planning
+        flank.setY(target.getY());
+        return flank;
     }
 
     /**
@@ -221,8 +264,8 @@ public class BridgePathPlanner {
      */
     @Nullable
     private Location findNearestEdgePoint(@Nonnull IslandGraph.Island island, @Nonnull Location from) {
-        // Use the island's center as a simple approximation
-        // A more sophisticated implementation would track actual island boundaries
+        // Use the island's center as a simple approximation.
+        // The island center preserves the Y level which is important for ascending bridges.
         return island.center.clone();
     }
 
@@ -234,15 +277,28 @@ public class BridgePathPlanner {
         ThreatMap threatMap = bot.getThreatMap();
         if (threatMap != null) {
             // Higher risk if enemies are near the target
+            Player nearestEnemyToTarget = threatMap.getNearestEnemyTo(target);
+            if (nearestEnemyToTarget != null) {
+                double enemyDist = target.distance(nearestEnemyToTarget.getLocation());
+                // Closer enemy = higher risk
+                risk += MathUtil.clamp(1.0 - (enemyDist / 30.0), 0.0, 0.5);
+            }
+
             int enemyCount = threatMap.getVisibleEnemyCount();
-            risk += MathUtil.clamp(enemyCount * 0.2, 0.0, 0.6);
+            risk += MathUtil.clamp(enemyCount * 0.15, 0.0, 0.4);
         }
 
         // Higher risk for longer bridges (more exposed)
         Location botLoc = bot.getLocation();
         if (botLoc != null) {
             double distance = MathUtil.horizontalDistance(botLoc, target);
-            risk += MathUtil.clamp(distance / 60.0, 0.0, 0.4);
+            risk += MathUtil.clamp(distance / 60.0, 0.0, 0.3);
+
+            // Additional risk for ascending bridges (takes longer, more vulnerable)
+            int heightDiff = target.getBlockY() - botLoc.getBlockY();
+            if (heightDiff > 0) {
+                risk += MathUtil.clamp(heightDiff / 20.0, 0.0, 0.2);
+            }
         }
 
         return MathUtil.clamp(risk, 0.0, 1.0);
@@ -269,25 +325,47 @@ public class BridgePathPlanner {
     public static class BridgePlan {
         /** The target location to bridge to. */
         public final Location target;
-        /** Estimated blocks needed to reach the target. */
+        /** Estimated blocks needed to reach the target (including ascent). */
         public final int estimatedBlocks;
         /** The goal type. */
         public final BridgeGoal goal;
         /** Risk assessment (0.0 = safe, 1.0 = very risky). */
         public final double risk;
+        /** The estimated height difference (positive = ascending). */
+        public final int heightDifference;
 
+        /**
+         * Creates a BridgePlan with all metadata.
+         *
+         * @param target          the target location
+         * @param estimatedBlocks blocks needed to reach target
+         * @param goal            the bridging goal
+         * @param risk            risk assessment [0.0, 1.0]
+         * @param heightDifference height difference (positive = ascending)
+         */
         public BridgePlan(@Nonnull Location target, int estimatedBlocks,
-                          @Nonnull BridgeGoal goal, double risk) {
+                          @Nonnull BridgeGoal goal, double risk, int heightDifference) {
             this.target = target;
             this.estimatedBlocks = estimatedBlocks;
             this.goal = goal;
             this.risk = risk;
+            this.heightDifference = heightDifference;
+        }
+
+        /**
+         * Returns true if this plan requires ascending (destination is higher).
+         *
+         * @return true if height difference > 2
+         */
+        public boolean requiresAscent() {
+            return heightDifference > 2;
         }
 
         @Override
         public String toString() {
             return "BridgePlan{goal=" + goal + ", blocks=" + estimatedBlocks
-                    + ", risk=" + String.format("%.2f", risk) + "}";
+                    + ", risk=" + String.format("%.2f", risk)
+                    + ", heightDiff=" + heightDifference + "}";
         }
     }
 }
