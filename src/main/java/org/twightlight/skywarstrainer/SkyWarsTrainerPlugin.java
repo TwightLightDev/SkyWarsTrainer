@@ -7,7 +7,6 @@ import org.twightlight.skywarstrainer.commands.CommandHandler;
 import org.twightlight.skywarstrainer.commands.TabCompleter;
 import org.twightlight.skywarstrainer.config.ConfigManager;
 import org.twightlight.skywarstrainer.config.DifficultyConfig;
-import org.twightlight.skywarstrainer.config.MapConfig;
 import org.twightlight.skywarstrainer.config.PersonalityConfig;
 import org.twightlight.skywarstrainer.game.GameEventListener;
 
@@ -35,7 +34,6 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
     private ConfigManager configManager;
     private DifficultyConfig difficultyConfig;
     private PersonalityConfig personalityConfig;
-    private MapConfig mapConfig;
     private BotManager botManager;
     private GameEventListener gameEventListener;
     private SkyWarsTrainerAPI api;
@@ -94,15 +92,6 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
         } catch (Exception e) {
             getLogger().log(Level.WARNING, "Failed to load personality config, using defaults.", e);
             this.personalityConfig = new PersonalityConfig(this);
-        }
-
-        // 6. Load map config
-        try {
-            this.mapConfig = new MapConfig(this);
-            this.mapConfig.load();
-        } catch (Exception e) {
-            getLogger().log(Level.WARNING, "Failed to load map config, using auto-detection.", e);
-            this.mapConfig = new MapConfig(this);
         }
 
         // 7. Initialize game hook
@@ -185,11 +174,6 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
     @Nonnull
     public PersonalityConfig getPersonalityConfig() {
         return personalityConfig;
-    }
-
-    @Nonnull
-    public MapConfig getMapConfig() {
-        return mapConfig;
     }
 
     @Nonnull
