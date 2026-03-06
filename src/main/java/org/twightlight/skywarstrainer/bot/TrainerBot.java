@@ -19,6 +19,7 @@ import org.twightlight.skywarstrainer.awareness.*;
 import org.twightlight.skywarstrainer.bridging.BridgeEngine;
 import org.twightlight.skywarstrainer.combat.CombatEngine;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
+import org.twightlight.skywarstrainer.game.BotChatManager;
 import org.twightlight.skywarstrainer.inventory.InventoryManager;
 import org.twightlight.skywarstrainer.loot.LootEngine;
 import org.twightlight.skywarstrainer.movement.MovementController;
@@ -34,35 +35,12 @@ import java.util.logging.Level;
  * The core wrapper around a Citizens NPC that represents a single trainer bot.
  *
  * <p>TrainerBot is the central object tying together the NPC entity, the bot's
- * profile (difficulty, personalities, stats), and all AI subsystems
- * (decision engine, state machine, combat, movement, awareness, bridging,
- * looting, and inventory management).</p>
+ * profile (difficulty, personalities, stats), and all AI subsystems.</p>
  *
  * <p>The bot's AI tick loop runs through a custom Citizens {@link Trait}
  * ({@link SkyWarsTrainerTrait}), whose {@code run()} method is called every
  * server tick by Citizens. This trait delegates to TrainerBot's {@link #tick()}
  * method where the staggered tick budget is managed.</p>
- *
- * <h3>Architecture Pipeline:</h3>
- * <p>Utility AI (DecisionEngine) picks WHAT to do → State Machine manages
- * transitions → Behavior Tree (per state) executes HOW to do it → Subsystems
- * (combat, movement, bridging, loot, inventory) perform the actual actions.</p>
- *
- * <h3>Tick Budget (per tick group):</h3>
- * <ul>
- *   <li>Movement &amp; aim: every tick (20 TPS)</li>
- *   <li>Threat map: every tick</li>
- *   <li>Combat engine: every 1-2 ticks (when active)</li>
- *   <li>Behavior tree traversal: every 2-4 ticks</li>
- *   <li>Utility AI re-score: every 10-20 ticks (unless interrupted)</li>
- *   <li>Void/fall detection: every 5 ticks</li>
- *   <li>Lava detection: every 15 ticks</li>
- *   <li>Game phase update: every 30 ticks</li>
- *   <li>Map scanning: every 40-60 ticks</li>
- *   <li>Chest locator: every 60 ticks</li>
- *   <li>Full inventory audit: every 100 ticks</li>
- *   <li>Island graph rebuild: every 200 ticks</li>
- * </ul>
  */
 public class TrainerBot {
 
@@ -81,36 +59,21 @@ public class TrainerBot {
     // ═══════════════════════════════════════════════════════════
     //  AI BRAIN
     // ═══════════════════════════════════════════════════════════
-
-    /** The state machine governing macro-behavioral state. */
     private BotStateMachine stateMachine;
-
-    /** The Utility AI decision engine — picks WHAT to do. */
     private DecisionEngine decisionEngine;
 
     // ═══════════════════════════════════════════════════════════
     //  SUBSYSTEMS
     // ═══════════════════════════════════════════════════════════
-
-    /** Central movement controller managing all bot locomotion. */
     private MovementController movementController;
-
-    /** Combat engine — melee, ranged, strategies, aim, clicks. */
     private CombatEngine combatEngine;
-
-    /** Bridge engine — all bridge construction behaviors. */
     private BridgeEngine bridgeEngine;
-
-    /** Loot engine — chest interaction and looting strategies. */
     private LootEngine lootEngine;
-
-    /** Inventory manager — armor equipping, hotbar, potions, food. */
     private InventoryManager inventoryManager;
 
     // ═══════════════════════════════════════════════════════════
     //  AWARENESS SUBSYSTEM
     // ═══════════════════════════════════════════════════════════
-
     private MapScanner mapScanner;
     private ThreatMap threatMap;
     private IslandGraph islandGraph;
@@ -123,7 +86,6 @@ public class TrainerBot {
     // ═══════════════════════════════════════════════════════════
     //  TICK TIMERS
     // ═══════════════════════════════════════════════════════════
-
     private TickTimer voidDetectTimer;
     private TickTimer lavaDetectTimer;
     private TickTimer chestUpdateTimer;
@@ -207,12 +169,9 @@ public class TrainerBot {
 
     /**
      * Initializes ALL subsystems in the correct dependency order.
-     *
-     * <p>Order matters: awareness first (others depend on it), then movement,
-     * then combat/bridge/loot/inventory, then the AI brain (depends on all others).</p>
      */
     private void initializeAllSubsystems() {
-        // ── 1. Awareness Subsystem (no dependencies on other subsystems) ──
+        // ── 1. Awareness ──
         int mapScanInterval = plugin.getConfigManager().getMapScanInterval();
         this.mapScanner = new MapScanner(this, mapScanInterval);
         this.threatMap = new ThreatMap(this);
@@ -223,26 +182,25 @@ public class TrainerBot {
         this.fallDamageEstimator = new FallDamageEstimator(this);
         this.gamePhaseTracker = new GamePhaseTracker(this);
 
-        // ── 2. Movement Subsystem (depends on awareness for edge detection) ──
+        // ── 2. Movement ──
         this.movementController = new MovementController(this);
 
-        // ── 3. Combat Subsystem (depends on movement, awareness) ──
+        // ── 3. Combat ──
         this.combatEngine = new CombatEngine(this);
 
-        // ── 4. Bridge Engine (depends on movement, awareness) ──
+        // ── 4. Bridge ──
         this.bridgeEngine = new BridgeEngine(this);
 
-        // ── 5. Loot Engine (depends on awareness for chest locations) ──
+        // ── 5. Loot ──
         this.lootEngine = new LootEngine(this);
 
-        // ── 6. Inventory Manager (depends on nothing special) ──
+        // ── 6. Inventory ──
         this.inventoryManager = new InventoryManager(this);
 
-        // ── 7. AI Brain (depends on ALL subsystems above) ──
+        // ── 7. AI Brain ──
         this.stateMachine = new BotStateMachine(this);
         this.decisionEngine = new DecisionEngine(this, stateMachine);
 
-        // Build and register behavior trees for each state
         buildBehaviorTrees();
 
         // ── 8. Tick Timers ──
@@ -251,24 +209,34 @@ public class TrainerBot {
         this.chestUpdateTimer = new TickTimer(60, 10);
         this.islandGraphTimer = new TickTimer(200, 40);
         this.gamePhaseTimer = new TickTimer(30, 5);
-        this.behaviorTreeTimer = new TickTimer(3, 1);     // BT every 2-4 ticks
-        this.inventoryAuditTimer = new TickTimer(100, 20); // Inventory every 100 ticks
+        this.behaviorTreeTimer = new TickTimer(3, 1);
+        this.inventoryAuditTimer = new TickTimer(100, 20);
 
-        // Force an initial map scan
         mapScanner.forceRescan();
     }
 
     /**
      * Builds behavior trees for each BotState and registers them with the state machine.
-     * Each tree defines the micro-actions for that state.
+     *
+     * <p>Key design decisions in these trees:</p>
+     * <ul>
+     *   <li>LOOTING: Checks if loot engine is already active OR has unlooted chests.
+     *       This prevents resetting a loot-in-progress when the BT re-evaluates from root.</li>
+     *   <li>FIGHTING: CombatEngine manages its own target lifecycle. The BT just
+     *       ensures a target exists and delegates to the engine.</li>
+     *   <li>BRIDGING: Null-safe access to activeStrategy. Bridge destination is
+     *       determined before starting the bridge, not after.</li>
+     *   <li>FLEEING: Integrates golden apple eating and ender pearl escape.</li>
+     * </ul>
      */
     private void buildBehaviorTrees() {
-        // ── IDLE state: just look around, maybe organize inventory ──
+        // ── IDLE: look around, organize inventory ──
         stateMachine.registerTree(BotState.IDLE, new BehaviorTree("IDLE",
                 new SequenceNode("idle-sequence",
                         new ActionNode("look-around", bot -> {
                             if (movementController != null) {
-                                float yaw = movementController.getCurrentYaw() + (float)(RandomUtil.nextDouble() - 0.5) * 5.0f;
+                                float yaw = movementController.getCurrentYaw()
+                                        + (float) (RandomUtil.nextDouble() - 0.5) * 5.0f;
                                 movementController.setCurrentYaw(yaw);
                             }
                             return NodeStatus.SUCCESS;
@@ -276,74 +244,108 @@ public class TrainerBot {
                 )
         ));
 
-        // ── LOOTING state: find chest → pathfind → loot → equip ──
+        // ── LOOTING: find chest → pathfind → loot → equip ──
+        // The loot engine manages its own state machine (IDLE→MOVING→LOOTING→EQUIPPING).
+        // We check if the loot engine is already active OR has unlooted chests.
         stateMachine.registerTree(BotState.LOOTING, new BehaviorTree("LOOTING",
-                new SequenceNode("loot-sequence",
-                        new ConditionNode("has-unlooted-chest", bot -> {
-                            return chestLocator != null && chestLocator.getUnlootedCount() > 0;
-                        }),
-                        new ActionNode("loot-tick", bot -> {
-                            if (lootEngine != null) {
-                                lootEngine.tick();
+                new SelectorNode("loot-selector",
+                        // Branch 1: Loot engine is already in progress — keep ticking it
+                        new SequenceNode("loot-in-progress",
+                                new ConditionNode("loot-engine-active", bot ->
+                                        lootEngine != null && lootEngine.isActive()),
+                                new ActionNode("loot-tick-active", bot -> {
+                                    lootEngine.tick();
+                                    return NodeStatus.RUNNING;
+                                })
+                        ),
+                        // Branch 2: Not active — check if there are chests to loot and start
+                        new SequenceNode("loot-start-new",
+                                new ConditionNode("has-unlooted-chest", bot ->
+                                        chestLocator != null && chestLocator.getUnlootedCount() > 0),
+                                new ActionNode("loot-tick-new", bot -> {
+                                    if (lootEngine != null) {
+                                        lootEngine.tick();
+                                    }
+                                    return NodeStatus.RUNNING;
+                                })
+                        )
+                        // If neither branch succeeds, the BT returns FAILURE,
+                        // which signals the decision engine to re-evaluate
+                )
+        ));
+
+        // ── FIGHTING: fully delegated to CombatEngine ──
+        stateMachine.registerTree(BotState.FIGHTING, new BehaviorTree("FIGHTING",
+                new SequenceNode("fight-sequence",
+                        new ActionNode("combat-tick", bot -> {
+                            if (combatEngine == null) return NodeStatus.FAILURE;
+
+                            if (!combatEngine.isActive()) {
+                                LivingEntity target = findNearestThreat();
+                                if (target != null) {
+                                    combatEngine.engage(target);
+                                } else {
+                                    return NodeStatus.FAILURE;
+                                }
                             }
+
+                            // Check if bot should flee
+                            if (combatEngine.shouldFlee()) {
+                                // Trigger interrupt to re-evaluate — FLEE score will be high
+                                if (decisionEngine != null) {
+                                    decisionEngine.triggerInterrupt();
+                                }
+                            }
+
                             return NodeStatus.RUNNING;
                         })
                 )
         ));
 
-        // ── FIGHTING state: fully delegated to CombatEngine ──
-        stateMachine.registerTree(BotState.FIGHTING, new BehaviorTree("FIGHTING",
-                new ActionNode("combat-tick", bot -> {
-                    if (combatEngine != null) {
-                        if (!combatEngine.isActive()) {
-                            // Auto-engage nearest threat
-                            LivingEntity target = findNearestThreat();
-                            if (target != null) {
-                                combatEngine.engage(target);
-                            } else {
-                                return NodeStatus.FAILURE; // No target → leave fight state
-                            }
-                        }
-                        // Combat engine ticks itself; we just confirm it's active
-                        return NodeStatus.RUNNING;
-                    }
-                    return NodeStatus.FAILURE;
-                })
-        ));
-
-        // ── BRIDGING state: delegated to BridgeEngine ──
-        // ── BRIDGING state: determine destination, start bridge, tick bridge engine ──
+        // ── BRIDGING: determine destination, start bridge, tick ──
         stateMachine.registerTree(BotState.BRIDGING, new BehaviorTree("BRIDGING",
                 new SequenceNode("bridge-sequence",
-                        new ConditionNode("has-blocks", bot -> {
-                            return bot.getInventoryManager() != null
-                                    && bot.getInventoryManager().getBlockCounter().getTotalBlocks() > 0;
-                        }),
+                        new ConditionNode("has-blocks", bot ->
+                                inventoryManager != null
+                                        && inventoryManager.getBlockCounter().getTotalBlocks() > 0),
                         new ActionNode("bridge-tick", bot -> {
                             if (bridgeEngine == null) return NodeStatus.FAILURE;
 
-                            // If bridge isn't active, we need to determine where to bridge
+                            // If bridge isn't active, determine destination and start
                             if (!bridgeEngine.isActive()) {
                                 Location destination = determineBridgeDestination();
                                 if (destination == null) return NodeStatus.FAILURE;
-                                bridgeEngine.startBridge(destination, bot.getInventoryManager().getBlockCounter().getTotalBlocks());
 
-                                // Fire BotBridgeEvent
-                                org.bukkit.Bukkit.getPluginManager().callEvent(
+                                boolean started = bridgeEngine.startBridge(destination,
+                                        inventoryManager.getBlockCounter().getTotalBlocks());
+                                if (!started) return NodeStatus.FAILURE;
+
+                                // Fire BotBridgeEvent safely
+                                String strategyName = bridgeEngine.getActiveStrategy() != null
+                                        ? bridgeEngine.getActiveStrategy().getName()
+                                        : "Unknown";
+                                Bukkit.getPluginManager().callEvent(
                                         new org.twightlight.skywarstrainer.api.events.BotBridgeEvent(
-                                                TrainerBot.this,
-                                                bridgeEngine.getActiveStrategy().getName(),
-                                                destination));
+                                                TrainerBot.this, strategyName, destination));
                             }
 
-                            bridgeEngine.tick();
-                            return bridgeEngine.isActive() ? NodeStatus.RUNNING : NodeStatus.SUCCESS;
+                            // Tick the bridge engine
+                            BridgeEngine.BridgeTickResult result = bridgeEngine.tick();
+                            switch (result) {
+                                case COMPLETE:
+                                case TIMEOUT:
+                                case OUT_OF_BLOCKS:
+                                    return NodeStatus.SUCCESS;
+                                case FAILED:
+                                    return NodeStatus.FAILURE;
+                                default:
+                                    return NodeStatus.RUNNING;
+                            }
                         })
                 )
         ));
 
-
-        // ── FLEEING state: sprint away, eat gap, pearl escape ──
+        // ── FLEEING: sprint away, eat gapple, pearl escape ──
         stateMachine.registerTree(BotState.FLEEING, new BehaviorTree("FLEEING",
                 new ActionNode("flee-tick", bot -> {
                     LivingEntity entity = getLivingEntity();
@@ -356,36 +358,38 @@ public class TrainerBot {
                     ThreatMap tm = getThreatMap();
                     if (tm != null && !tm.getVisibleThreats().isEmpty()) {
                         ThreatMap.ThreatEntry nearest = tm.getNearestThreat();
-                        if (nearest != null) {
+                        if (nearest != null && nearest.currentPosition != null) {
                             Location botLoc = entity.getLocation();
                             Location threatLoc = nearest.currentPosition;
-                            if (threatLoc != null) {
-                                // Move in the opposite direction
-                                double dx = botLoc.getX() - threatLoc.getX();
-                                double dz = botLoc.getZ() - threatLoc.getZ();
-                                double len = Math.sqrt(dx * dx + dz * dz);
-                                if (len > 0.01) {
-                                    dx /= len; dz /= len;
-                                    Location fleeTarget = botLoc.clone().add(dx * 10, 0, dz * 10);
-                                    mc.setMoveTarget(fleeTarget);
-                                }
+                            double dx = botLoc.getX() - threatLoc.getX();
+                            double dz = botLoc.getZ() - threatLoc.getZ();
+                            double len = Math.sqrt(dx * dx + dz * dz);
+                            if (len > 0.01) {
+                                dx /= len;
+                                dz /= len;
+                                Location fleeTarget = botLoc.clone().add(dx * 10, 0, dz * 10);
+                                mc.setMoveTarget(fleeTarget);
                             }
                         }
+                    }
+
+                    // Try to eat golden apple while fleeing
+                    if (inventoryManager != null) {
+                        inventoryManager.getFoodHandler().tick();
                     }
 
                     // Check if health has recovered enough to stop fleeing
                     double healthFrac = entity.getHealth() / entity.getMaxHealth();
                     if (healthFrac > getDifficultyProfile().getFleeHealthThreshold() * 1.5) {
-                        return NodeStatus.SUCCESS; // Safe enough to stop fleeing
+                        return NodeStatus.SUCCESS;
                     }
                     return NodeStatus.RUNNING;
                 })
         ));
 
-        // ── ENCHANTING state: pathfind to enchant table, enchant items ──
+        // ── ENCHANTING ──
         stateMachine.registerTree(BotState.ENCHANTING, new BehaviorTree("ENCHANTING",
                 new ActionNode("enchant-tick", bot -> {
-                    // Simplified: enchant handler integration
                     if (inventoryManager != null) {
                         inventoryManager.tick();
                     }
@@ -393,7 +397,7 @@ public class TrainerBot {
                 })
         ));
 
-        // ── HUNTING state: find target, bridge/walk toward them ──
+        // ── HUNTING: find target, bridge/walk toward them ──
         stateMachine.registerTree(BotState.HUNTING, new BehaviorTree("HUNTING",
                 new ActionNode("hunt-tick", bot -> {
                     LivingEntity target = findNearestThreat();
@@ -404,11 +408,11 @@ public class TrainerBot {
 
                     double distance = entity.getLocation().distance(target.getLocation());
                     if (distance <= 4.0) {
-                        // Close enough to fight — transition will happen via interrupt
+                        // Close enough — trigger re-eval which should pick FIGHT
+                        if (decisionEngine != null) decisionEngine.triggerInterrupt();
                         return NodeStatus.SUCCESS;
                     }
 
-                    // Move toward target
                     MovementController mc = getMovementController();
                     if (mc != null) {
                         mc.getSprintController().startSprinting();
@@ -419,16 +423,14 @@ public class TrainerBot {
                 })
         ));
 
-        // ── CAMPING state: build fortification, watch for enemies ──
+        // ── CAMPING: build fortification, watch for enemies ──
         stateMachine.registerTree(BotState.CAMPING, new BehaviorTree("CAMPING",
                 new ActionNode("camp-tick", bot -> {
-                    // Look around slowly (360 degree scan)
                     if (movementController != null) {
                         float yaw = movementController.getCurrentYaw() + 2.0f;
                         movementController.setCurrentYaw(yaw);
                     }
 
-                    // Check for enemies
                     if (threatMap != null && threatMap.getVisibleEnemyCount() > 0) {
                         ThreatMap.ThreatEntry nearest = threatMap.getNearestThreat();
                         if (nearest != null) {
@@ -438,7 +440,8 @@ public class TrainerBot {
                                 distance = entity.getLocation().distance(nearest.currentPosition);
                             }
                             if (distance < 15) {
-                                return NodeStatus.SUCCESS; // Enemy close — trigger re-eval
+                                if (decisionEngine != null) decisionEngine.triggerInterrupt();
+                                return NodeStatus.SUCCESS;
                             }
                         }
                     }
@@ -446,10 +449,9 @@ public class TrainerBot {
                 })
         ));
 
-        // ── END_GAME state: celebrate or just stand still ──
+        // ── END_GAME ──
         stateMachine.registerTree(BotState.END_GAME, new BehaviorTree("END_GAME",
                 new ActionNode("end-game-tick", bot -> {
-                    // Celebratory jumps
                     if (movementController != null && RandomUtil.chance(0.05)) {
                         movementController.getJumpController().jump();
                     }
@@ -460,8 +462,6 @@ public class TrainerBot {
 
     /**
      * Helper to find the nearest visible threat entity.
-     *
-     * @return the nearest threatening LivingEntity, or null
      */
     @Nullable
     private LivingEntity findNearestThreat() {
@@ -484,8 +484,6 @@ public class TrainerBot {
     /**
      * Determines the best destination for bridging based on the decision engine's
      * last chosen action and personality.
-     *
-     * @return the bridge destination, or null if none found
      */
     @Nullable
     private Location determineBridgeDestination() {
@@ -495,12 +493,13 @@ public class TrainerBot {
 
         switch (lastAction) {
             case BRIDGE_TO_MID:
-                // Bridge to mid island center
                 if (islandGraph != null) {
-                    Location midCenter = islandGraph.getMidIsland().center;
-                    if (midCenter != null) return midCenter;
+                    IslandGraph.Island midIsland = islandGraph.getMidIsland();
+                    if (midIsland != null && midIsland.center != null) {
+                        return midIsland.center;
+                    }
                 }
-                // Fallback: bridge toward world center (0, Y, 0)
+                // Fallback: bridge toward world center
                 LivingEntity entity = getLivingEntity();
                 if (entity != null) {
                     return new Location(entity.getWorld(), 0, entity.getLocation().getY(), 0);
@@ -508,7 +507,6 @@ public class TrainerBot {
                 return null;
 
             case BRIDGE_TO_PLAYER:
-                // Bridge toward nearest enemy
                 if (threatMap != null) {
                     ThreatMap.ThreatEntry nearest = threatMap.getNearestThreat();
                     if (nearest != null && nearest.currentPosition != null) {
@@ -518,6 +516,14 @@ public class TrainerBot {
                 return null;
 
             default:
+                // For non-bridge actions that somehow ended up in BRIDGING state,
+                // try bridging to mid as a fallback
+                if (islandGraph != null) {
+                    IslandGraph.Island midIsland = islandGraph.getMidIsland();
+                    if (midIsland != null && midIsland.center != null) {
+                        return midIsland.center;
+                    }
+                }
                 return null;
         }
     }
@@ -535,6 +541,14 @@ public class TrainerBot {
         if (combatEngine != null && combatEngine.isActive()) {
             combatEngine.disengage();
         }
+
+        // Stop bridge if active
+        if (bridgeEngine != null && bridgeEngine.isActive()) {
+            bridgeEngine.stopBridge();
+        }
+
+        // Clear chat cooldowns for this bot
+        BotChatManager.clearCooldown(botId);
 
         // Clear subsystem references
         movementController = null;
@@ -570,9 +584,7 @@ public class TrainerBot {
     }
 
     /**
-     * Returns true if this bot is alive (spawned, not destroyed, entity exists and alive).
-     *
-     * @return true if the bot is alive
+     * Returns true if this bot is alive.
      */
     public boolean isAlive() {
         if (destroyed || !initialized || npc == null || !npc.isSpawned()) {
@@ -586,23 +598,6 @@ public class TrainerBot {
 
     /**
      * Main tick method called every server tick by the Citizens Trait.
-     *
-     * <p>Full pipeline:
-     * <ol>
-     *   <li>Movement &amp; aim (every tick)</li>
-     *   <li>Threat map (every tick)</li>
-     *   <li>Combat engine (every tick when active)</li>
-     *   <li>Decision engine / Utility AI (every N ticks or on interrupt)</li>
-     *   <li>Behavior tree (every 2-4 ticks)</li>
-     *   <li>Void detection (every 5 ticks)</li>
-     *   <li>Lava detection (every 15 ticks)</li>
-     *   <li>Game phase (every 30 ticks)</li>
-     *   <li>Map scanning (incremental every tick, full rescan on timer)</li>
-     *   <li>Chest locator (every 60 ticks)</li>
-     *   <li>Inventory audit (every 100 ticks)</li>
-     *   <li>Island graph (every 200 ticks)</li>
-     *   <li>Mistake injection (periodic based on difficulty)</li>
-     * </ol></p>
      */
     public void tick() {
         if (!initialized || destroyed || profile.isPaused()) return;
@@ -705,9 +700,6 @@ public class TrainerBot {
     /**
      * Wraps a subsystem tick call in a try-catch to prevent one subsystem failure
      * from killing the entire bot tick loop.
-     *
-     * @param systemName the subsystem name for logging
-     * @param runnable   the tick operation
      */
     private void tickSafe(@Nonnull String systemName, @Nonnull Runnable runnable) {
         try {
@@ -842,9 +834,7 @@ public class TrainerBot {
     public void setStaggerOffset(int offset) { this.staggerOffset = offset; }
 
     @Nonnull
-    public String getName() {
-        return skin.getDisplayName();
-    }
+    public String getName() { return skin.getDisplayName(); }
 
     @Nullable
     public LivingEntity getLivingEntity() {

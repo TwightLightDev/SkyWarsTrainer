@@ -18,6 +18,7 @@ import java.util.List;
  * <p>Example:
  * <pre>
  * TrainerBot bot = new BotBuilder()
+ *     .arena(myArena)
  *     .name("PracticeBot_1")
  *     .difficulty(Difficulty.HARD)
  *     .personality(Personality.AGGRESSIVE, Personality.STRATEGIC)
@@ -25,6 +26,9 @@ import java.util.List;
  *     .spawnLocation(location)
  *     .build();
  * </pre></p>
+ *
+ * <p>Note: The arena parameter is required. If not set, the builder will
+ * throw an IllegalStateException on build().</p>
  */
 public class BotBuilder {
 
@@ -33,11 +37,24 @@ public class BotBuilder {
     private final List<String> personalities = new ArrayList<>();
     private String skin;
     private Location spawnLocation;
+    private org.twightlight.skywars.arena.Arena<?> arena;
 
     /**
      * Creates a new BotBuilder with default settings.
      */
     public BotBuilder() {
+    }
+
+    /**
+     * Sets the arena for this bot. Required.
+     *
+     * @param arena the arena this bot participates in
+     * @return this builder
+     */
+    @Nonnull
+    public BotBuilder arena(@Nonnull org.twightlight.skywars.arena.Arena<?> arena) {
+        this.arena = arena;
+        return this;
     }
 
     /**
@@ -118,12 +135,15 @@ public class BotBuilder {
      * Builds and spawns the bot with the configured settings.
      *
      * @return the spawned TrainerBot, or null if spawning failed
-     * @throws IllegalStateException if no spawn location is set
+     * @throws IllegalStateException if spawn location or arena is not set
      */
     @Nullable
     public TrainerBot build() {
         if (spawnLocation == null) {
             throw new IllegalStateException("Spawn location must be set before building a bot.");
+        }
+        if (arena == null) {
+            throw new IllegalStateException("Arena must be set before building a bot. Use .arena(myArena).");
         }
 
         SkyWarsTrainerPlugin plugin = SkyWarsTrainerPlugin.getInstance();
@@ -132,7 +152,7 @@ public class BotBuilder {
         }
 
         return plugin.getBotManager().spawnBot(
-                null,
+                arena,
                 spawnLocation,
                 difficulty,
                 personalities,

@@ -8,6 +8,7 @@ import org.twightlight.skywarstrainer.commands.TabCompleter;
 import org.twightlight.skywarstrainer.config.ConfigManager;
 import org.twightlight.skywarstrainer.config.DifficultyConfig;
 import org.twightlight.skywarstrainer.config.PersonalityConfig;
+import org.twightlight.skywarstrainer.game.BotChatManager;
 import org.twightlight.skywarstrainer.game.GameEventListener;
 
 import net.citizensnpcs.api.CitizensAPI;
@@ -52,7 +53,7 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
             return;
         }
 
-        // 2. Register the Citizens trait so it is known to the trait system
+        // 2. Register the Citizens trait
         try {
             CitizensAPI.getTraitFactory().registerTrait(
                     TraitInfo.create(TrainerBot.SkyWarsTrainerTrait.class)
@@ -94,20 +95,18 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
             this.personalityConfig = new PersonalityConfig(this);
         }
 
-        // 7. Initialize game hook
-
-        // 8. Initialize bot manager
+        // 6. Initialize bot manager
         this.botManager = new BotManager(this);
 
-        // 9. Initialize API
+        // 7. Initialize API
         this.api = new SkyWarsTrainerAPI(this);
 
-        // 10. Register event listener for LostSkyWars + Bukkit events
+        // 8. Register event listener
         this.gameEventListener = new GameEventListener(this);
         Bukkit.getPluginManager().registerEvents(gameEventListener, this);
         getLogger().info("Game event listener registered.");
 
-        // 11. Register commands and tab completer
+        // 9. Register commands
         this.commandHandler = new CommandHandler(this);
         if (getCommand("swt") != null) {
             getCommand("swt").setExecutor(commandHandler);
@@ -116,11 +115,6 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
         } else {
             getLogger().severe("Failed to register /swt command! Check plugin.yml.");
         }
-
-        // NOTE: We do NOT start a main tick loop here because TrainerBot.tick()
-        // is driven by the Citizens Trait's run() method, which is called every
-        // tick by Citizens automatically. Running a second tick loop would cause
-        // double-ticking.
 
         getLogger().info("SkyWarsTrainer v" + getDescription().getVersion() + " enabled successfully!");
         getLogger().info("Use /swt spawn <difficulty> to create a practice bot.");
@@ -136,6 +130,9 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
             int removed = botManager.removeAllBots();
             getLogger().info("Removed " + removed + " active bot(s).");
         }
+
+        // Clear chat manager cooldowns
+        BotChatManager.clearAllCooldowns();
 
         SkyWarsTrainerAPI.clearInstance();
         instance = null;
@@ -185,7 +182,6 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
     public GameEventListener getGameEventListener() {
         return gameEventListener;
     }
-
 
     @Nullable
     public SkyWarsTrainerAPI getApi() {

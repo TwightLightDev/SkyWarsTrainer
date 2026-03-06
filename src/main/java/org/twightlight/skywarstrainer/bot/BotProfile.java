@@ -18,9 +18,9 @@ import java.util.List;
  * subsystems (combat, movement, decisions) read from this profile to
  * determine behavior parameters.</p>
  *
- * <p>In Phase 1, the personality system is not yet implemented. The profile
- * stores the difficulty and placeholder personality names. The personality
- * weight modifiers and conflict resolution are added in Phase 6.</p>
+ * <p>The personality profile is lazily built from stored personality names
+ * and cached. It is automatically invalidated when personalities are
+ * added, removed, or replaced.</p>
  */
 public class BotProfile {
 
@@ -29,10 +29,16 @@ public class BotProfile {
 
     /** The resolved difficulty profile with all numeric parameters. */
     private DifficultyProfile difficultyProfile;
+
+    /**
+     * Cached personality profile. Lazily built from personalityNames.
+     * Invalidated whenever the personality list changes.
+     */
     private PersonalityProfile personalityProfile;
+
     /**
      * Personality names assigned to this bot (1-3). These are stored as
-     * strings in Phase 1 and resolved to full Personality enums in Phase 6.
+     * strings and resolved to full Personality enums in the PersonalityProfile.
      */
     private final List<String> personalityNames;
 
@@ -56,6 +62,7 @@ public class BotProfile {
         this.difficulty = difficulty;
         this.difficultyProfile = difficultyProfile;
         this.personalityNames = new ArrayList<>();
+        this.personalityProfile = null;
         this.kills = 0;
         this.deaths = 0;
         this.gamesPlayed = 0;
@@ -66,22 +73,13 @@ public class BotProfile {
 
     // ─── Difficulty ─────────────────────────────────────────────
 
-    /**
-     * Returns the difficulty level.
-     *
-     * @return the difficulty
-     */
+    /** @return the difficulty level */
     @Nonnull
     public Difficulty getDifficulty() {
         return difficulty;
     }
 
-    /**
-     * Returns the resolved difficulty profile containing all numeric parameters.
-     * This is the primary object that subsystems read from.
-     *
-     * @return the difficulty profile
-     */
+    /** @return the resolved difficulty profile containing all numeric parameters */
     @Nonnull
     public DifficultyProfile getDifficultyProfile() {
         return difficultyProfile;
@@ -100,45 +98,50 @@ public class BotProfile {
 
     // ─── Personalities ──────────────────────────────────────────
 
-    /**
-     * Returns the list of personality names assigned to this bot.
-     *
-     * @return unmodifiable list of personality names
-     */
+    /** @return unmodifiable list of personality names */
     @Nonnull
     public List<String> getPersonalityNames() {
         return Collections.unmodifiableList(personalityNames);
     }
 
     /**
-     * Adds a personality name to this bot's profile.
+     * Adds a personality name to this bot's profile. Invalidates the
+     * cached PersonalityProfile so it will be rebuilt on next access.
      *
      * @param personalityName the personality name (e.g., "AGGRESSIVE")
      */
     public void addPersonality(@Nonnull String personalityName) {
         if (!personalityNames.contains(personalityName)) {
             personalityNames.add(personalityName);
+            invalidateProfile();
         }
     }
 
     /**
-     * Removes a personality name from this bot's profile.
+     * Removes a personality name from this bot's profile. Invalidates the
+     * cached PersonalityProfile so it will be rebuilt on next access.
      *
      * @param personalityName the personality name to remove
      * @return true if it was present and removed
      */
     public boolean removePersonality(@Nonnull String personalityName) {
-        return personalityNames.remove(personalityName);
+        boolean removed = personalityNames.remove(personalityName);
+        if (removed) {
+            invalidateProfile();
+        }
+        return removed;
     }
 
     /**
-     * Replaces all personality names with the given list.
+     * Replaces all personality names with the given list. Invalidates the
+     * cached PersonalityProfile so it will be rebuilt on next access.
      *
      * @param personalities the new personality names
      */
     public void setPersonalities(@Nonnull List<String> personalities) {
         personalityNames.clear();
         personalityNames.addAll(personalities);
+        invalidateProfile();
     }
 
     /**
@@ -149,6 +152,28 @@ public class BotProfile {
      */
     public boolean hasPersonality(@Nonnull String personalityName) {
         return personalityNames.contains(personalityName);
+    }
+
+    /**
+     * Returns the resolved PersonalityProfile. Lazily builds from stored names.
+     * The profile is cached and only rebuilt when personalities change.
+     *
+     * @return the personality profile (never null; may be empty)
+     */
+    @Nonnull
+    public PersonalityProfile getPersonalityProfile() {
+        if (personalityProfile == null) {
+            personalityProfile = PersonalityProfile.fromNames(personalityNames);
+        }
+        return personalityProfile;
+    }
+
+    /**
+     * Invalidates the cached personality profile. Called automatically when
+     * personalities are added, removed, or replaced.
+     */
+    private void invalidateProfile() {
+        this.personalityProfile = null;
     }
 
     // ─── Statistics ─────────────────────────────────────────────
@@ -211,28 +236,6 @@ public class BotProfile {
     /** @param debugMode whether debug output is shown for this bot */
     public void setDebugMode(boolean debugMode) { this.debugMode = debugMode; }
 
-
-    /**
-     * Returns the resolved PersonalityProfile. Lazily builds from stored names.
-     *
-     * @return the personality profile (never null; may be empty)
-     */
-    @Nonnull
-    public PersonalityProfile getPersonalityProfile() {
-        if (personalityProfile == null) {
-            personalityProfile = PersonalityProfile.fromNames(personalityNames);
-        }
-        return personalityProfile;
-    }
-
-    /**
-     * Invalidates the cached personality profile. Must be called when
-     * personalities are added/removed.
-     */
-    private void invalidateProfile() {
-        this.personalityProfile = null;
-    }
-
     @Override
     public String toString() {
         return "BotProfile{difficulty=" + difficulty.name()
@@ -243,4 +246,3 @@ public class BotProfile {
                 + ", wins=" + gamesWon + "}";
     }
 }
-

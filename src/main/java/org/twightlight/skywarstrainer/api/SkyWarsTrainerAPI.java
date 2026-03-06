@@ -2,21 +2,28 @@ package org.twightlight.skywarstrainer.api;
 
 import org.bukkit.Location;
 import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.ai.decision.UtilityScorer;
 import org.twightlight.skywarstrainer.ai.personality.Personality;
 import org.twightlight.skywarstrainer.ai.personality.PersonalityProfile;
 import org.twightlight.skywarstrainer.bot.BotManager;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
+import org.twightlight.skywarstrainer.bridging.strategies.BridgeStrategy;
+import org.twightlight.skywarstrainer.combat.strategies.CombatStrategy;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
+import org.twightlight.skywarstrainer.loot.strategies.LootStrategy;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Public API for the SkyWarsTrainer plugin. External plugins can use this
- * to programmatically spawn, remove, and query bots.
+ * to programmatically spawn, remove, query bots, and register custom
+ * strategies, considerations, and personalities.
  *
  * <p>Access via {@code SkyWarsTrainerAPI.getInstance()}.</p>
  *
@@ -24,7 +31,9 @@ import java.util.List;
  * <pre>
  * SkyWarsTrainerAPI api = SkyWarsTrainerAPI.getInstance();
  * if (api != null) {
- *     TrainerBot bot = api.spawnBot(location, Difficulty.HARD, personalityProfile);
+ *     TrainerBot bot = api.spawnBot(arena, location, Difficulty.HARD, personalityProfile);
+ *     // Register custom combat strategy
+ *     api.registerCustomCombatStrategy(new MyCustomStrategy());
  * }
  * </pre></p>
  */
@@ -81,6 +90,26 @@ public class SkyWarsTrainerAPI {
                 arena, location, difficulty, profile.toNameList(), null);
     }
 
+    /**
+     * Spawns a bot with a specific difficulty profile and personality profile.
+     * This overload allows specifying a custom name.
+     *
+     * @param arena      the arena
+     * @param location   the spawn location
+     * @param difficulty the difficulty level
+     * @param profile    the personality profile
+     * @param name       the custom bot name, or null for random
+     * @return the spawned bot, or null if spawning failed
+     */
+    @Nullable
+    public TrainerBot spawnBot(@Nonnull org.twightlight.skywars.arena.Arena<?> arena,
+                               @Nonnull Location location,
+                               @Nonnull Difficulty difficulty,
+                               @Nonnull PersonalityProfile profile,
+                               @Nullable String name) {
+        return plugin.getBotManager().spawnBot(
+                arena, location, difficulty, profile.toNameList(), name);
+    }
 
     /**
      * Removes a bot.
@@ -127,7 +156,81 @@ public class SkyWarsTrainerAPI {
      * @param entityUuid the entity UUID
      * @return true if it's a bot
      */
-    public boolean isBot(@Nonnull java.util.UUID entityUuid) {
+    public boolean isBot(@Nonnull UUID entityUuid) {
         return plugin.getBotManager().isBot(entityUuid);
+    }
+
+    // ─── Custom Strategy Registration ───────────────────────────
+
+    /**
+     * Registers a custom combat strategy that will be available to all bots.
+     * The strategy will be evaluated alongside built-in strategies during combat.
+     *
+     * @param strategy the custom combat strategy to register
+     */
+    public void registerCustomCombatStrategy(@Nonnull CombatStrategy strategy) {
+        for (TrainerBot bot : plugin.getBotManager().getAllBots()) {
+            if (bot.getCombatEngine() != null) {
+                bot.getCombatEngine().getStrategies().add(strategy);
+            }
+        }
+        plugin.getLogger().info("[API] Registered custom combat strategy: " + strategy.getName());
+    }
+
+    /**
+     * Registers a custom bridge strategy that will be available to all bots.
+     * The strategy will be considered during bridge type selection.
+     *
+     * @param strategy the custom bridge strategy to register
+     */
+    public void registerCustomBridgeStrategy(@Nonnull BridgeStrategy strategy) {
+        for (TrainerBot bot : plugin.getBotManager().getAllBots()) {
+            if (bot.getBridgeEngine() != null) {
+                bot.getBridgeEngine().registerStrategy(strategy);
+            }
+        }
+        plugin.getLogger().info("[API] Registered custom bridge strategy: " + strategy.getName());
+    }
+
+    /**
+     * Registers a custom loot strategy that will be available to all bots.
+     * The strategy will be considered during loot strategy selection.
+     *
+     * @param strategy the custom loot strategy to register
+     */
+    public void registerCustomLootStrategy(@Nonnull LootStrategy strategy) {
+        for (TrainerBot bot : plugin.getBotManager().getAllBots()) {
+            if (bot.getLootEngine() != null) {
+                bot.getLootEngine().registerStrategy(strategy);
+            }
+        }
+        plugin.getLogger().info("[API] Registered custom loot strategy: " + strategy.getName());
+    }
+
+    /**
+     * Registers a custom utility consideration that will be used in decision
+     * making for all bots. Custom considerations are evaluated alongside
+     * built-in ones during each utility evaluation cycle.
+     *
+     * @param consideration the custom consideration to register
+     */
+    public void registerCustomConsideration(@Nonnull UtilityScorer consideration) {
+        for (TrainerBot bot : plugin.getBotManager().getAllBots()) {
+            if (bot.getDecisionEngine() != null) {
+                bot.getDecisionEngine().registerCustomConsideration(consideration);
+            }
+        }
+        plugin.getLogger().info("[API] Registered custom consideration: " + consideration.getName());
+    }
+
+    /**
+     * Returns the plugin instance. Useful for external plugins that need
+     * to access configuration or other plugin services.
+     *
+     * @return the plugin instance
+     */
+    @Nonnull
+    public SkyWarsTrainerPlugin getPlugin() {
+        return plugin;
     }
 }

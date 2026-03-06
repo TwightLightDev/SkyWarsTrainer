@@ -23,27 +23,22 @@ import java.util.*;
  *   <li>Captures a {@link DecisionContext} snapshot of the world</li>
  *   <li>For each possible {@link BotAction}, computes a utility score by combining
  *       weighted {@link UtilityScorer} considerations</li>
- *   <li>Applies personality multipliers to the scores</li>
+ *   <li>Applies personality multipliers to the scores via {@link org.twightlight.skywarstrainer.ai.personality.PersonalityProfile}</li>
  *   <li>Applies decision quality noise (lower quality = more random)</li>
  *   <li>Picks the highest-scoring action and transitions the {@link BotStateMachine}</li>
  * </ol></p>
  *
  * <h3>Interrupt System</h3>
  * <p>Certain events trigger immediate re-evaluation:
- * <ul>
- *   <li>Taking damage</li>
- *   <li>New enemy enters awareness radius</li>
- *   <li>Health drops below threshold</li>
- *   <li>Player count changes (someone dies)</li>
- * </ul>
- * Interrupts set a dirty flag that causes evaluation on the next tick regardless
- * of the timer.</p>
+ * taking damage, new enemy enters awareness radius, health drops below threshold,
+ * player count changes. Interrupts set a dirty flag that causes evaluation on the
+ * next tick regardless of the timer.</p>
  *
  * <h3>Personality Integration</h3>
  * <p>Personality modifiers multiply specific action scores. For example, an AGGRESSIVE
- * bot multiplies FIGHT utility by 1.8. These multipliers are passed in via the bot's
- * profile. Phase 6 provides the full PersonalityProfile; in Phase 3 we use the
- * raw personality names from BotProfile to apply known multipliers.</p>
+ * bot multiplies FIGHT utility by 1.8. The {@link #getPersonalityMultiplier(BotAction)}
+ * method resolves modifiers from the bot's {@link org.twightlight.skywarstrainer.ai.personality.PersonalityProfile},
+ * which multiplicatively combines modifiers from all assigned personalities.</p>
  */
 public class DecisionEngine {
 
@@ -74,6 +69,9 @@ public class DecisionEngine {
      */
     private final Map<BotAction, List<WeightedConsideration>> actionWeights;
 
+    /** Custom considerations registered via API. */
+    private final List<UtilityScorer> customConsiderations;
+
     // ── Shared consideration instances (stateless, reusable) ──
     private final HealthConsideration healthConsideration = new HealthConsideration();
     private final ThreatConsideration threatConsideration = new ThreatConsideration();
@@ -102,6 +100,7 @@ public class DecisionEngine {
         this.lastChosenAction = BotAction.LOOT_OWN_ISLAND;
         this.lastScores = new EnumMap<>(BotAction.class);
         this.actionWeights = new EnumMap<>(BotAction.class);
+        this.customConsiderations = new ArrayList<>();
 
         buildActionWeights();
     }
@@ -153,6 +152,11 @@ public class DecisionEngine {
         DifficultyProfile diff = bot.getDifficultyProfile();
         double decisionQuality = diff.getDecisionQuality();
 
+        // Apply STRATEGIC personality's decision quality boost
+        double qualityMultiplier = bot.getProfile().getPersonalityProfile()
+                .getModifier("decisionQuality");
+        decisionQuality = MathUtil.clamp(decisionQuality * qualityMultiplier, 0.0, 1.0);
+
         for (BotAction action : BotAction.values()) {
             double score = scoreAction(action);
 
@@ -172,7 +176,18 @@ public class DecisionEngine {
         // 4. Select the best action
         BotAction bestAction = selectBestAction(decisionQuality);
 
-        // 5. Map action to state and transition
+        // 5. Fire BotDecisionEvent (cancellable)
+        if (bestAction != null) {
+            BotDecisionEvent decisionEvent = new BotDecisionEvent(
+                    bot, bestAction, new HashMap<>(lastScores));
+            org.bukkit.Bukkit.getPluginManager().callEvent(decisionEvent);
+
+            if (decisionEvent.isCancelled()) {
+                return; // Another plugin cancelled this decision
+            }
+        }
+
+        // 6. Map action to state and transition
         if (bestAction != null && bestAction != lastChosenAction) {
             BotState newState = actionToState(bestAction);
             if (newState != null) {
@@ -180,20 +195,9 @@ public class DecisionEngine {
                         + String.format(" (%.3f)", lastScores.getOrDefault(bestAction, 0.0)));
             }
             lastChosenAction = bestAction;
-            // In evaluate(), after selecting bestAction and before transitioning state:
-
-            // Fire BotDecisionEvent (cancellable)
-            BotDecisionEvent decisionEvent = new BotDecisionEvent(
-                    bot, bestAction, new java.util.HashMap<>(lastScores));
-            org.bukkit.Bukkit.getPluginManager().callEvent(decisionEvent);
-
-            if (decisionEvent.isCancelled()) {
-                return; // Another plugin cancelled this decision
-            }
-
         }
 
-        // 6. Debug output
+        // 7. Debug output
         if (bot.getProfile().isDebugMode()) {
             logEvaluation();
         }
@@ -203,7 +207,13 @@ public class DecisionEngine {
      * Handles decision-making during grace period. Only looting and idle are allowed.
      */
     private void handleGracePeriod() {
-        if (context.unlootedChestCount > 0) {
+        // Check if RUSHER personality — should bridge to mid even during grace
+        boolean isRusher = bot.getProfile().hasPersonality("RUSHER");
+
+        if (isRusher && context.blockCount > 0) {
+            stateMachine.transitionTo(BotState.BRIDGING, "Grace period: rusher bridging to mid");
+            lastChosenAction = BotAction.BRIDGE_TO_MID;
+        } else if (context.unlootedChestCount > 0) {
             stateMachine.transitionTo(BotState.LOOTING, "Grace period: looting");
             lastChosenAction = BotAction.LOOT_OWN_ISLAND;
         } else {
@@ -267,80 +277,87 @@ public class DecisionEngine {
         return sorted.get(0).getKey();
     }
 
+    /**
+     * Returns the personality multiplier for a given action based on the bot's
+     * PersonalityProfile. Uses the resolved modifiers from all assigned personalities.
+     *
+     * <p>The mapping from BotAction to modifier key accounts for the fact that
+     * multiple actions may share a modifier key (e.g., all FIGHT variants use "FIGHT"),
+     * and some personalities define specific keys (e.g., RUSHER defines "LOOT_OWN_ISLAND"
+     * separately from "LOOT").</p>
+     *
+     * @param action the action to get the multiplier for
+     * @return the combined personality multiplier, clamped to [0.01, 5.0]
+     */
+    private double getPersonalityMultiplier(@Nonnull BotAction action) {
+        org.twightlight.skywarstrainer.ai.personality.PersonalityProfile profile =
+                bot.getProfile().getPersonalityProfile();
+        if (profile.isEmpty()) return 1.0;
 
+        // Try specific key first, then generic key
+        String specificKey = actionToSpecificKey(action);
+        String genericKey = actionToGenericKey(action);
+
+        double multiplier = profile.getModifier(specificKey);
+
+        // If the specific key returned 1.0 (default / not defined), also check generic
+        if (Math.abs(multiplier - 1.0) < 0.001 && !specificKey.equals(genericKey)) {
+            double genericMult = profile.getModifier(genericKey);
+            if (Math.abs(genericMult - 1.0) > 0.001) {
+                multiplier = genericMult;
+            }
+        }
+
+        // Clamp to prevent extreme values
+        return MathUtil.clamp(multiplier, 0.01, 5.0);
+    }
 
     /**
-     * Returns the multiplier a specific personality applies to a specific action.
-     * Based on Section 4 of the specification.
+     * Maps a BotAction to a specific personality modifier key.
+     * These are the exact keys as defined in Personality enum modifiers.
+     *
+     * @param action the action
+     * @return the specific modifier key
      */
-    private double getPersonalityActionMultiplier(@Nonnull String personality, @Nonnull BotAction action) {
-        switch (personality) {
-            case "AGGRESSIVE":
-                switch (action) {
-                    case FIGHT_NEAREST: case FIGHT_WEAKEST: case FIGHT_TARGETED: return 1.8;
-                    case HUNT_PLAYER: return 2.0;
-                    case LOOT_OWN_ISLAND: case LOOT_MID: case LOOT_OTHER_ISLAND: return 0.5;
-                    case FLEE: return 0.4;
-                    default: return 1.0;
-                }
-            case "PASSIVE":
-                switch (action) {
-                    case FIGHT_NEAREST: case FIGHT_WEAKEST: case FIGHT_TARGETED: return 0.4;
-                    case FLEE: return 2.0;
-                    case LOOT_OWN_ISLAND: case LOOT_MID: case LOOT_OTHER_ISLAND: return 1.5;
-                    case ENCHANT: return 1.8;
-                    default: return 1.0;
-                }
-            case "RUSHER":
-                switch (action) {
-                    case BRIDGE_TO_MID: return 3.0;
-                    case LOOT_OWN_ISLAND: return 0.2;
-                    default: return 1.0;
-                }
-            case "CAMPER":
-                switch (action) {
-                    case CAMP_POSITION: return 2.5;
-                    case HUNT_PLAYER: return 0.3;
-                    case BRIDGE_TO_PLAYER: return 0.3;
-                    default: return 1.0;
-                }
-            case "STRATEGIC":
-                // Strategic doesn't change action weights; it boosts decision quality
-                return 1.0;
-            case "COLLECTOR":
-                switch (action) {
-                    case LOOT_OWN_ISLAND: case LOOT_MID: case LOOT_OTHER_ISLAND: return 2.5;
-                    case ENCHANT: case ORGANIZE_INVENTORY: return 1.5;
-                    case FIGHT_NEAREST: case FIGHT_WEAKEST: case FIGHT_TARGETED: return 0.6;
-                    default: return 1.0;
-                }
-            case "BERSERKER":
-                switch (action) {
-                    case FLEE: return 0.05;
-                    case FIGHT_NEAREST: case FIGHT_WEAKEST: case FIGHT_TARGETED: return 1.5;
-                    default: return 1.0;
-                }
-            case "SNIPER":
-                // Sniper affects combat strategy selection, not action-level decisions
-                return 1.0;
-            case "TRICKSTER":
-                switch (action) {
-                    case BREAK_ENEMY_BRIDGE: return 1.8;
-                    case USE_ENDER_PEARL: return 1.5;
-                    default: return 1.0;
-                }
-            case "CAUTIOUS":
-                switch (action) {
-                    case FLEE: return 1.3;
-                    default: return 1.0;
-                }
-            case "CLUTCH_MASTER":
-                // Clutch affects combat execution, not high-level decisions
-                return 1.0;
-            case "TEAMWORK":
-                return 1.0; // Phase 6: team mode integration
-            default:
-                return 1.0;
+    @Nonnull
+    private String actionToSpecificKey(@Nonnull BotAction action) {
+        switch (action) {
+            case LOOT_OWN_ISLAND: return "LOOT_OWN_ISLAND";
+            case FIGHT_NEAREST:
+            case FIGHT_WEAKEST:
+            case FIGHT_TARGETED: return "FIGHT";
+            case HUNT_PLAYER: return "HUNT";
+            case LOOT_MID:
+            case LOOT_OTHER_ISLAND: return "LOOT";
+            case FLEE: return "FLEE";
+            case ENCHANT: return "ENCHANT";
+            case CAMP_POSITION: return "CAMP";
+            case BRIDGE_TO_MID: return "BRIDGE_TO_MID";
+            case BRIDGE_TO_PLAYER: return "BRIDGE_TO_PLAYER";
+            case BREAK_ENEMY_BRIDGE: return "BREAK_ENEMY_BRIDGE";
+            case USE_ENDER_PEARL: return "USE_ENDER_PEARL";
+            case ORGANIZE_INVENTORY: return "EQUIP";
+            default: return action.name();
+        }
+    }
+
+    /**
+     * Maps a BotAction to a generic/fallback modifier key.
+     * Used when the specific key has no modifier defined.
+     *
+     * @param action the action
+     * @return the generic modifier key
+     */
+    @Nonnull
+    private String actionToGenericKey(@Nonnull BotAction action) {
+        switch (action) {
+            case LOOT_OWN_ISLAND:
+            case LOOT_MID:
+            case LOOT_OTHER_ISLAND: return "LOOT";
+            case FIGHT_NEAREST:
+            case FIGHT_WEAKEST:
+            case FIGHT_TARGETED: return "FIGHT";
+            default: return actionToSpecificKey(action);
         }
     }
 
@@ -401,25 +418,22 @@ public class DecisionEngine {
     /**
      * Builds the consideration-weight tables for each possible action.
      * This defines how each consideration influences each action's utility score.
-     *
-     * <p>Positive weight: higher consideration score → higher action score.
-     * Negative weight: higher consideration score → lower action score.</p>
      */
     private void buildActionWeights() {
         // ── LOOT_OWN_ISLAND ──
         addWeight(BotAction.LOOT_OWN_ISLAND,
-                lootValueConsideration, 1.5,         // High when inventory is empty
-                equipmentGapConsideration, -0.8,     // More desire to loot when outgeared (inverted)
-                timePressureConsideration, -1.0,     // Less desire late game
-                threatConsideration, -0.6,            // Don't loot when enemies are close
-                playerCountConsideration, 0.3);       // More players = more reason to gear up first
+                lootValueConsideration, 1.5,
+                equipmentGapConsideration, -0.8,
+                timePressureConsideration, -1.0,
+                threatConsideration, -0.6,
+                playerCountConsideration, 0.3);
 
         // ── LOOT_MID ──
         addWeight(BotAction.LOOT_MID,
                 lootValueConsideration, 1.2,
                 equipmentGapConsideration, -0.6,
-                timePressureConsideration, -0.5,      // Mid loot stays relevant longer
-                zoneControlConsideration, 0.5,        // Mid has best loot
+                timePressureConsideration, -0.5,
+                zoneControlConsideration, 0.5,
                 threatConsideration, -0.8);
 
         // ── LOOT_OTHER_ISLAND ──
@@ -431,24 +445,24 @@ public class DecisionEngine {
 
         // ── BRIDGE_TO_MID ──
         addWeight(BotAction.BRIDGE_TO_MID,
-                lootValueConsideration, 0.8,          // Mid has best loot
-                zoneControlConsideration, -0.5,       // If already in good position, less need
-                gamePhaseConsideration, -0.3,         // More attractive early/mid
-                resourceConsideration, -0.3);         // Need blocks to bridge
+                lootValueConsideration, 0.8,
+                zoneControlConsideration, -0.5,
+                gamePhaseConsideration, -0.3,
+                resourceConsideration, -0.3);
 
         // ── BRIDGE_TO_PLAYER ──
         addWeight(BotAction.BRIDGE_TO_PLAYER,
-                threatConsideration, 0.6,              // Need a target to bridge toward
-                equipmentGapConsideration, 0.8,       // Only bridge to fight if well-equipped
-                timePressureConsideration, 0.7,       // More attractive late game
-                resourceConsideration, -0.2);         // Need blocks
+                threatConsideration, 0.6,
+                equipmentGapConsideration, 0.8,
+                timePressureConsideration, 0.7,
+                resourceConsideration, -0.2);
 
         // ── FIGHT_NEAREST ──
         addWeight(BotAction.FIGHT_NEAREST,
-                threatConsideration, 1.2,              // Enemy present and close
-                equipmentGapConsideration, 0.8,       // Fight when gear advantage
-                healthConsideration, -1.0,             // Don't fight at low HP
-                timePressureConsideration, 0.5,       // More fighting late game
+                threatConsideration, 1.2,
+                equipmentGapConsideration, 0.8,
+                healthConsideration, -1.0,
+                timePressureConsideration, 0.5,
                 gamePhaseConsideration, 0.4);
 
         // ── FIGHT_WEAKEST ──
@@ -467,15 +481,15 @@ public class DecisionEngine {
 
         // ── FLEE ──
         addWeight(BotAction.FLEE,
-                healthConsideration, 2.0,              // High urgency when health is low
-                threatConsideration, 1.0,              // High threat → flee
-                equipmentGapConsideration, -1.2,      // Outgeared → flee (inverted: low score = flee)
+                healthConsideration, 2.0,
+                threatConsideration, 1.0,
+                equipmentGapConsideration, -1.2,
                 resourceConsideration, -0.3);
 
         // ── HEAL ──
         addWeight(BotAction.HEAL,
                 healthConsideration, 1.8,
-                threatConsideration, -0.5);            // Hard to heal when enemy is close
+                threatConsideration, -0.5);
 
         // ── EAT_FOOD ──
         addWeight(BotAction.EAT_FOOD,
@@ -484,40 +498,40 @@ public class DecisionEngine {
 
         // ── DRINK_POTION ──
         addWeight(BotAction.DRINK_POTION,
-                threatConsideration, 0.5,              // Drink speed/strength before fights
+                threatConsideration, 0.5,
                 equipmentGapConsideration, 0.3,
                 timePressureConsideration, 0.4);
 
         // ── ENCHANT ──
         addWeight(BotAction.ENCHANT,
-                lootValueConsideration, 0.5,           // Still want to improve gear
-                threatConsideration, -1.5,             // Never enchant near enemies
+                lootValueConsideration, 0.5,
+                threatConsideration, -1.5,
                 timePressureConsideration, -0.5,
                 zoneControlConsideration, 0.3);
 
         // ── ORGANIZE_INVENTORY ──
         addWeight(BotAction.ORGANIZE_INVENTORY,
-                threatConsideration, -1.5,             // Never organize near enemies
+                threatConsideration, -1.5,
                 resourceConsideration, 0.3);
 
         // ── CAMP_POSITION ──
         addWeight(BotAction.CAMP_POSITION,
                 zoneControlConsideration, 1.2,
-                resourceConsideration, 0.4,            // Need supplies to camp
-                threatConsideration, -0.3,             // Camp when not under immediate pressure
+                resourceConsideration, 0.4,
+                threatConsideration, -0.3,
                 playerCountConsideration, 0.5);
 
         // ── HUNT_PLAYER ──
         addWeight(BotAction.HUNT_PLAYER,
-                equipmentGapConsideration, 1.0,       // Hunt when well-equipped
-                timePressureConsideration, 1.2,       // Hunt more in late game
-                healthConsideration, -0.8,             // Don't hunt at low HP
-                gamePhaseConsideration, 0.8,          // Hunt in mid-late game
-                playerCountConsideration, -0.6);      // Fewer players → more hunting
+                equipmentGapConsideration, 1.0,
+                timePressureConsideration, 1.2,
+                healthConsideration, -0.8,
+                gamePhaseConsideration, 0.8,
+                playerCountConsideration, -0.6);
 
         // ── USE_ENDER_PEARL ──
         addWeight(BotAction.USE_ENDER_PEARL,
-                healthConsideration, 0.8,              // Pearl to escape when low HP
+                healthConsideration, 0.8,
                 threatConsideration, 0.6,
                 projectileConsideration, 0.3);
 
@@ -547,6 +561,18 @@ public class DecisionEngine {
         actionWeights.put(action, list);
     }
 
+    // ─── Custom Consideration Registration ──────────────────────
+
+    /**
+     * Registers a custom utility consideration via the API. Custom considerations
+     * are evaluated alongside built-in ones during each evaluation cycle.
+     *
+     * @param consideration the custom consideration to register
+     */
+    public void registerCustomConsideration(@Nonnull UtilityScorer consideration) {
+        customConsiderations.add(consideration);
+    }
+
     // ─── Debug ──────────────────────────────────────────────────
 
     /**
@@ -561,7 +587,7 @@ public class DecisionEngine {
 
         int shown = 0;
         for (Map.Entry<BotAction, Double> entry : sorted) {
-            if (shown >= 5) break; // Show top 5
+            if (shown >= 5) break;
             if (shown > 0) sb.append(", ");
             sb.append(entry.getKey().name())
                     .append(String.format("=%.3f", entry.getValue()));
@@ -574,31 +600,19 @@ public class DecisionEngine {
 
     // ─── Queries ────────────────────────────────────────────────
 
-    /**
-     * Returns the action chosen in the most recent evaluation.
-     *
-     * @return the last chosen action
-     */
+    /** @return the action chosen in the most recent evaluation */
     @Nonnull
     public BotAction getLastChosenAction() {
         return lastChosenAction;
     }
 
-    /**
-     * Returns the score map from the most recent evaluation.
-     *
-     * @return unmodifiable map of action scores
-     */
+    /** @return unmodifiable map of action scores from last evaluation */
     @Nonnull
     public Map<BotAction, Double> getLastScores() {
         return Collections.unmodifiableMap(lastScores);
     }
 
-    /**
-     * Returns the current decision context (snapshot from last evaluation).
-     *
-     * @return the context
-     */
+    /** @return the current decision context (snapshot from last evaluation) */
     @Nonnull
     public DecisionContext getContext() {
         return context;
@@ -618,62 +632,6 @@ public class DecisionEngine {
             this.weight = weight;
         }
     }
-
-    /**
-     * Returns the personality multiplier for a given action based on the bot's
-     * PersonalityProfile. Uses the resolved modifiers from all assigned personalities.
-     */
-    private double getPersonalityMultiplier(@Nonnull BotAction action) {
-        org.twightlight.skywarstrainer.ai.personality.PersonalityProfile profile =
-                bot.getProfile().getPersonalityProfile();
-        if (profile.isEmpty()) return 1.0;
-
-        // Map BotAction to the modifier key used in Personality enum
-        String key = actionToModifierKey(action);
-        double multiplier = profile.getModifier(key);
-
-        // Clamp to prevent extreme values
-        return MathUtil.clamp(multiplier, 0.01, 5.0);
-    }
-
-    /**
-     * Maps a BotAction to the personality modifier key.
-     */
-    @Nonnull
-    private String actionToModifierKey(@Nonnull BotAction action) {
-        switch (action) {
-            case FIGHT_NEAREST:
-            case FIGHT_WEAKEST:
-            case FIGHT_TARGETED:
-                return "FIGHT";
-            case HUNT_PLAYER:
-                return "HUNT";
-            case LOOT_OWN_ISLAND:
-                return "LOOT_OWN_ISLAND";
-            case LOOT_MID:
-            case LOOT_OTHER_ISLAND:
-                return "LOOT";
-            case FLEE:
-                return "FLEE";
-            case ENCHANT:
-                return "ENCHANT";
-            case CAMP_POSITION:
-                return "CAMP";
-            case BRIDGE_TO_MID:
-                return "BRIDGE_TO_MID";
-            case BRIDGE_TO_PLAYER:
-                return "BRIDGE_TO_PLAYER";
-            case BREAK_ENEMY_BRIDGE:
-                return "BREAK_ENEMY_BRIDGE";
-            case USE_ENDER_PEARL:
-                return "USE_ENDER_PEARL";
-            case ORGANIZE_INVENTORY:
-                return "EQUIP";
-            default:
-                return action.name();
-        }
-    }
-
 
     /**
      * All possible high-level actions the bot can take.
@@ -701,4 +659,3 @@ public class DecisionEngine {
         DRINK_POTION
     }
 }
-
