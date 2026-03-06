@@ -3,21 +3,16 @@ package org.twightlight.skywarstrainer.api;
 import org.bukkit.Location;
 import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
 import org.twightlight.skywarstrainer.ai.decision.UtilityScorer;
-import org.twightlight.skywarstrainer.ai.personality.Personality;
 import org.twightlight.skywarstrainer.ai.personality.PersonalityProfile;
-import org.twightlight.skywarstrainer.bot.BotManager;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.bridging.strategies.BridgeStrategy;
 import org.twightlight.skywarstrainer.combat.strategies.CombatStrategy;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
-import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.loot.strategies.LootStrategy;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 /**
