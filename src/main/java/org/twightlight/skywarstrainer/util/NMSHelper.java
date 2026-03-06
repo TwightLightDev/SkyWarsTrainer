@@ -3,8 +3,10 @@ package org.twightlight.skywarstrainer.util;
 import net.minecraft.server.v1_8_R3.EntityLiving;
 import net.minecraft.server.v1_8_R3.EntityPlayer;
 
+import net.minecraft.server.v1_8_R3.ItemStack;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.craftbukkit.v1_8_R3.CraftWorld;
 import org.bukkit.craftbukkit.v1_8_R3.entity.CraftEntity;
 import org.bukkit.craftbukkit.v1_8_R3.entity.CraftLivingEntity;
@@ -379,4 +381,155 @@ public final class NMSHelper {
             entity.setNoDamageTicks(ticks);
         }
     }
+
+    /**
+     * Simulates the bot attacking a target entity, replicating vanilla 1.8 melee attack.
+     *
+     * <p>This uses NMS to invoke the attack sequence as if the bot performed a left-click
+     * on the target. It handles damage calculation, invulnerability frame checks, and
+     * the attack event. Knockback is NOT applied here — it should be applied separately
+     * via {@link #applyKnockback} for finer control from the combat system.</p>
+     *
+     * @param attacker the attacking living entity (the bot)
+     * @param target   the entity being attacked
+     */
+    public static void attackEntity(@Nonnull LivingEntity attacker, @Nonnull LivingEntity target) {
+        try {
+            EntityLiving nmsAttacker = getNMSLivingEntity(attacker);
+            EntityLiving nmsTarget = getNMSLivingEntity(target);
+            if (nmsAttacker == null || nmsTarget == null) {
+                // Fallback: use Bukkit damage method
+                attackEntityFallback(attacker, target);
+                return;
+            }
+
+            /*
+             * Check invulnerability frames. In vanilla 1.8, an entity has
+             * noDamageTicks after being hit (default 20 ticks = 1 second,
+             * but damage can still be applied if it exceeds the last damage dealt).
+             * The hurtTimestamp / noDamageTicks check prevents damage spam.
+             */
+            if (nmsTarget.noDamageTicks > nmsTarget.maxNoDamageTicks / 2) {
+                return; // Target is still in invulnerability frames
+            }
+
+            /*
+             * Calculate base attack damage from the attacker's held item.
+             * In 1.8, there's no attack cooldown — damage is based purely on
+             * the weapon's damage attribute.
+             */
+            float damage = calculateMeleeDamage(attacker);
+
+            // Apply the damage through Bukkit's damage method to ensure events fire
+            // (EntityDamageByEntityEvent, etc.) so other plugins can handle it.
+            target.damage(damage, attacker);
+
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "[SkyWarsTrainer] Failed to attack entity via NMS, using fallback", e);
+            attackEntityFallback(attacker, target);
+        }
+    }
+
+    /**
+     * Fallback attack method using pure Bukkit API.
+     * Less precise than NMS but functional if NMS fails.
+     *
+     * @param attacker the attacking entity
+     * @param target   the target entity
+     */
+    private static void attackEntityFallback(@Nonnull LivingEntity attacker, @Nonnull LivingEntity target) {
+        float damage = calculateMeleeDamage(attacker);
+        target.damage(damage, attacker);
+    }
+
+    /**
+     * Calculates melee damage for the given attacker based on their held weapon.
+     *
+     * <p>Vanilla 1.8 base damage values:
+     * <ul>
+     *   <li>Fist: 1.0</li>
+     *   <li>Wood/Gold Sword: 5.0</li>
+     *   <li>Stone Sword: 6.0</li>
+     *   <li>Iron Sword: 7.0</li>
+     *   <li>Diamond Sword: 8.0</li>
+     *   <li>Sharpness adds +1.25 per level</li>
+     * </ul></p>
+     *
+     * @param attacker the attacking entity
+     * @return the base melee damage
+     */
+    private static float calculateMeleeDamage(@Nonnull LivingEntity attacker) {
+        org.bukkit.inventory.ItemStack weapon = attacker.getEquipment() != null
+                ? attacker.getEquipment().getItemInHand() : null;
+
+        if (weapon == null || weapon.getType() == Material.AIR) {
+            return 1.0f; // Fist damage
+        }
+
+        float baseDamage;
+        switch (weapon.getType()) {
+            case DIAMOND_SWORD:
+                baseDamage = 8.0f;
+                break;
+            case IRON_SWORD:
+                baseDamage = 7.0f;
+                break;
+            case STONE_SWORD:
+                baseDamage = 6.0f;
+                break;
+            case GOLD_SWORD:
+            case WOOD_SWORD:
+                baseDamage = 5.0f;
+                break;
+            case DIAMOND_AXE:
+                baseDamage = 7.0f;
+                break;
+            case IRON_AXE:
+                baseDamage = 6.0f;
+                break;
+            case STONE_AXE:
+                baseDamage = 5.0f;
+                break;
+            case GOLD_AXE:
+            case WOOD_AXE:
+                baseDamage = 4.0f;
+                break;
+            default:
+                baseDamage = 1.0f;
+                break;
+        }
+
+        // Add Sharpness enchantment bonus (+1.25 per level in 1.8)
+        if (weapon.containsEnchantment(org.bukkit.enchantments.Enchantment.DAMAGE_ALL)) {
+            int sharpnessLevel = weapon.getEnchantmentLevel(org.bukkit.enchantments.Enchantment.DAMAGE_ALL);
+            baseDamage += sharpnessLevel * 1.25f;
+        }
+
+        return baseDamage;
+    }
+
+    /**
+     * Plays the arm swing animation for the given entity, visible to all nearby players.
+     * Delegates to {@link PacketUtil#playArmSwing(Entity)} for packet-based animation.
+     *
+     * @param entity the entity whose arm should swing
+     */
+    public static void playArmSwing(@Nonnull Entity entity) {
+        PacketUtil.playArmSwing(entity);
+    }
+
+    public static void useItem(Player player, boolean use) {
+        EntityPlayer ep = ((CraftPlayer) player).getHandle();
+        ItemStack item = ep.inventory.getItemInHand();
+
+        if (item == null || item.getItem() == null) return;
+
+        if (use) {
+            int duration = 72000;
+            ep.a(item, duration);                   // start using item
+        } else {
+            ep.bU();                                // stop using item
+        }
+    }
+
 }
