@@ -9,6 +9,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
+import org.twightlight.skywarstrainer.combat.CombatEngine;
 import org.twightlight.skywarstrainer.combat.ComboTracker;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.awareness.VoidDetector;
@@ -377,19 +378,20 @@ public class BlockPlacePVPStrategy implements CombatStrategy {
     }
 
     /**
-     * Attempts to get the combo tracker from the bot's combat engine.
-     * Returns null if the combat engine is not available.
+     * Gets the combo tracker from the bot's combat engine.
+     *
+     * @param bot the trainer bot
+     * @return the combo tracker, or null if the combat engine is not active
      */
     @Nullable
     private ComboTracker getComboTracker(@Nonnull TrainerBot bot) {
-        // The combat engine is not directly accessible from here
-        // since it's created in Phase 4 and referenced through TrainerBot.
-        // We'll return null for now — the combo tracker will be wired in
-        // when CombatEngine is integrated into TrainerBot's tick loop.
-        // For standalone strategy testing, the combo break check will fall through
-        // to other placement modes.
+        CombatEngine engine = bot.getCombatEngine();
+        if (engine != null) {
+            return engine.getComboTracker();
+        }
         return null;
     }
+
 
     @Override
     public double getPriority(@Nonnull TrainerBot bot) {

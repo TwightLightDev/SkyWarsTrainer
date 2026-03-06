@@ -11,6 +11,7 @@ import org.bukkit.entity.Player;
 import org.twightlight.skywars.arena.Arena;
 import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
 import org.twightlight.skywarstrainer.awareness.*;
+import org.twightlight.skywarstrainer.combat.CombatEngine;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.util.PacketUtil;
@@ -169,6 +170,8 @@ public class TrainerBot {
      */
     private TickTimer gamePhaseTimer;
 
+    private CombatEngine combatEngine;
+
     /**
      * Creates a new TrainerBot. Does NOT spawn the NPC yet — call {@link #spawn(Location)}
      * to create and spawn the NPC in the world.
@@ -281,6 +284,9 @@ public class TrainerBot {
         this.voidDetector = new VoidDetector(this);
         this.fallDamageEstimator = new FallDamageEstimator(this);
         this.gamePhaseTracker = new GamePhaseTracker(this);
+        // ── Combat Subsystem ──
+        this.combatEngine = new CombatEngine(this);
+
 
         /*
          * Initialize tick timers for awareness subsystems with variance to prevent
@@ -316,6 +322,7 @@ public class TrainerBot {
         voidDetector = null;
         fallDamageEstimator = null;
         gamePhaseTracker = null;
+        combatEngine = null;
 
         if (npc != null) {
             if (npc.isSpawned()) {
@@ -391,6 +398,19 @@ public class TrainerBot {
         // and velocity vectors. This is a lightweight operation (iterates nearby entities).
         tickThreatMap();
 
+        // ── 2.5 Combat Engine (every 1-2 ticks) ──────────────
+        // The combat engine needs frequent ticking for responsive PvP.
+        // It only does real work when the bot is in the FIGHTING state.
+        if (combatEngine != null && combatEngine.isActive()) {
+            try {
+                combatEngine.tick();
+            } catch (Exception e) {
+                plugin.getLogger().log(Level.WARNING,
+                        "Error in combat engine tick for bot " + getName(), e);
+            }
+        }
+
+
         // ── 3. Void/edge detection (every 5 ticks) ───────────
         // Edge detection is frequent because falling into void is instant death.
         // The bot needs fast awareness of nearby edges for crouch/avoidance behavior.
@@ -437,6 +457,7 @@ public class TrainerBot {
         if (mistakeTimer.tick()) {
             injectMistake();
         }
+
 
         /*
          * Phase 3+ will add:
@@ -998,6 +1019,17 @@ public class TrainerBot {
     }
 
     /**
+     * Returns the combat engine for this bot.
+     * Used by combat strategies, the decision engine, and evaluation systems.
+     *
+     * @return the combat engine, or null if not yet initialized
+     */
+    @Nullable
+    public CombatEngine getCombatEngine() {
+        return combatEngine;
+    }
+
+    /**
      * Helper to format a location for debug logging.
      */
     private static String formatLocation(Location loc) {
@@ -1101,5 +1133,6 @@ public class TrainerBot {
         public TrainerBot getOwnerBot() {
             return ownerBot;
         }
+
     }
 }
