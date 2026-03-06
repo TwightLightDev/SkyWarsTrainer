@@ -137,6 +137,17 @@ public class BotStateMachine {
         currentState = newState;
         stateEnteredTick = bot.getLocalTickCount();
 
+        // In transitionTo(), after setting currentState and before debug log:
+
+        // Fire BotStateChangeEvent
+        try {
+            org.twightlight.skywarstrainer.api.events.BotStateChangeEvent event =
+                    new org.twightlight.skywarstrainer.api.events.BotStateChangeEvent(bot, oldState, newState);
+            org.bukkit.Bukkit.getPluginManager().callEvent(event);
+        } catch (Exception e) {
+            // Don't let event errors block state transitions
+        }
+
         if (bot.getProfile().isDebugMode()) {
             SkyWarsTrainerPlugin.getInstance().getLogger().info(
                     "[DEBUG] " + bot.getName() + " " + transition);

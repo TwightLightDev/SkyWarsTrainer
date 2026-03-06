@@ -4,11 +4,13 @@ import net.citizensnpcs.api.CitizensAPI;
 import net.citizensnpcs.api.npc.NPC;
 import net.citizensnpcs.api.npc.NPCRegistry;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.twightlight.skywars.arena.Arena;
 import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
 import org.twightlight.skywarstrainer.ai.personality.Personality;
 import org.twightlight.skywarstrainer.ai.personality.PersonalityConflictTable;
+import org.twightlight.skywarstrainer.ai.personality.PersonalityProfile;
 import org.twightlight.skywarstrainer.config.DifficultyConfig;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
@@ -81,6 +83,7 @@ public class BotManager {
         }
 
         DifficultyProfile difficultyProfile = plugin.getDifficultyConfig().getProfile(difficulty);
+
         BotProfile profile = new BotProfile(difficulty, difficultyProfile);
         for (String personality : personalities) {
             profile.addPersonality(personality);
@@ -108,6 +111,17 @@ public class BotManager {
             return null;
         }
 
+        // In spawnBot() method, after bot.spawn(location) succeeds and before return:
+
+        // Fire BotSpawnEvent
+        org.twightlight.skywarstrainer.api.events.BotSpawnEvent spawnEvent =
+                new org.twightlight.skywarstrainer.api.events.BotSpawnEvent(bot, location);
+        Bukkit.getPluginManager().callEvent(spawnEvent);
+        if (spawnEvent.isCancelled()) {
+            bot.destroy();
+            return null;
+        }
+
         activeBots.put(bot.getBotId(), bot);
         botsByName.put(displayName.toLowerCase(), bot);
 
@@ -132,6 +146,16 @@ public class BotManager {
         if (difficulty == null) difficulty = Difficulty.MEDIUM;
         return spawnBot(arena, location, difficulty, Collections.emptyList(), null);
     }
+
+    /**
+     * Periodic maintenance: cleans up dead bots. Called by a lightweight
+     * scheduler in the main plugin (NOT for ticking bots — that is handled
+     * by the Citizens Trait).
+     */
+    public void maintenance() {
+        cleanupDeadBots();
+    }
+
 
     // ─── Removal ────────────────────────────────────────────────
 

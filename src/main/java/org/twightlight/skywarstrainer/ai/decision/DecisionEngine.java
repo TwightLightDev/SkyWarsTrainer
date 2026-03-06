@@ -4,6 +4,7 @@ import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
 import org.twightlight.skywarstrainer.ai.decision.considerations.*;
 import org.twightlight.skywarstrainer.ai.state.BotState;
 import org.twightlight.skywarstrainer.ai.state.BotStateMachine;
+import org.twightlight.skywarstrainer.api.events.BotDecisionEvent;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.util.MathUtil;
@@ -179,6 +180,17 @@ public class DecisionEngine {
                         + String.format(" (%.3f)", lastScores.getOrDefault(bestAction, 0.0)));
             }
             lastChosenAction = bestAction;
+            // In evaluate(), after selecting bestAction and before transitioning state:
+
+            // Fire BotDecisionEvent (cancellable)
+            BotDecisionEvent decisionEvent = new BotDecisionEvent(
+                    bot, bestAction, new java.util.HashMap<>(lastScores));
+            org.bukkit.Bukkit.getPluginManager().callEvent(decisionEvent);
+
+            if (decisionEvent.isCancelled()) {
+                return; // Another plugin cancelled this decision
+            }
+
         }
 
         // 6. Debug output
@@ -255,25 +267,7 @@ public class DecisionEngine {
         return sorted.get(0).getKey();
     }
 
-    /**
-     * Returns the personality multiplier for a given action based on the bot's
-     * personality names. In Phase 3, we use hardcoded multipliers based on known
-     * personality names from the BotProfile. Phase 6's PersonalityProfile will
-     * provide a proper system.
-     */
-    private double getPersonalityMultiplier(@Nonnull BotAction action) {
-        List<String> personalities = bot.getProfile().getPersonalityNames();
-        if (personalities.isEmpty()) return 1.0;
 
-        double multiplier = 1.0;
-
-        for (String personality : personalities) {
-            multiplier *= getPersonalityActionMultiplier(personality.toUpperCase(), action);
-        }
-
-        // Clamp to prevent extreme values
-        return MathUtil.clamp(multiplier, 0.01, 5.0);
-    }
 
     /**
      * Returns the multiplier a specific personality applies to a specific action.
@@ -624,6 +618,62 @@ public class DecisionEngine {
             this.weight = weight;
         }
     }
+
+    /**
+     * Returns the personality multiplier for a given action based on the bot's
+     * PersonalityProfile. Uses the resolved modifiers from all assigned personalities.
+     */
+    private double getPersonalityMultiplier(@Nonnull BotAction action) {
+        org.twightlight.skywarstrainer.ai.personality.PersonalityProfile profile =
+                bot.getProfile().getPersonalityProfile();
+        if (profile.isEmpty()) return 1.0;
+
+        // Map BotAction to the modifier key used in Personality enum
+        String key = actionToModifierKey(action);
+        double multiplier = profile.getModifier(key);
+
+        // Clamp to prevent extreme values
+        return MathUtil.clamp(multiplier, 0.01, 5.0);
+    }
+
+    /**
+     * Maps a BotAction to the personality modifier key.
+     */
+    @Nonnull
+    private String actionToModifierKey(@Nonnull BotAction action) {
+        switch (action) {
+            case FIGHT_NEAREST:
+            case FIGHT_WEAKEST:
+            case FIGHT_TARGETED:
+                return "FIGHT";
+            case HUNT_PLAYER:
+                return "HUNT";
+            case LOOT_OWN_ISLAND:
+                return "LOOT_OWN_ISLAND";
+            case LOOT_MID:
+            case LOOT_OTHER_ISLAND:
+                return "LOOT";
+            case FLEE:
+                return "FLEE";
+            case ENCHANT:
+                return "ENCHANT";
+            case CAMP_POSITION:
+                return "CAMP";
+            case BRIDGE_TO_MID:
+                return "BRIDGE_TO_MID";
+            case BRIDGE_TO_PLAYER:
+                return "BRIDGE_TO_PLAYER";
+            case BREAK_ENEMY_BRIDGE:
+                return "BREAK_ENEMY_BRIDGE";
+            case USE_ENDER_PEARL:
+                return "USE_ENDER_PEARL";
+            case ORGANIZE_INVENTORY:
+                return "EQUIP";
+            default:
+                return action.name();
+        }
+    }
+
 
     /**
      * All possible high-level actions the bot can take.

@@ -1,5 +1,6 @@
 package org.twightlight.skywarstrainer.bot;
 
+import org.twightlight.skywarstrainer.ai.personality.PersonalityProfile;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 
@@ -28,7 +29,7 @@ public class BotProfile {
 
     /** The resolved difficulty profile with all numeric parameters. */
     private DifficultyProfile difficultyProfile;
-
+    private PersonalityProfile personalityProfile;
     /**
      * Personality names assigned to this bot (1-3). These are stored as
      * strings in Phase 1 and resolved to full Personality enums in Phase 6.
@@ -209,6 +210,28 @@ public class BotProfile {
 
     /** @param debugMode whether debug output is shown for this bot */
     public void setDebugMode(boolean debugMode) { this.debugMode = debugMode; }
+
+
+    /**
+     * Returns the resolved PersonalityProfile. Lazily builds from stored names.
+     *
+     * @return the personality profile (never null; may be empty)
+     */
+    @Nonnull
+    public PersonalityProfile getPersonalityProfile() {
+        if (personalityProfile == null) {
+            personalityProfile = PersonalityProfile.fromNames(personalityNames);
+        }
+        return personalityProfile;
+    }
+
+    /**
+     * Invalidates the cached personality profile. Must be called when
+     * personalities are added/removed.
+     */
+    private void invalidateProfile() {
+        this.personalityProfile = null;
+    }
 
     @Override
     public String toString() {

@@ -184,6 +184,12 @@ public class MovementController {
 
         // Apply the final look angles to the entity
         applyLookToEntity(entity);
+
+        // In tick() method, after sprintController.tick():
+
+        // Update strafe controller (must be ticked for combat strafing to work)
+        strafeController.tick();
+
     }
 
     // ─── Sprint-Jump Travel ─────────────────────────────────────

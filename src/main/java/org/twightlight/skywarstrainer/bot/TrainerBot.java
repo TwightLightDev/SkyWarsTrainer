@@ -311,15 +311,36 @@ public class TrainerBot {
         ));
 
         // ── BRIDGING state: delegated to BridgeEngine ──
+        // ── BRIDGING state: determine destination, start bridge, tick bridge engine ──
         stateMachine.registerTree(BotState.BRIDGING, new BehaviorTree("BRIDGING",
-                new ActionNode("bridge-tick", bot -> {
-                    if (bridgeEngine != null) {
-                        bridgeEngine.tick();
-                        return bridgeEngine.isActive() ? NodeStatus.RUNNING : NodeStatus.SUCCESS;
-                    }
-                    return NodeStatus.FAILURE;
-                })
+                new SequenceNode("bridge-sequence",
+                        new ConditionNode("has-blocks", bot -> {
+                            return bot.getInventoryManager() != null
+                                    && bot.getInventoryManager().getBlockCounter().getTotalBlocks() > 0;
+                        }),
+                        new ActionNode("bridge-tick", bot -> {
+                            if (bridgeEngine == null) return NodeStatus.FAILURE;
+
+                            // If bridge isn't active, we need to determine where to bridge
+                            if (!bridgeEngine.isActive()) {
+                                Location destination = determineBridgeDestination();
+                                if (destination == null) return NodeStatus.FAILURE;
+                                bridgeEngine.startBridge(destination, bot.getInventoryManager().getBlockCounter().getTotalBlocks());
+
+                                // Fire BotBridgeEvent
+                                org.bukkit.Bukkit.getPluginManager().callEvent(
+                                        new org.twightlight.skywarstrainer.api.events.BotBridgeEvent(
+                                                TrainerBot.this,
+                                                bridgeEngine.getActiveStrategy().getName(),
+                                                destination));
+                            }
+
+                            bridgeEngine.tick();
+                            return bridgeEngine.isActive() ? NodeStatus.RUNNING : NodeStatus.SUCCESS;
+                        })
+                )
         ));
+
 
         // ── FLEEING state: sprint away, eat gap, pearl escape ──
         stateMachine.registerTree(BotState.FLEEING, new BehaviorTree("FLEEING",
@@ -457,6 +478,47 @@ public class TrainerBot {
             }
         }
         return null;
+    }
+
+    /**
+     * Determines the best destination for bridging based on the decision engine's
+     * last chosen action and personality.
+     *
+     * @return the bridge destination, or null if none found
+     */
+    @Nullable
+    private Location determineBridgeDestination() {
+        if (decisionEngine == null) return null;
+
+        DecisionEngine.BotAction lastAction = decisionEngine.getLastChosenAction();
+
+        switch (lastAction) {
+            case BRIDGE_TO_MID:
+                // Bridge to mid island center
+                if (islandGraph != null) {
+                    Location midCenter = islandGraph.getMidIsland().center;
+                    if (midCenter != null) return midCenter;
+                }
+                // Fallback: bridge toward world center (0, Y, 0)
+                LivingEntity entity = getLivingEntity();
+                if (entity != null) {
+                    return new Location(entity.getWorld(), 0, entity.getLocation().getY(), 0);
+                }
+                return null;
+
+            case BRIDGE_TO_PLAYER:
+                // Bridge toward nearest enemy
+                if (threatMap != null) {
+                    ThreatMap.ThreatEntry nearest = threatMap.getNearestThreat();
+                    if (nearest != null && nearest.currentPosition != null) {
+                        return nearest.currentPosition;
+                    }
+                }
+                return null;
+
+            default:
+                return null;
+        }
     }
 
     /**

@@ -64,21 +64,23 @@ public class SkyWarsTrainerAPI {
     // ─── Bot Lifecycle ──────────────────────────────────────────
 
     /**
-     * Spawns a bot at the given location with the specified settings.
+     * Spawns a bot in a specific arena at the given location.
      *
+     * @param arena      the LostSkyWars arena
      * @param location   the spawn location
-     * @param difficulty the difficulty profile
+     * @param difficulty the difficulty level
      * @param profile    the personality profile
      * @return the spawned bot, or null if spawning failed
      */
     @Nullable
-    public TrainerBot spawnBot(@Nonnull Location location,
-                               @Nonnull DifficultyProfile difficulty,
+    public TrainerBot spawnBot(@Nonnull org.twightlight.skywars.arena.Arena<?> arena,
+                               @Nonnull Location location,
+                               @Nonnull Difficulty difficulty,
                                @Nonnull PersonalityProfile profile) {
         return plugin.getBotManager().spawnBot(
-                null, location, difficulty.getDifficulty(),
-                profile.toNameList(), null);
+                arena, location, difficulty, profile.toNameList(), null);
     }
+
 
     /**
      * Removes a bot.

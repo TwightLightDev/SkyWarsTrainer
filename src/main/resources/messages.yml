@@ -1,0 +1,89 @@
+# ══════════════════════════════════════════════════════════════
+# SkyWarsTrainer Chat Messages
+# ══════════════════════════════════════════════════════════════
+
+chat:
+  DEFAULT:
+    game_start:
+      - "gl hf"
+      - "good luck"
+      - "let's go!"
+    first_kill:
+      - "gg"
+      - "nice fight!"
+    death:
+      - "gg"
+      - "well played"
+    win:
+      - "GG!"
+      - "good game"
+    close_fight_won:
+      - "that was close!"
+      - "I'm shaking"
+    close_fight_lost:
+      - "gg wp"
+      - "you're good"
+  AGGRESSIVE:
+    game_start:
+      - "ez game"
+      - "who wants to die first?"
+    first_kill:
+      - "ez"
+      - "rekt"
+      - "too easy"
+    death:
+      - "lag"
+      - "how???"
+      - "lucky"
+    win:
+      - "ez win"
+      - "too easy"
+    close_fight_won:
+      - "get good"
+      - "ez"
+    close_fight_lost:
+      - "whatever"
+      - "lag"
+  PASSIVE:
+    game_start:
+      - "gl hf"
+      - "have fun everyone"
+    first_kill:
+      - "nice fight!"
+      - "gg"
+      - "sorry about that"
+    death:
+      - "gg wp"
+      - "nice combo"
+      - "well played"
+    win:
+      - "GG everyone!"
+      - "fun game"
+  BERSERKER:
+    game_start:
+      - "LET'S GO!"
+      - "FULL SEND"
+      - "CHARGE!!!"
+    first_kill:
+      - "YEAHHH"
+      - "GET REKT"
+    death:
+      - "WORTH IT"
+      - "FULL SEND BABY"
+    win:
+      - "UNSTOPPABLE"
+      - "WHO'S NEXT"
+  TRICKSTER:
+    game_start:
+      - "hehe"
+      - ":)"
+    first_kill:
+      - "fell for it LMAO"
+      - "baited"
+      - "outplayed"
+    death:
+      - "ok that was good"
+      - "didn't see that coming"
+    win:
+      - "calculated"
+      - "all planned"

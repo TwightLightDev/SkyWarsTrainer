@@ -1,9 +1,18 @@
 package org.twightlight.skywarstrainer;
 
+import org.twightlight.skywarstrainer.api.SkyWarsTrainerAPI;
 import org.twightlight.skywarstrainer.bot.BotManager;
+import org.twightlight.skywarstrainer.bot.TrainerBot;
+import org.twightlight.skywarstrainer.commands.CommandHandler;
+import org.twightlight.skywarstrainer.commands.TabCompleter;
 import org.twightlight.skywarstrainer.config.ConfigManager;
 import org.twightlight.skywarstrainer.config.DifficultyConfig;
+import org.twightlight.skywarstrainer.config.MapConfig;
+import org.twightlight.skywarstrainer.config.PersonalityConfig;
 import org.twightlight.skywarstrainer.game.GameEventListener;
+
+import net.citizensnpcs.api.CitizensAPI;
+import net.citizensnpcs.api.trait.TraitInfo;
 
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -25,9 +34,12 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
 
     private ConfigManager configManager;
     private DifficultyConfig difficultyConfig;
+    private PersonalityConfig personalityConfig;
+    private MapConfig mapConfig;
     private BotManager botManager;
     private GameEventListener gameEventListener;
-    private int mainTickTaskId = -1;
+    private SkyWarsTrainerAPI api;
+    private CommandHandler commandHandler;
 
     // ─── Lifecycle ──────────────────────────────────────────────
 
@@ -42,7 +54,17 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
             return;
         }
 
-        // 2. Load configs
+        // 2. Register the Citizens trait so it is known to the trait system
+        try {
+            CitizensAPI.getTraitFactory().registerTrait(
+                    TraitInfo.create(TrainerBot.SkyWarsTrainerTrait.class)
+                            .withName(TrainerBot.SkyWarsTrainerTrait.TRAIT_NAME));
+            getLogger().info("Registered SkyWarsTrainer trait with Citizens.");
+        } catch (Exception e) {
+            getLogger().log(Level.WARNING, "Could not register trait with Citizens (may already exist).", e);
+        }
+
+        // 3. Load configs
         try {
             this.configManager = new ConfigManager(this);
             this.configManager.loadAll();
@@ -53,7 +75,7 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
             return;
         }
 
-        // 3. Load difficulty profiles
+        // 4. Load difficulty profiles
         try {
             this.difficultyConfig = new DifficultyConfig(this);
             this.difficultyConfig.load();
@@ -64,17 +86,52 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
             return;
         }
 
-        // 4. Initialize bot manager
+        // 5. Load personality config
+        try {
+            this.personalityConfig = new PersonalityConfig(this);
+            this.personalityConfig.load();
+            getLogger().info("Personality configuration loaded.");
+        } catch (Exception e) {
+            getLogger().log(Level.WARNING, "Failed to load personality config, using defaults.", e);
+            this.personalityConfig = new PersonalityConfig(this);
+        }
+
+        // 6. Load map config
+        try {
+            this.mapConfig = new MapConfig(this);
+            this.mapConfig.load();
+        } catch (Exception e) {
+            getLogger().log(Level.WARNING, "Failed to load map config, using auto-detection.", e);
+            this.mapConfig = new MapConfig(this);
+        }
+
+        // 7. Initialize game hook
+
+        // 8. Initialize bot manager
         this.botManager = new BotManager(this);
 
+        // 9. Initialize API
+        this.api = new SkyWarsTrainerAPI(this);
 
-        // 6. Register event listener for LostSkyWars + Bukkit events
+        // 10. Register event listener for LostSkyWars + Bukkit events
         this.gameEventListener = new GameEventListener(this);
         Bukkit.getPluginManager().registerEvents(gameEventListener, this);
         getLogger().info("Game event listener registered.");
 
-        // 7. Start the main bot tick loop
-        startTickLoop();
+        // 11. Register commands and tab completer
+        this.commandHandler = new CommandHandler(this);
+        if (getCommand("swt") != null) {
+            getCommand("swt").setExecutor(commandHandler);
+            getCommand("swt").setTabCompleter(new TabCompleter(this));
+            getLogger().info("Commands registered.");
+        } else {
+            getLogger().severe("Failed to register /swt command! Check plugin.yml.");
+        }
+
+        // NOTE: We do NOT start a main tick loop here because TrainerBot.tick()
+        // is driven by the Citizens Trait's run() method, which is called every
+        // tick by Citizens automatically. Running a second tick loop would cause
+        // double-ticking.
 
         getLogger().info("SkyWarsTrainer v" + getDescription().getVersion() + " enabled successfully!");
         getLogger().info("Use /swt spawn <difficulty> to create a practice bot.");
@@ -86,44 +143,14 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        stopTickLoop();
-
         if (botManager != null) {
             int removed = botManager.removeAllBots();
             getLogger().info("Removed " + removed + " active bot(s).");
         }
 
+        SkyWarsTrainerAPI.clearInstance();
         instance = null;
         getLogger().info("SkyWarsTrainer disabled.");
-    }
-
-    // ─── Tick Loop ──────────────────────────────────────────────
-
-    private void startTickLoop() {
-        int tickRate = configManager.getBotTickRate();
-        long maxMsPerTick = configManager.getMaxTotalMsPerTick();
-
-        mainTickTaskId = Bukkit.getScheduler().scheduleSyncRepeatingTask(this, () -> {
-            long startNanos = System.nanoTime();
-            try {
-                botManager.tickAll(startNanos, maxMsPerTick);
-            } catch (Exception e) {
-                getLogger().log(Level.WARNING, "Error in bot tick loop", e);
-            }
-        }, 1L, tickRate);
-
-        if (mainTickTaskId == -1) {
-            getLogger().severe("Failed to start bot tick loop!");
-        } else {
-            getLogger().info("Bot tick loop started (rate=" + tickRate + ", budget=" + maxMsPerTick + "ms).");
-        }
-    }
-
-    private void stopTickLoop() {
-        if (mainTickTaskId != -1) {
-            Bukkit.getScheduler().cancelTask(mainTickTaskId);
-            mainTickTaskId = -1;
-        }
     }
 
     // ─── Dependency Validation ──────────────────────────────────
@@ -156,17 +183,28 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
     }
 
     @Nonnull
+    public PersonalityConfig getPersonalityConfig() {
+        return personalityConfig;
+    }
+
+    @Nonnull
+    public MapConfig getMapConfig() {
+        return mapConfig;
+    }
+
+    @Nonnull
     public BotManager getBotManager() {
         return botManager;
     }
 
-    /**
-     * Returns the game event listener.
-     *
-     * @return the event listener
-     */
     @Nonnull
     public GameEventListener getGameEventListener() {
         return gameEventListener;
+    }
+
+
+    @Nullable
+    public SkyWarsTrainerAPI getApi() {
+        return api;
     }
 }

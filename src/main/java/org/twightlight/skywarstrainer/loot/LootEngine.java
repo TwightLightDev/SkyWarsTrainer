@@ -160,9 +160,11 @@ public class LootEngine {
             if (block.getState() instanceof Chest) {
                 activeStrategy.initialize(bot, (Chest) block.getState());
                 strategyInitialized = true;
-            } else {
-                resetLoot();
-                return;
+
+                // Fire BotLootEvent
+                org.bukkit.Bukkit.getPluginManager().callEvent(
+                        new org.twightlight.skywarstrainer.api.events.BotLootEvent(
+                                bot, targetChest.location, activeStrategy.getName()));
             }
         }
 
@@ -196,10 +198,18 @@ public class LootEngine {
     @Nonnull
     private LootStrategy selectStrategy() {
         List<String> personalities = bot.getProfile().getPersonalityNames();
+        DifficultyProfile diff = bot.getDifficultyProfile();
+
         for (String personality : personalities) {
             switch (personality.toUpperCase()) {
                 case "AGGRESSIVE":
                 case "BERSERKER":
+                    // At medium+ difficulty, aggressive/berserker bots break chests
+                    if (diff.getDifficulty().ordinal() >=
+                            org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty.MEDIUM.ordinal()) {
+                        return findStrategy("AggressiveLoot");
+                    }
+                    return findStrategy("SpeedLoot");
                 case "RUSHER":
                     return findStrategy("SpeedLoot");
                 case "COLLECTOR":

@@ -77,7 +77,7 @@ public class GameEventListener implements Listener {
         for (TrainerBot bot : bots) {
             try {
                 bot.getProfile().addGamePlayed();
-
+                BotChatManager.sendChatMessage(bot, "game_start");
                 // Trigger decision engine interrupt to start AI
                 DecisionEngine de = bot.getDecisionEngine();
                 if (de != null) {
@@ -113,6 +113,7 @@ public class GameEventListener implements Listener {
                     Player botPlayer = bot.getPlayerEntity();
                     if (botPlayer != null && event.getWinnerTeam().hasMember(botPlayer)) {
                         bot.getProfile().addGameWon();
+                        BotChatManager.sendChatMessage(bot, "win");
                     }
                 }
                 plugin.getBotManager().removeBot(bot);
@@ -142,6 +143,9 @@ public class GameEventListener implements Listener {
             TrainerBot deadBot = botManager.getBotByEntityUuid(dead.getUniqueId());
             if (deadBot != null) {
                 deadBot.getProfile().addDeath();
+                BotChatManager.sendChatMessage(deadBot, "death");
+                Bukkit.getPluginManager().callEvent(
+                        new org.twightlight.skywarstrainer.api.events.BotDeathEvent(deadBot, killer));
                 if (plugin.getConfigManager().isDebugMode()) {
                     plugin.getLogger().info("[GameHook] Bot died: " + deadBot.getName()
                             + (killer != null ? " killed by " + killer.getName() : ""));
@@ -154,6 +158,7 @@ public class GameEventListener implements Listener {
             TrainerBot killerBot = botManager.getBotByEntityUuid(killer.getUniqueId());
             if (killerBot != null) {
                 killerBot.getProfile().addKill();
+                BotChatManager.sendChatMessage(killerBot, "first_kill");
                 Bukkit.getPluginManager().callEvent(
                         new org.twightlight.skywarstrainer.api.events.BotKillPlayerEvent(killerBot, dead));
             }

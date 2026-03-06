@@ -1,0 +1,68 @@
+# ══════════════════════════════════════════════════════════════
+# SkyWarsTrainer Personality Overrides
+# Override modifier values from code defaults here.
+# ══════════════════════════════════════════════════════════════
+
+personalities:
+  AGGRESSIVE:
+    modifiers:
+      FIGHT: 1.8
+      HUNT: 2.0
+      LOOT: 0.5
+      FLEE: 0.4
+      fleeHealthThreshold: 0.5
+  PASSIVE:
+    modifiers:
+      FIGHT: 0.4
+      FLEE: 2.0
+      LOOT: 1.5
+      ENCHANT: 1.8
+      fleeHealthThreshold: 1.5
+  RUSHER:
+    modifiers:
+      BRIDGE_TO_MID: 3.0
+      LOOT_OWN_ISLAND: 0.2
+      bridgeSpeed: 1.2
+  CAMPER:
+    modifiers:
+      CAMP: 2.5
+      HUNT: 0.3
+      BRIDGE_TO_PLAYER: 0.3
+  STRATEGIC:
+    modifiers:
+      decisionQuality: 1.3
+  COLLECTOR:
+    modifiers:
+      LOOT: 2.5
+      EQUIP: 1.5
+      ENCHANT: 1.5
+      FIGHT: 0.6
+  BERSERKER:
+    modifiers:
+      FLEE: 0.05
+      FIGHT: 1.5
+      fleeHealthThreshold: 0.1
+  SNIPER:
+    modifiers:
+      rangedPreference: 2.5
+      projectileAccuracy: 1.2
+      meleePreference: 0.6
+  TRICKSTER:
+    modifiers:
+      pearlUsageIQ: 1.5
+      rodUsageSkill: 1.4
+      BREAK_ENEMY_BRIDGE: 1.8
+      USE_ENDER_PEARL: 1.5
+  CAUTIOUS:
+    modifiers:
+      mistakeFrequency: 0.5
+      reactionTime: 0.9
+      FLEE: 1.3
+  CLUTCH_MASTER:
+    modifiers:
+      waterBucketMLG: 1.5
+      pearlEscapeIQ: 2.0
+      blockClutchSpeed: 1.3
+  TEAMWORK:
+    modifiers:
+      teamUtility: 2.0

@@ -138,6 +138,12 @@ public class CombatEngine {
         if (target != null) {
             aimController.setTarget(target);
             clickController.rollNewEngagement();
+            // In engage(), after setting up the target, fire the event:
+
+            org.bukkit.Bukkit.getPluginManager().callEvent(
+                    new org.twightlight.skywarstrainer.api.events.BotCombatEvent(bot, target, null));
+        
+
         }
 
         comboTracker.reset();
