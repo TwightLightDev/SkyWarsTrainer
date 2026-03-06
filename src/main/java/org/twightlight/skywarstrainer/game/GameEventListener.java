@@ -33,13 +33,13 @@ import java.util.logging.Level;
  * Listens to both LostSkyWars events and standard Bukkit events to keep
  * bots synchronized with game state.
  *
- * <p>This listener handles:
- * <ul>
- *   <li>LostSkyWars game lifecycle events (start, end, death, join, quit, refill, doom)</li>
- *   <li>Combat events (damage dealt to/from bots)</li>
- *   <li>Interrupt triggers for the bot decision engine</li>
- *   <li>Bot death cleanup</li>
- * </ul></p>
+ * <p>This listener handles LostSkyWars game lifecycle events (start, end, death,
+ * join, quit, refill, doom), combat events (damage dealt to/from bots), and
+ * interrupt triggers for the bot decision engine.</p>
+ *
+ * <p>All LostSkyWars event classes extend SkyWarsEvent which extends Bukkit Event.
+ * Each event has getServer() returning SkyWarsServer. We cast to Arena&lt;?&gt; to
+ * access full arena functionality.</p>
  */
 public class GameEventListener implements Listener {
 
@@ -60,7 +60,7 @@ public class GameEventListener implements Listener {
 
     /**
      * Called when a SkyWars game starts (cages open, game timer begins).
-     * Notifies all bots in the arena to begin their opening strategy.
+     * SkyWarsGameStartEvent.getServer() returns SkyWarsServer.
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onGameStart(SkyWarsGameStartEvent event) {
@@ -76,12 +76,12 @@ public class GameEventListener implements Listener {
 
         for (TrainerBot bot : bots) {
             try {
-                // Update game state to grace period (initial damage immunity)
                 bot.getProfile().addGamePlayed();
 
                 // Trigger decision engine interrupt to start AI
-                if (bot.getDecisionEngine() != null) {
-                    bot.getDecisionEngine().triggerInterrupt();
+                DecisionEngine de = bot.getDecisionEngine();
+                if (de != null) {
+                    de.triggerInterrupt();
                 }
             } catch (Exception e) {
                 plugin.getLogger().log(Level.WARNING,
@@ -91,8 +91,8 @@ public class GameEventListener implements Listener {
     }
 
     /**
-     * Called when a SkyWars game ends (winner determined or draw).
-     * Cleans up all bots in the arena.
+     * Called when a SkyWars game ends.
+     * SkyWarsGameEndEvent has getServer(), getWinnerTeam(), hasWinner().
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onGameEnd(SkyWarsGameEndEvent event) {
@@ -115,7 +115,6 @@ public class GameEventListener implements Listener {
                         bot.getProfile().addGameWon();
                     }
                 }
-                // Clean up: bots will be removed when arena resets
                 plugin.getBotManager().removeBot(bot);
             } catch (Exception e) {
                 plugin.getLogger().log(Level.WARNING,
@@ -126,8 +125,7 @@ public class GameEventListener implements Listener {
 
     /**
      * Called when a player dies in LostSkyWars.
-     * If the dead player is a bot, handles bot death. If a bot was the killer,
-     * updates the bot's stats. Also triggers interrupts for nearby bots.
+     * SkyWarsPlayerDeathEvent has getServer(), getPlayer(), getKiller().
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerDeath(SkyWarsPlayerDeathEvent event) {
@@ -140,12 +138,14 @@ public class GameEventListener implements Listener {
         BotManager botManager = plugin.getBotManager();
 
         // Check if the dead entity is a bot
-        TrainerBot deadBot = botManager.getBotByEntityUuid(dead.getUniqueId());
-        if (deadBot != null) {
-            deadBot.getProfile().addDeath();
-            if (plugin.getConfigManager().isDebugMode()) {
-                plugin.getLogger().info("[GameHook] Bot died: " + deadBot.getName()
-                        + (killer != null ? " killed by " + killer.getName() : ""));
+        if (dead != null) {
+            TrainerBot deadBot = botManager.getBotByEntityUuid(dead.getUniqueId());
+            if (deadBot != null) {
+                deadBot.getProfile().addDeath();
+                if (plugin.getConfigManager().isDebugMode()) {
+                    plugin.getLogger().info("[GameHook] Bot died: " + deadBot.getName()
+                            + (killer != null ? " killed by " + killer.getName() : ""));
+                }
             }
         }
 
@@ -154,7 +154,6 @@ public class GameEventListener implements Listener {
             TrainerBot killerBot = botManager.getBotByEntityUuid(killer.getUniqueId());
             if (killerBot != null) {
                 killerBot.getProfile().addKill();
-                // Fire custom event
                 Bukkit.getPluginManager().callEvent(
                         new org.twightlight.skywarstrainer.api.events.BotKillPlayerEvent(killerBot, dead));
             }
@@ -162,15 +161,16 @@ public class GameEventListener implements Listener {
 
         // Trigger interrupt for all bots in the arena (player count changed)
         for (TrainerBot bot : botManager.getBotsInArena(arena)) {
-            if (bot.getDecisionEngine() != null) {
-                bot.getDecisionEngine().triggerInterrupt();
+            DecisionEngine de = bot.getDecisionEngine();
+            if (de != null) {
+                de.triggerInterrupt();
             }
         }
     }
 
     /**
      * Called when a player joins a SkyWars arena.
-     * Triggers interrupt for bots in that arena.
+     * SkyWarsPlayerJoinEvent has getServer(), getPlayer().
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerJoin(SkyWarsPlayerJoinEvent event) {
@@ -179,15 +179,16 @@ public class GameEventListener implements Listener {
         Arena<?> arena = (Arena<?>) server;
 
         for (TrainerBot bot : plugin.getBotManager().getBotsInArena(arena)) {
-            if (bot.getDecisionEngine() != null) {
-                bot.getDecisionEngine().triggerInterrupt();
+            DecisionEngine de = bot.getDecisionEngine();
+            if (de != null) {
+                de.triggerInterrupt();
             }
         }
     }
 
     /**
      * Called when a player quits a SkyWars arena.
-     * Triggers interrupt for bots in that arena.
+     * SkyWarsPlayerQuitEvent has getServer(), getPlayer().
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerQuit(SkyWarsPlayerQuitEvent event) {
@@ -196,14 +197,16 @@ public class GameEventListener implements Listener {
         Arena<?> arena = (Arena<?>) server;
 
         for (TrainerBot bot : plugin.getBotManager().getBotsInArena(arena)) {
-            if (bot.getDecisionEngine() != null) {
-                bot.getDecisionEngine().triggerInterrupt();
+            DecisionEngine de = bot.getDecisionEngine();
+            if (de != null) {
+                de.triggerInterrupt();
             }
         }
     }
 
     /**
-     * Called when chests are refilled. Bots reset their chest memory for those chests.
+     * Called when chests are refilled.
+     * SkyWarsChestRefillEvent has getServer().
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onChestRefill(SkyWarsChestRefillEvent event) {
@@ -216,16 +219,16 @@ public class GameEventListener implements Listener {
             if (bot.getChestLocator() != null) {
                 bot.getChestLocator().markAllUnlooted();
             }
-            // Trigger interrupt to re-evaluate looting
-            if (bot.getDecisionEngine() != null) {
-                bot.getDecisionEngine().triggerInterrupt();
+            DecisionEngine de = bot.getDecisionEngine();
+            if (de != null) {
+                de.triggerInterrupt();
             }
         }
     }
 
     /**
-     * Called when doom (deathmatch) event activates in an arena.
-     * All bots switch to maximum aggression.
+     * Called when doom event activates (deathmatch phase).
+     * SkyWarsDoomEvent has getServer().
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onDoom(SkyWarsDoomEvent event) {
@@ -234,8 +237,9 @@ public class GameEventListener implements Listener {
         Arena<?> arena = (Arena<?>) server;
 
         for (TrainerBot bot : plugin.getBotManager().getBotsInArena(arena)) {
-            if (bot.getDecisionEngine() != null) {
-                bot.getDecisionEngine().triggerInterrupt();
+            DecisionEngine de = bot.getDecisionEngine();
+            if (de != null) {
+                de.triggerInterrupt();
             }
         }
     }
@@ -245,8 +249,7 @@ public class GameEventListener implements Listener {
     // ═════════════════════════════════════════════════════════════
 
     /**
-     * Handles damage dealt to or by bots. Triggers combat interrupts
-     * and updates combo tracking.
+     * Handles damage dealt to or by bots. Triggers combat interrupts.
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
@@ -267,15 +270,14 @@ public class GameEventListener implements Listener {
         if (victim instanceof LivingEntity) {
             TrainerBot victimBot = botManager.getBotByEntityUuid(victim.getUniqueId());
             if (victimBot != null) {
-                // Notify combat engine
                 if (victimBot.getCombatEngine() != null) {
                     LivingEntity attackerEntity = (actualDamager instanceof LivingEntity)
                             ? (LivingEntity) actualDamager : null;
                     victimBot.getCombatEngine().onBotHit(attackerEntity, event.getDamage());
                 }
-                // Trigger interrupt — the bot is being attacked
-                if (victimBot.getDecisionEngine() != null) {
-                    victimBot.getDecisionEngine().triggerInterrupt();
+                DecisionEngine de = victimBot.getDecisionEngine();
+                if (de != null) {
+                    de.triggerInterrupt();
                 }
             }
         }
@@ -290,8 +292,7 @@ public class GameEventListener implements Listener {
     }
 
     /**
-     * Handles any damage taken by bots (not just entity damage).
-     * This catches environmental damage (fire, lava, void, fall).
+     * Handles any damage taken by bots (environmental: fire, lava, void, fall).
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntityDamage(EntityDamageEvent event) {
@@ -301,15 +302,14 @@ public class GameEventListener implements Listener {
                 event.getEntity().getUniqueId());
         if (bot == null) return;
 
-        // Trigger interrupt on any damage
-        if (bot.getDecisionEngine() != null) {
-            bot.getDecisionEngine().triggerInterrupt();
+        DecisionEngine de = bot.getDecisionEngine();
+        if (de != null) {
+            de.triggerInterrupt();
         }
     }
 
     /**
      * Handles projectile hit events for bot-fired projectiles.
-     * Used for tracking fishing rod hits, snowball hits, etc.
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onProjectileHit(ProjectileHitEvent event) {
@@ -320,7 +320,6 @@ public class GameEventListener implements Listener {
         TrainerBot bot = plugin.getBotManager().getBotByEntityUuid(shooter.getUniqueId());
         if (bot == null) return;
 
-        // Notify the projectile handler
         if (bot.getCombatEngine() != null) {
             bot.getCombatEngine().getProjectileHandler().onProjectileHit(projectile);
         }

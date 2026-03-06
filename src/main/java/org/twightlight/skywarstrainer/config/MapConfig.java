@@ -16,7 +16,7 @@ import java.util.*;
  *
  * <p>Map config allows admins to define per-map settings such as:
  * <ul>
- *   <li>Mid island center coordinates</li>
+ *   <li>Mid-island center coordinates</li>
  *   <li>Spawn point locations</li>
  *   <li>Preferred bot strategies for the map</li>
  *   <li>Custom bridge paths</li>

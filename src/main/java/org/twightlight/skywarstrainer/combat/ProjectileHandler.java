@@ -14,6 +14,7 @@ import org.twightlight.skywarstrainer.util.RandomUtil;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.List;
 
 /**
  * Handles all projectile interactions: bow shooting, fishing rod casting,
@@ -437,6 +438,80 @@ public class ProjectileHandler {
                 || hasItemInInventory(player, Material.FISHING_ROD)
                 || hasItemInInventory(player, Material.SNOW_BALL)
                 || hasItemInInventory(player, Material.EGG);
+    }
+
+    /**
+     * Called when a projectile fired by this bot hits something.
+     * Handles special behavior for rods, snowballs, eggs, etc.
+     *
+     * @param projectile the projectile that hit
+     */
+    public void onProjectileHit(@Nonnull Projectile projectile) {
+
+        // Fishing rod hook hit logic (used for rod combo)
+        if (projectile instanceof FishHook) {
+            List<Entity> entities = projectile.getNearbyEntities(1, 1.5, 1);
+            if (entities.isEmpty()) return;
+            Entity hooked = entities.get(0);
+            if (hooked instanceof LivingEntity) {
+                LivingEntity target = (LivingEntity) hooked;
+
+                // Small knockback effect to simulate rod combo
+                Vector kb = target.getLocation().toVector()
+                        .subtract(projectile.getLocation().toVector())
+                        .normalize()
+                        .multiply(0.35);
+
+                kb.setY(0.25);
+                target.setVelocity(target.getVelocity().add(kb));
+            }
+            return;
+        }
+
+        // Snowball hit behavior
+        if (projectile instanceof Snowball) {
+            if (projectile.getNearbyEntities(1.5, 1.5, 1.5).isEmpty()) return;
+
+            for (Entity entity : projectile.getNearbyEntities(1.5, 1.5, 1.5)) {
+                if (entity instanceof LivingEntity && entity != bot.getPlayerEntity()) {
+                    LivingEntity target = (LivingEntity) entity;
+
+                    Vector kb = target.getLocation().toVector()
+                            .subtract(projectile.getLocation().toVector())
+                            .normalize()
+                            .multiply(0.2);
+
+                    kb.setY(0.2);
+                    target.setVelocity(target.getVelocity().add(kb));
+                }
+            }
+            return;
+        }
+
+        // Egg hit behavior (same as snowball but weaker)
+        if (projectile instanceof Egg) {
+            for (Entity entity : projectile.getNearbyEntities(1.5, 1.5, 1.5)) {
+                if (entity instanceof LivingEntity && entity != bot.getPlayerEntity()) {
+                    LivingEntity target = (LivingEntity) entity;
+
+                    Vector kb = target.getLocation().toVector()
+                            .subtract(projectile.getLocation().toVector())
+                            .normalize()
+                            .multiply(0.15);
+
+                    kb.setY(0.15);
+                    target.setVelocity(target.getVelocity().add(kb));
+                }
+            }
+            return;
+        }
+
+        // Arrow hit (mainly used for tracking hits)
+        if (projectile instanceof Arrow) {
+            // Could add hit statistics, accuracy tracking, etc.
+            // For now we just ensure the arrow is removed after hit
+            projectile.remove();
+        }
     }
 
     /**

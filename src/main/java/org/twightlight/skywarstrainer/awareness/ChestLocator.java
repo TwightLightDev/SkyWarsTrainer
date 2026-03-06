@@ -223,6 +223,19 @@ public class ChestLocator {
                 && a.getBlockZ() == b.getBlockZ();
     }
 
+    /**
+     * Marks ALL known chests as unlooted. Called when chests are refilled
+     * in the SkyWars game, resetting the bot's chest memory.
+     */
+    public void markAllUnlooted() {
+        for (ChestInfo chest : knownChests) {
+            chest.isLooted = false;
+            chest.lootedByBot = false;
+            chest.lootedByEnemy = false;
+            chest.itemQualityRating = -1;
+        }
+    }
+
     // ═════════════════════════════════════════════════════════════
     //  INNER: ChestInfo
     // ═════════════════════════════════════════════════════════════

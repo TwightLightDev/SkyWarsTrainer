@@ -621,6 +621,16 @@ public class BridgeEngine {
         return String.format("(%.1f, %.1f, %.1f)", loc.getX(), loc.getY(), loc.getZ());
     }
 
+    /**
+     * Returns whether the bridge engine is currently active (performing a bridge).
+     * This is an alias for {@link #isBridging()} for API consistency with other engines.
+     *
+     * @return true if actively bridging
+     */
+    public boolean isActive() {
+        return bridging;
+    }
+
     // ═══════════════════════════════════════════════════════════════
     //  Bridge tick result enum for the engine level
     // ═══════════════════════════════════════════════════════════════

@@ -7,6 +7,8 @@ import net.citizensnpcs.api.npc.NPCRegistry;
 import org.bukkit.Location;
 import org.twightlight.skywars.arena.Arena;
 import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.ai.personality.Personality;
+import org.twightlight.skywarstrainer.ai.personality.PersonalityConflictTable;
 import org.twightlight.skywarstrainer.config.DifficultyConfig;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
@@ -22,42 +24,26 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 
 /**
  * Manages the lifecycle of all trainer bots: creation, spawning, despawning,
  * tick distribution, and cleanup.
  *
  * <p>BotManager is the single entry point for bot operations. External systems
- * (commands, API, game hooks) call BotManager to spawn and remove bots.
- * Internally, it maintains a registry of all active bots and distributes
- * their tick processing across server ticks to minimize lag.</p>
- *
- * <p>Tick staggering: When multiple bots are active, running all of them on
- * every tick would cause lag spikes. Instead, BotManager assigns each bot a
- * stagger offset. On tick N, only bots whose offset matches (N % groupSize)
- * run their expensive logic. Movement (which must be smooth) still runs
- * every tick for all bots.</p>
+ * (commands, API, game hooks) call BotManager to spawn and remove bots.</p>
  */
 public class BotManager {
 
     private final SkyWarsTrainerPlugin plugin;
 
-    /**
-     * All active bots, keyed by their unique bot ID.
-     * ConcurrentHashMap because bots may be accessed from async contexts
-     * (e.g., map scanning callbacks).
-     */
+    /** All active bots, keyed by their unique bot ID. */
     private final Map<UUID, TrainerBot> activeBots;
 
-    /**
-     * Index of bots by display name for quick lookups via commands.
-     */
+    /** Index of bots by display name for quick lookups via commands. */
     private final Map<String, TrainerBot> botsByName;
 
-    /**
-     * Counter for assigning stagger offsets to new bots.
-     * Wraps around to distribute bots evenly across ticks.
-     */
+    /** Counter for assigning stagger offsets to new bots. */
     private int staggerCounter;
 
     /**
@@ -77,41 +63,29 @@ public class BotManager {
     /**
      * Spawns a new trainer bot at the given location with the specified settings.
      *
-     * <p>This is the primary bot creation method. It:
-     * <ol>
-     *   <li>Validates the bot count limit.</li>
-     *   <li>Creates a BotProfile with the specified difficulty.</li>
-     *   <li>Generates or applies the given skin.</li>
-     *   <li>Creates and spawns a TrainerBot.</li>
-     *   <li>Registers the bot in all tracking structures.</li>
-     * </ol></p>
-     *
-     * @param location    the spawn location
-     * @param difficulty  the difficulty level
+     * @param arena         the arena this bot belongs to
+     * @param location      the spawn location
+     * @param difficulty    the difficulty level
      * @param personalities optional personality names (may be empty)
-     * @param name        the bot display name, or null for random generation
+     * @param name          the bot display name, or null for random generation
      * @return the spawned TrainerBot, or null if spawning failed
      */
     @Nullable
-    public TrainerBot spawnBot(Arena<?> arena, @Nonnull Location location, @Nonnull Difficulty difficulty,
+    public TrainerBot spawnBot(@Nonnull Arena<?> arena, @Nonnull Location location,
+                               @Nonnull Difficulty difficulty,
                                @Nonnull List<String> personalities, @Nullable String name) {
-        // Check bot count limit
         int maxBots = plugin.getConfigManager().getMaxBotsPerGame();
         if (activeBots.size() >= maxBots) {
             plugin.getLogger().warning("Cannot spawn bot: maximum bot limit reached (" + maxBots + ").");
             return null;
         }
 
-        // Resolve difficulty profile
         DifficultyProfile difficultyProfile = plugin.getDifficultyConfig().getProfile(difficulty);
-
-        // Create bot profile
         BotProfile profile = new BotProfile(difficulty, difficultyProfile);
         for (String personality : personalities) {
             profile.addPersonality(personality);
         }
 
-        // Create skin
         BotSkin skin;
         if (name != null && !name.isEmpty()) {
             skin = BotSkin.withName(plugin, name);
@@ -119,15 +93,12 @@ public class BotManager {
             skin = BotSkin.generateRandom(plugin);
         }
 
-        // Ensure no name collision
         String displayName = skin.getDisplayName();
         if (botsByName.containsKey(displayName.toLowerCase())) {
-            // Append random number to make unique
             displayName = displayName + RandomUtil.nextInt(10, 99);
             skin = new BotSkin(skin.getSkinName(), displayName);
         }
 
-        // Create and spawn the bot
         TrainerBot bot = new TrainerBot(plugin, arena, profile, skin);
         bot.setStaggerOffset(staggerCounter % Math.max(1, activeBots.size() + 1));
         staggerCounter++;
@@ -137,14 +108,8 @@ public class BotManager {
             return null;
         }
 
-        // Register in tracking structures
         activeBots.put(bot.getBotId(), bot);
         botsByName.put(displayName.toLowerCase(), bot);
-
-        // Register with player tracker so the game tracks this bot as a "player"
-        if (bot.getLivingEntity() != null) {
-
-        }
 
         plugin.getLogger().info("Spawned bot: " + displayName
                 + " [" + difficulty.name() + "] "
@@ -154,18 +119,17 @@ public class BotManager {
     }
 
     /**
-     * Convenience method: spawns a bot with the default difficulty and random personalities.
+     * Convenience method: spawns a bot with the default difficulty.
      *
+     * @param arena    the arena
      * @param location the spawn location
      * @return the spawned bot, or null on failure
      */
     @Nullable
-    public TrainerBot spawnBot(Arena<?> arena, @Nonnull Location location) {
+    public TrainerBot spawnBot(@Nonnull Arena<?> arena, @Nonnull Location location) {
         String defaultDiff = plugin.getConfigManager().getDefaultDifficulty();
         Difficulty difficulty = Difficulty.fromString(defaultDiff);
-        if (difficulty == null) {
-            difficulty = Difficulty.MEDIUM;
-        }
+        if (difficulty == null) difficulty = Difficulty.MEDIUM;
         return spawnBot(arena, location, difficulty, Collections.emptyList(), null);
     }
 
@@ -181,9 +145,6 @@ public class BotManager {
         TrainerBot removed = activeBots.remove(bot.getBotId());
         if (removed != null) {
             botsByName.remove(removed.getName().toLowerCase());
-            if (removed.getLivingEntity() != null) {
-
-            }
             removed.destroy();
             return true;
         }
@@ -220,28 +181,20 @@ public class BotManager {
     // ─── Tick Distribution ──────────────────────────────────────
 
     /**
-     * Ticks all active bots, distributing processing within the given time budget.
+     * Ticks all active bots within the given time budget.
+     * Called once per server tick by the main plugin tick loop.
      *
-     * <p>Called once per server tick by the main plugin tick loop. If staggering
-     * is enabled, each bot only runs expensive logic on its assigned tick slot.
-     * Movement (Phase 2+) always runs every tick for smoothness.</p>
-     *
-     * <p>If the time budget is exceeded, remaining bots are deferred to the next tick.</p>
-     *
-     * @param startNanos     the System.nanoTime() when this tick started
-     * @param maxMsPerTick   the maximum milliseconds allowed for bot processing
+     * @param startNanos   System.nanoTime() when this tick started
+     * @param maxMsPerTick maximum milliseconds allowed for bot processing
      */
     public void tickAll(long startNanos, long maxMsPerTick) {
         if (activeBots.isEmpty()) return;
 
         long budgetNanos = maxMsPerTick * 1_000_000L;
 
-        // Clean up any dead bots
         cleanupDeadBots();
 
-        // Tick each bot
         for (TrainerBot bot : activeBots.values()) {
-            // Check time budget
             if (System.nanoTime() - startNanos > budgetNanos) {
                 if (plugin.getConfigManager().isDebugMode()) {
                     plugin.getLogger().info("[DEBUG] Tick budget exceeded, deferring remaining bots.");
@@ -249,9 +202,7 @@ public class BotManager {
                 break;
             }
 
-            if (bot.isDestroyed() || !bot.isInitialized()) {
-                continue;
-            }
+            if (bot.isDestroyed() || !bot.isInitialized()) continue;
 
             try {
                 bot.tick();
@@ -276,14 +227,11 @@ public class BotManager {
                 continue;
             }
 
-            // Check if the NPC entity is dead (killed in combat)
             if (bot.isInitialized() && !bot.isAlive()) {
-                // The NPC died — record the death and clean up
                 bot.getProfile().addDeath();
                 botsByName.remove(bot.getName().toLowerCase());
                 iterator.remove();
                 bot.destroy();
-
                 plugin.getLogger().info("Bot died: " + bot.getName());
             }
         }
@@ -292,22 +240,40 @@ public class BotManager {
     // ─── Queries ────────────────────────────────────────────────
 
     /**
-     * Returns a bot by its display name (case-insensitive).
+     * Returns all bots in a specific arena.
+     * This is the key method that GameEventListener and other game integration
+     * classes need to find bots participating in a specific SkyWars game.
      *
-     * @param name the bot name
-     * @return the bot, or null if not found
+     * @param arena the arena to search
+     * @return list of bots in that arena (may be empty, never null)
      */
+    @Nonnull
+    public List<TrainerBot> getBotsInArena(@Nonnull Arena<?> arena) {
+        return activeBots.values().stream()
+                .filter(bot -> !bot.isDestroyed() && bot.getArena().equals(arena))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Returns all bots in the arena identified by its server name.
+     *
+     * @param arenaServerName the arena server name
+     * @return list of bots in that arena
+     */
+    @Nonnull
+    public List<TrainerBot> getBotsInArena(@Nonnull String arenaServerName) {
+        return activeBots.values().stream()
+                .filter(bot -> !bot.isDestroyed()
+                        && bot.getArena().getServerName() != null
+                        && bot.getArena().getServerName().equals(arenaServerName))
+                .collect(Collectors.toList());
+    }
+
     @Nullable
     public TrainerBot getBotByName(@Nonnull String name) {
         return botsByName.get(name.toLowerCase());
     }
 
-    /**
-     * Returns a bot by its unique ID.
-     *
-     * @param id the bot UUID
-     * @return the bot, or null if not found
-     */
     @Nullable
     public TrainerBot getBotById(@Nonnull UUID id) {
         return activeBots.get(id);
@@ -315,7 +281,6 @@ public class BotManager {
 
     /**
      * Returns a bot whose NPC entity matches the given entity UUID.
-     * Used to identify if a Player entity in events is actually a bot.
      *
      * @param entityUuid the entity UUID
      * @return the bot, or null if the entity is not a bot
@@ -341,76 +306,49 @@ public class BotManager {
         return getBotByEntityUuid(entityUuid) != null;
     }
 
-    /**
-     * Returns an unmodifiable list of all active bots.
-     *
-     * @return all active bots
-     */
     @Nonnull
     public List<TrainerBot> getAllBots() {
         return Collections.unmodifiableList(new ArrayList<>(activeBots.values()));
     }
 
-    /**
-     * Returns the number of currently active bots.
-     *
-     * @return active bot count
-     */
     public int getActiveBotCount() {
         return activeBots.size();
     }
 
-    /**
-     * Returns a list of all active bot names.
-     *
-     * @return list of bot names
-     */
     @Nonnull
     public List<String> getBotNames() {
         return new ArrayList<>(botsByName.keySet());
     }
 
     /**
-     * Fills a game with the specified number of bots at a given difficulty.
-     * Each bot is spawned at the given location (typically a spawn point).
+     * Fills a game with the specified number of bots.
      *
-     * <p>In practice, each bot should be spawned at a different spawn point.
-     * The locations should be provided by the SkyWars game hook (Phase 6).
-     * This convenience method spawns all bots at the same location.</p>
-     *
-     * @param location     the spawn location
+     * @param arena        the arena
+     * @param location     the spawn location (ideally different per bot)
      * @param count        number of bots to spawn
      * @param difficulty   the difficulty level
      * @param personalities optional personality names
      * @return the number of bots successfully spawned
      */
-    public int fillWithBots(Arena<?> arena, @Nonnull Location location, int count, @Nonnull Difficulty difficulty,
+    public int fillWithBots(@Nonnull Arena<?> arena, @Nonnull Location location, int count,
+                            @Nonnull Difficulty difficulty,
                             @Nonnull List<String> personalities) {
         int spawned = 0;
         for (int i = 0; i < count; i++) {
             TrainerBot bot = spawnBot(arena, location, difficulty, personalities, null);
-            if (bot != null) {
-                spawned++;
-            }
+            if (bot != null) spawned++;
         }
         plugin.getLogger().info("Filled game with " + spawned + "/" + count + " bots.");
         return spawned;
     }
 
     /**
-     * Generates a random personality list for a bot. In Phase 1, this returns
-     * placeholder strings. Full personality generation with conflict resolution
-     * is implemented in Phase 6.
+     * Generates a random personality list for a bot with conflict checking.
      *
-     * @param difficulty the difficulty level (unused in Phase 1)
-     * @return a list of 1-3 random personality names
+     * @return a list of 1-3 non-conflicting random personality names
      */
     @Nonnull
-    public List<String> generateRandomPersonalities(@Nonnull Difficulty difficulty) {
-        /*
-         * Placeholder: returns random personality names from the full list.
-         * Phase 6 implements PersonalityConflictTable validation and re-rolling.
-         */
+    public List<String> generateRandomPersonalities() {
         String[] allPersonalities = {
                 "AGGRESSIVE", "PASSIVE", "RUSHER", "CAMPER", "STRATEGIC",
                 "COLLECTOR", "BERSERKER", "SNIPER", "TRICKSTER", "CAUTIOUS",
@@ -421,11 +359,23 @@ public class BotManager {
         count = Math.max(1, Math.min(3, count));
 
         List<String> result = new ArrayList<>();
-        for (int i = 0; i < count; i++) {
-            String personality = RandomUtil.randomElement(allPersonalities);
-            // Simple duplicate check (full conflict check in Phase 6)
-            if (!result.contains(personality)) {
-                result.add(personality);
+        int attempts = 0;
+        while (result.size() < count && attempts < 50) {
+            attempts++;
+            String candidate = RandomUtil.randomElement(allPersonalities);
+            if (result.contains(candidate)) continue;
+
+            // Check conflicts using PersonalityConflictTable
+            boolean conflicts = false;
+            for (String existing : result) {
+                if (PersonalityConflictTable
+                        .conflicts(Personality.valueOf(existing) , Personality.valueOf(candidate))) {
+                    conflicts = true;
+                    break;
+                }
+            }
+            if (!conflicts) {
+                result.add(candidate);
             }
         }
 
@@ -436,4 +386,3 @@ public class BotManager {
         return result;
     }
 }
-
