@@ -392,9 +392,6 @@ public class DecisionEngine {
             case ENCHANT:
                 return BotState.ENCHANTING;
 
-            case ORGANIZE_INVENTORY:
-                return BotState.IDLE;
-
             case CAMP_POSITION:
             case BUILD_FORTIFICATION:
                 return BotState.CAMPING;
