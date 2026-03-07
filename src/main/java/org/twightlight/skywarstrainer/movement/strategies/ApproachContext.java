@@ -1,11 +1,10 @@
-package org.twightlight.skywarstrainer.strategy;
+package org.twightlight.skywarstrainer.movement.strategies;
 
 import org.bukkit.Location;
 import org.bukkit.entity.LivingEntity;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 /**
  * Context snapshot for approach strategy evaluation. Captures the

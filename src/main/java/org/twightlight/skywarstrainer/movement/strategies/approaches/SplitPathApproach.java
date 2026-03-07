@@ -1,4 +1,4 @@
-package org.twightlight.skywarstrainer.strategy.approaches;
+package org.twightlight.skywarstrainer.movement.strategies.approaches;
 
 import org.bukkit.Location;
 import org.bukkit.entity.LivingEntity;
@@ -6,7 +6,7 @@ import org.bukkit.util.Vector;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.bridging.BridgeEngine;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
-import org.twightlight.skywarstrainer.strategy.*;
+import org.twightlight.skywarstrainer.movement.strategies.*;
 import org.twightlight.skywarstrainer.util.DebugLogger;
 import org.twightlight.skywarstrainer.util.MathUtil;
 import org.twightlight.skywarstrainer.util.RandomUtil;

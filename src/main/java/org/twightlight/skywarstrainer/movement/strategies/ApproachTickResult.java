@@ -1,4 +1,4 @@
-package org.twightlight.skywarstrainer.strategy;
+package org.twightlight.skywarstrainer.movement.strategies;
 
 /**
  * Result of a single approach strategy tick.

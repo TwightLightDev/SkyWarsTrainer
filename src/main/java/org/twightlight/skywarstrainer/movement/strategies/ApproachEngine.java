@@ -1,9 +1,9 @@
-package org.twightlight.skywarstrainer.strategy;
+package org.twightlight.skywarstrainer.movement.strategies;
 
 import org.bukkit.entity.LivingEntity;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
-import org.twightlight.skywarstrainer.strategy.approaches.*;
+import org.twightlight.skywarstrainer.movement.strategies.approaches.*;
 import org.twightlight.skywarstrainer.util.DebugLogger;
 import org.twightlight.skywarstrainer.util.RandomUtil;
 
@@ -19,7 +19,7 @@ import java.util.List;
  * <p>Called by the HUNTING state behavior tree when the target is on
  * a different island from the bot.</p>
  */
-public class ApproachManager {
+public class ApproachEngine {
 
     private final TrainerBot bot;
 
@@ -43,7 +43,7 @@ public class ApproachManager {
      *
      * @param bot the owning trainer bot
      */
-    public ApproachManager(@Nonnull TrainerBot bot) {
+    public ApproachEngine(@Nonnull TrainerBot bot) {
         this.bot = bot;
         this.strategies = new ArrayList<>();
         this.context = new ApproachContext();
