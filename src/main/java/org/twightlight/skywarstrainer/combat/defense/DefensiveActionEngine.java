@@ -1,16 +1,11 @@
 package org.twightlight.skywarstrainer.combat.defense;
 
-import org.bukkit.Location;
-import org.bukkit.entity.LivingEntity;
-import org.twightlight.skywarstrainer.awareness.ThreatMap;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
-import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.util.DebugLogger;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -25,7 +20,7 @@ import java.util.List;
  * and scores them based on the current situation, difficulty parameters, and
  * personality multipliers.</p>
  */
-public class DefensiveActionManager {
+public class DefensiveActionEngine {
 
     private final TrainerBot bot;
 
@@ -44,7 +39,7 @@ public class DefensiveActionManager {
      *
      * @param bot the owning trainer bot
      */
-    public DefensiveActionManager(@Nonnull TrainerBot bot) {
+    public DefensiveActionEngine(@Nonnull TrainerBot bot) {
         this.bot = bot;
         this.behaviors = new ArrayList<>();
         this.activeBehavior = null;
