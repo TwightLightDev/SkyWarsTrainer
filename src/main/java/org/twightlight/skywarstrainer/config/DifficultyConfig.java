@@ -182,7 +182,27 @@ public class DifficultyConfig {
         builder.mistakeFrequency(section.getDouble("mistakeFrequency", 4.0));
         builder.headMovementNoise(section.getDouble("headMovementNoise", 0.12));
         builder.itemDropOnDeathPanic(section.getDouble("itemDropOnDeathPanic", 0.1));
-
+        builder.jumpBridgeChance(section.getDouble("jumpBridgeChance", 0.2));
+        builder.stairBridgeSkill(section.getDouble("stairBridgeSkill", 0.5));
+        builder.fakeBridgeChance(section.getDouble("fakeBridgeChance", 0.1));
+        builder.bridgeSafetyRailChance(section.getDouble("bridgeSafetyRailChance", 0.2));
+        builder.diagonalApproachTendency(section.getDouble("diagonalApproachTendency", 0.3));
+        builder.verticalApproachTendency(section.getDouble("verticalApproachTendency", 0.15));
+        builder.splitPathChance(section.getDouble("splitPathChance", 0.05));
+        builder.approachPatienceTicks(section.getInt("approachPatienceTicks", 80));
+        builder.edgeKnockSkill(section.getDouble("edgeKnockSkill", 0.35));
+        builder.comboLockSkill(section.getDouble("comboLockSkill", 0.4));
+        builder.kbCancelSkill(section.getDouble("kbCancelSkill", 0.2));
+        builder.preferredEngageDistance(section.getDouble("preferredEngageDistance", 3.0));
+        builder.highGroundPriority(section.getDouble("highGroundPriority", 0.35));
+        builder.islandRotationTendency(section.getDouble("islandRotationTendency", 0.2));
+        builder.thirdPartyTendency(section.getDouble("thirdPartyTendency", 0.3));
+        builder.bridgeCutSkill(section.getDouble("bridgeCutSkill", 0.3));
+        builder.projectileZoningTendency(section.getDouble("projectileZoningTendency", 0.35));
+        builder.retreatHealSkill(section.getDouble("retreatHealSkill", 0.4));
+        builder.counterPlayIQ(section.getDouble("counterPlayIQ", 0.35));
+        builder.antiRushReaction(section.getDouble("antiRushReaction", 0.4));
+        builder.baitDetectionSkill(section.getDouble("baitDetectionSkill", 0.3));
         return builder.build();
     }
 
@@ -205,6 +225,16 @@ public class DifficultyConfig {
                         .rodUsageSkill(0.0).blockPlaceChance(0.05).comboBreakPriority(0.1)
                         .antiKBReduction(0.0).waterBucketMLG(0.0).mistakeFrequency(12.0)
                         .headMovementNoise(0.3).itemDropOnDeathPanic(0.4);
+                b.jumpBridgeChance(0.0).stairBridgeSkill(0.1).fakeBridgeChance(0.0)
+                        .bridgeSafetyRailChance(0.0).diagonalApproachTendency(0.0)
+                        .verticalApproachTendency(0.0).splitPathChance(0.0)
+                        .approachPatienceTicks(20).edgeKnockSkill(0.05).comboLockSkill(0.1)
+                        .kbCancelSkill(0.0).preferredEngageDistance(2.0)
+                        .highGroundPriority(0.05).islandRotationTendency(0.0)
+                        .thirdPartyTendency(0.0).bridgeCutSkill(0.0)
+                        .projectileZoningTendency(0.05).retreatHealSkill(0.1)
+                        .counterPlayIQ(0.05).antiRushReaction(0.1).baitDetectionSkill(0.0);
+
                 break;
             case EASY:
                 b.reactionTimeMin(400).reactionTimeMax(800).aimAccuracy(0.5).aimSpeedDegPerTick(5.0)
@@ -217,6 +247,15 @@ public class DifficultyConfig {
                         .rodUsageSkill(0.1).blockPlaceChance(0.2).comboBreakPriority(0.3)
                         .antiKBReduction(0.0).waterBucketMLG(0.0).mistakeFrequency(8.0)
                         .headMovementNoise(0.2).itemDropOnDeathPanic(0.25);
+                b.jumpBridgeChance(0.05).stairBridgeSkill(0.25).fakeBridgeChance(0.0)
+                        .bridgeSafetyRailChance(0.1).diagonalApproachTendency(0.1)
+                        .verticalApproachTendency(0.0).splitPathChance(0.0)
+                        .approachPatienceTicks(40).edgeKnockSkill(0.15).comboLockSkill(0.2)
+                        .kbCancelSkill(0.05).preferredEngageDistance(2.5)
+                        .highGroundPriority(0.15).islandRotationTendency(0.05)
+                        .thirdPartyTendency(0.1).bridgeCutSkill(0.1)
+                        .projectileZoningTendency(0.15).retreatHealSkill(0.2)
+                        .counterPlayIQ(0.15).antiRushReaction(0.2).baitDetectionSkill(0.1);
                 break;
             case MEDIUM:
                 b.reactionTimeMin(250).reactionTimeMax(500).aimAccuracy(0.7).aimSpeedDegPerTick(10.0)
@@ -229,6 +268,15 @@ public class DifficultyConfig {
                         .rodUsageSkill(0.3).blockPlaceChance(0.3).comboBreakPriority(0.5)
                         .antiKBReduction(0.15).waterBucketMLG(0.2).mistakeFrequency(4.0)
                         .headMovementNoise(0.12).itemDropOnDeathPanic(0.1);
+                b.jumpBridgeChance(0.2).stairBridgeSkill(0.5).fakeBridgeChance(0.1)
+                        .bridgeSafetyRailChance(0.2).diagonalApproachTendency(0.3)
+                        .verticalApproachTendency(0.15).splitPathChance(0.05)
+                        .approachPatienceTicks(80).edgeKnockSkill(0.35).comboLockSkill(0.4)
+                        .kbCancelSkill(0.2).preferredEngageDistance(3.0)
+                        .highGroundPriority(0.35).islandRotationTendency(0.2)
+                        .thirdPartyTendency(0.3).bridgeCutSkill(0.3)
+                        .projectileZoningTendency(0.35).retreatHealSkill(0.4)
+                        .counterPlayIQ(0.35).antiRushReaction(0.4).baitDetectionSkill(0.3);
                 break;
             case HARD:
                 b.reactionTimeMin(150).reactionTimeMax(300).aimAccuracy(0.85).aimSpeedDegPerTick(18.0)
@@ -241,6 +289,15 @@ public class DifficultyConfig {
                         .rodUsageSkill(0.6).blockPlaceChance(0.45).comboBreakPriority(0.7)
                         .antiKBReduction(0.3).waterBucketMLG(0.6).mistakeFrequency(2.0)
                         .headMovementNoise(0.07).itemDropOnDeathPanic(0.02);
+                b.jumpBridgeChance(0.5).stairBridgeSkill(0.75).fakeBridgeChance(0.3)
+                        .bridgeSafetyRailChance(0.15).diagonalApproachTendency(0.6)
+                        .verticalApproachTendency(0.4).splitPathChance(0.2)
+                        .approachPatienceTicks(120).edgeKnockSkill(0.6).comboLockSkill(0.7)
+                        .kbCancelSkill(0.45).preferredEngageDistance(3.0)
+                        .highGroundPriority(0.6).islandRotationTendency(0.4)
+                        .thirdPartyTendency(0.55).bridgeCutSkill(0.6)
+                        .projectileZoningTendency(0.6).retreatHealSkill(0.7)
+                        .counterPlayIQ(0.6).antiRushReaction(0.65).baitDetectionSkill(0.6);
                 break;
             case EXPERT:
                 b.reactionTimeMin(80).reactionTimeMax(150).aimAccuracy(0.95).aimSpeedDegPerTick(25.0)
@@ -253,6 +310,15 @@ public class DifficultyConfig {
                         .rodUsageSkill(0.9).blockPlaceChance(0.7).comboBreakPriority(0.95)
                         .antiKBReduction(0.45).waterBucketMLG(0.9).mistakeFrequency(0.5)
                         .headMovementNoise(0.03).itemDropOnDeathPanic(0.0);
+                b.jumpBridgeChance(0.8).stairBridgeSkill(0.95).fakeBridgeChance(0.6)
+                        .bridgeSafetyRailChance(0.05).diagonalApproachTendency(0.85)
+                        .verticalApproachTendency(0.7).splitPathChance(0.5)
+                        .approachPatienceTicks(200).edgeKnockSkill(0.9).comboLockSkill(0.92)
+                        .kbCancelSkill(0.75).preferredEngageDistance(3.0)
+                        .highGroundPriority(0.85).islandRotationTendency(0.7)
+                        .thirdPartyTendency(0.8).bridgeCutSkill(0.9)
+                        .projectileZoningTendency(0.85).retreatHealSkill(0.9)
+                        .counterPlayIQ(0.9).antiRushReaction(0.9).baitDetectionSkill(0.85);
                 break;
         }
         return b.build();
@@ -377,7 +443,38 @@ public class DifficultyConfig {
         private final double mistakeFrequency;
         private final double headMovementNoise;
         private final double itemDropOnDeathPanic;
+        // ── Advanced Bridging Movement ──
+        private final double jumpBridgeChance;
+        private final double stairBridgeSkill;
+        private final double fakeBridgeChance;
+        private final double bridgeSafetyRailChance;
 
+        // ── Approaching Strategy ──
+        private final double diagonalApproachTendency;
+        private final double verticalApproachTendency;
+        private final double splitPathChance;
+        private final int approachPatienceTicks;
+
+        // ── Advanced Engagement ──
+        private final double edgeKnockSkill;
+        private final double comboLockSkill;
+        private final double kbCancelSkill;
+        private final double preferredEngageDistance;
+
+        // ── Positional Strategy ──
+        private final double highGroundPriority;
+        private final double islandRotationTendency;
+        private final double thirdPartyTendency;
+
+        // ── Defensive Behavior ──
+        private final double bridgeCutSkill;
+        private final double projectileZoningTendency;
+        private final double retreatHealSkill;
+
+        // ── Counter-Play ──
+        private final double counterPlayIQ;
+        private final double antiRushReaction;
+        private final double baitDetectionSkill;
 
         private DifficultyProfile(Builder builder) {
             this.difficulty = builder.difficulty;
@@ -414,6 +511,27 @@ public class DifficultyConfig {
             this.mistakeFrequency = builder.mistakeFrequency;
             this.headMovementNoise = builder.headMovementNoise;
             this.itemDropOnDeathPanic = builder.itemDropOnDeathPanic;
+            this.jumpBridgeChance = builder.jumpBridgeChance;
+            this.stairBridgeSkill = builder.stairBridgeSkill;
+            this.fakeBridgeChance = builder.fakeBridgeChance;
+            this.bridgeSafetyRailChance = builder.bridgeSafetyRailChance;
+            this.diagonalApproachTendency = builder.diagonalApproachTendency;
+            this.verticalApproachTendency = builder.verticalApproachTendency;
+            this.splitPathChance = builder.splitPathChance;
+            this.approachPatienceTicks = builder.approachPatienceTicks;
+            this.edgeKnockSkill = builder.edgeKnockSkill;
+            this.comboLockSkill = builder.comboLockSkill;
+            this.kbCancelSkill = builder.kbCancelSkill;
+            this.preferredEngageDistance = builder.preferredEngageDistance;
+            this.highGroundPriority = builder.highGroundPriority;
+            this.islandRotationTendency = builder.islandRotationTendency;
+            this.thirdPartyTendency = builder.thirdPartyTendency;
+            this.bridgeCutSkill = builder.bridgeCutSkill;
+            this.projectileZoningTendency = builder.projectileZoningTendency;
+            this.retreatHealSkill = builder.retreatHealSkill;
+            this.counterPlayIQ = builder.counterPlayIQ;
+            this.antiRushReaction = builder.antiRushReaction;
+            this.baitDetectionSkill = builder.baitDetectionSkill;
         }
 
         // ── Getters ─────────────────────────────────────────────
@@ -522,6 +640,69 @@ public class DifficultyConfig {
         /** @return chance to panic-drop items when near death */
         public double getItemDropOnDeathPanic() { return itemDropOnDeathPanic; }
 
+        /** @return chance to attempt jump bridging [0.0, 1.0] */
+        public double getJumpBridgeChance() { return jumpBridgeChance; }
+
+        /** @return stair bridge execution skill [0.0, 1.0] */
+        public double getStairBridgeSkill() { return stairBridgeSkill; }
+
+        /** @return chance to use fake/bait bridge tactics [0.0, 1.0] */
+        public double getFakeBridgeChance() { return fakeBridgeChance; }
+
+        /** @return chance to place safety rail blocks while bridging [0.0, 1.0] */
+        public double getBridgeSafetyRailChance() { return bridgeSafetyRailChance; }
+
+        /** @return tendency to use diagonal approach routes [0.0, 1.0] */
+        public double getDiagonalApproachTendency() { return diagonalApproachTendency; }
+
+        /** @return tendency to use vertical approach (tower + bridge) [0.0, 1.0] */
+        public double getVerticalApproachTendency() { return verticalApproachTendency; }
+
+        /** @return chance to use split-path approach [0.0, 1.0] */
+        public double getSplitPathChance() { return splitPathChance; }
+
+        /** @return patience ticks when waiting in approach strategies */
+        public int getApproachPatienceTicks() { return approachPatienceTicks; }
+
+        /** @return skill at positioning for edge/void knockback kills [0.0, 1.0] */
+        public double getEdgeKnockSkill() { return edgeKnockSkill; }
+
+        /** @return skill at maintaining combo lock distance [0.0, 1.0] */
+        public double getComboLockSkill() { return comboLockSkill; }
+
+        /** @return skill at cancelling incoming knockback [0.0, 1.0] */
+        public double getKbCancelSkill() { return kbCancelSkill; }
+
+        /** @return preferred engagement distance in blocks */
+        public double getPreferredEngageDistance() { return preferredEngageDistance; }
+
+        /** @return priority for gaining height advantage [0.0, 1.0] */
+        public double getHighGroundPriority() { return highGroundPriority; }
+
+        /** @return tendency to rotate between islands for loot [0.0, 1.0] */
+        public double getIslandRotationTendency() { return islandRotationTendency; }
+
+        /** @return tendency to third-party fights [0.0, 1.0] */
+        public double getThirdPartyTendency() { return thirdPartyTendency; }
+
+        /** @return skill at cutting enemy bridges [0.0, 1.0] */
+        public double getBridgeCutSkill() { return bridgeCutSkill; }
+
+        /** @return tendency to use projectiles for area denial [0.0, 1.0] */
+        public double getProjectileZoningTendency() { return projectileZoningTendency; }
+
+        /** @return skill at retreating, healing, and re-engaging [0.0, 1.0] */
+        public double getRetreatHealSkill() { return retreatHealSkill; }
+
+        /** @return intelligence at recognizing and countering enemy playstyles [0.0, 1.0] */
+        public double getCounterPlayIQ() { return counterPlayIQ; }
+
+        /** @return reaction skill against rush strategies [0.0, 1.0] */
+        public double getAntiRushReaction() { return antiRushReaction; }
+
+        /** @return skill at detecting bait/trick plays [0.0, 1.0] */
+        public double getBaitDetectionSkill() { return baitDetectionSkill; }
+
         /**
          * Returns a randomized reaction time within the profile's range.
          *
@@ -594,6 +775,27 @@ public class DifficultyConfig {
             private double mistakeFrequency = 4.0;
             private double headMovementNoise = 0.12;
             private double itemDropOnDeathPanic = 0.1;
+            private double jumpBridgeChance = 0.2;
+            private double stairBridgeSkill = 0.5;
+            private double fakeBridgeChance = 0.1;
+            private double bridgeSafetyRailChance = 0.2;
+            private double diagonalApproachTendency = 0.3;
+            private double verticalApproachTendency = 0.15;
+            private double splitPathChance = 0.05;
+            private int approachPatienceTicks = 80;
+            private double edgeKnockSkill = 0.35;
+            private double comboLockSkill = 0.4;
+            private double kbCancelSkill = 0.2;
+            private double preferredEngageDistance = 3.0;
+            private double highGroundPriority = 0.35;
+            private double islandRotationTendency = 0.2;
+            private double thirdPartyTendency = 0.3;
+            private double bridgeCutSkill = 0.3;
+            private double projectileZoningTendency = 0.35;
+            private double retreatHealSkill = 0.4;
+            private double counterPlayIQ = 0.35;
+            private double antiRushReaction = 0.4;
+            private double baitDetectionSkill = 0.3;
 
             public Builder(@Nonnull Difficulty difficulty) {
                 this.difficulty = difficulty;
@@ -632,7 +834,30 @@ public class DifficultyConfig {
             public Builder mistakeFrequency(double v) { this.mistakeFrequency = v; return this; }
             public Builder headMovementNoise(double v) { this.headMovementNoise = v; return this; }
             public Builder itemDropOnDeathPanic(double v) { this.itemDropOnDeathPanic = v; return this; }
-
+            public Builder jumpBridgeChance(double v) { this.jumpBridgeChance = v; return this; }
+            public Builder stairBridgeSkill(double v) { this.stairBridgeSkill = v; return this; }
+            public Builder fakeBridgeChance(double v) { this.fakeBridgeChance = v; return this; }
+            public Builder bridgeSafetyRailChance(double v) { this.bridgeSafetyRailChance = v; return this; }
+            public Builder diagonalApproachTendency(double v) { this.diagonalApproachTendency = v; return this; }
+            public Builder verticalApproachTendency(double v) { this.verticalApproachTendency = v; return this; }
+            public Builder splitPathChance(double v) { this.splitPathChance = v; return this; }
+            public Builder approachPatienceTicks(int v) { this.approachPatienceTicks = v; return this; }
+            public Builder edgeKnockSkill(double v) { this.edgeKnockSkill = v; return this; }
+            public Builder comboLockSkill(double v) { this.comboLockSkill = v; return this; }
+            public Builder kbCancelSkill(double v) { this.kbCancelSkill = v; return this; }
+            public Builder preferredEngageDistance(double v) { this.preferredEngageDistance = v; return this; }
+            public Builder highGroundPriority(double v) { this.highGroundPriority = v; return this; }
+            public Builder islandRotationTendency(double v) { this.islandRotationTendency = v; return this; }
+            public Builder thirdPartyTendency(double v) { this.thirdPartyTendency = v; return this; }
+            public Builder bridgeCutSkill(double v) { this.bridgeCutSkill = v; return this; }
+            public Builder projectileZoningTendency(double v) { this.projectileZoningTendency = v; return this; }
+            public Builder retreatHealSkill(double v) { this.retreatHealSkill = v; return this; }
+            public Builder counterPlayIQ(double v) { this.counterPlayIQ = v; return this; }
+            public Builder antiRushReaction(double v) { this.antiRushReaction = v; return this; }
+            public Builder baitDetectionSkill(double v) {
+                this.baitDetectionSkill = v;
+                return this;
+            }
             @Nonnull
             public DifficultyProfile build() {
                 return new DifficultyProfile(this);

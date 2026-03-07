@@ -5,70 +5,57 @@ import org.twightlight.skywarstrainer.bot.TrainerBot;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.logging.Level;
+import java.util.Collections;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Centralized debug logging utility for SkyWarsTrainer.
+ * Centralized debug logging utility for the SkyWarsTrainer plugin.
  *
- * <p>All debug-level messages should go through this class rather than
- * directly using {@code plugin.getLogger().info("[DEBUG] ...")}. This
- * ensures debug output is only generated when debug mode is active,
- * avoiding unnecessary string concatenation and method calls in production.</p>
+ * <p>All new systems MUST use this instead of direct plugin.getLogger() for
+ * debug-level messages. Production messages (errors, warnings) still use
+ * plugin.getLogger() directly.</p>
  *
- * <p>Debug mode can be toggled globally via config or per-bot via the
- * /swt debug command. Messages are suppressed entirely (not even
- * string-formatted) when debug is off, minimizing performance impact.</p>
- *
- * <h3>Usage:</h3>
- * <pre>
- * // Global debug message (only prints if global debug is on)
- * DebugLogger.log("Something happened: %s", someValue);
- *
- * // Bot-specific debug message (prints if global OR bot-specific debug is on)
- * DebugLogger.log(bot, "State changed to %s", newState);
- *
- * // Performance profiling (always guarded by debug check)
- * DebugLogger.logTiming("mapScan", elapsedNanos);
- * </pre>
+ * <p>Supports per-bot debug toggles so developers can watch a single bot's
+ * decision-making without being flooded by all bots.</p>
  */
 public final class DebugLogger {
 
-    /** Global debug mode flag — cached from ConfigManager for fast access. */
-    private static volatile boolean globalDebugEnabled = false;
+    /** Global debug enabled flag. */
+    private static boolean globalDebugEnabled = false;
 
-    /** Reference to plugin for the logger. */
-    private static SkyWarsTrainerPlugin pluginRef;
+    /** Per-bot debug overrides. If a bot's UUID is in this set, its debug is forced on. */
+    private static final Set<UUID> perBotDebug = Collections.newSetFromMap(new ConcurrentHashMap<>());
+
+    /** Reference to the plugin for logging output. */
+    private static SkyWarsTrainerPlugin pluginInstance;
 
     private DebugLogger() {
-        // Utility class — no instantiation
+        // Static utility class
     }
 
     /**
-     * Initializes the debug logger with the plugin reference and current
-     * debug mode setting. Call this during plugin enable.
+     * Initializes the debug logger with the plugin instance and global setting.
      *
      * @param plugin the plugin instance
      */
     public static void init(@Nonnull SkyWarsTrainerPlugin plugin) {
-        pluginRef = plugin;
+        pluginInstance = plugin;
         globalDebugEnabled = plugin.getConfigManager().isDebugMode();
     }
 
     /**
-     * Updates the global debug mode flag. Called when debug mode is toggled
-     * at runtime via command or config reload.
+     * Sets the global debug flag.
      *
-     * @param enabled whether global debug is now enabled
+     * @param enabled true to enable global debug
      */
-    public static void setGlobalDebugEnabled(boolean enabled) {
+    public static void setGlobalDebug(boolean enabled) {
         globalDebugEnabled = enabled;
-        if (pluginRef != null) {
-            pluginRef.getLogger().info("Debug mode " + (enabled ? "ENABLED" : "DISABLED"));
-        }
     }
 
     /**
-     * Returns whether global debug mode is currently active.
+     * Returns whether global debug is enabled.
      *
      * @return true if global debug is on
      */
@@ -77,106 +64,96 @@ public final class DebugLogger {
     }
 
     /**
-     * Returns whether debug output should be generated for the given bot.
-     * True if either global debug or bot-specific debug is enabled.
+     * Enables debug logging for a specific bot by UUID.
      *
-     * @param bot the bot to check, or null for global-only check
-     * @return true if debug output should be generated
+     * @param botId the bot's UUID
+     */
+    public static void enableBotDebug(@Nonnull UUID botId) {
+        perBotDebug.add(botId);
+    }
+
+    /**
+     * Disables debug logging for a specific bot by UUID.
+     *
+     * @param botId the bot's UUID
+     */
+    public static void disableBotDebug(@Nonnull UUID botId) {
+        perBotDebug.remove(botId);
+    }
+
+    /**
+     * Checks whether debug is enabled for a given bot.
+     * True if global debug is on OR if this bot has per-bot debug enabled.
+     *
+     * @param bot the bot to check
+     * @return true if debug is enabled for this bot
      */
     public static boolean isDebugEnabled(@Nullable TrainerBot bot) {
         if (globalDebugEnabled) return true;
-        return bot != null && bot.getProfile().isDebugMode();
+        if (bot != null && perBotDebug.contains(bot.getBotId())) return true;
+        return false;
     }
 
     /**
-     * Logs a global debug message. Only generates the message string if
-     * global debug mode is active.
+     * Logs a debug message for a specific bot. Only outputs if debug is enabled
+     * for the bot (either globally or per-bot).
      *
-     * @param format the format string (printf-style)
-     * @param args   the format arguments
+     * @param bot    the bot context (may be null for system-level messages)
+     * @param format the format string (as in String.format)
+     * @param args   format arguments
      */
-    public static void log(@Nonnull String format, Object... args) {
-        if (!globalDebugEnabled) return;
-        if (pluginRef == null) return;
-        pluginRef.getLogger().info("[DEBUG] " + String.format(format, args));
-    }
-
-    /**
-     * Logs a bot-specific debug message. Only generates the message string if
-     * debug mode is active for the given bot (either globally or per-bot).
-     *
-     * @param bot    the bot this message relates to
-     * @param format the format string (printf-style)
-     * @param args   the format arguments
-     */
-    public static void log(@Nonnull TrainerBot bot, @Nonnull String format, Object... args) {
+    public static void log(@Nullable TrainerBot bot, @Nonnull String format, Object... args) {
         if (!isDebugEnabled(bot)) return;
-        if (pluginRef == null) return;
-        pluginRef.getLogger().info("[DEBUG] [" + bot.getName() + "] " + String.format(format, args));
+        if (pluginInstance == null) return;
+
+        String botName = (bot != null) ? bot.getName() : "SYSTEM";
+        String message = String.format(format, args);
+        pluginInstance.getLogger().info("[DEBUG] [" + botName + "] " + message);
     }
 
     /**
-     * Logs a performance timing message. Used by subsystem tick profiling
-     * to identify bottlenecks.
-     *
-     * @param systemName   the subsystem name (e.g., "mapScan", "combat")
-     * @param elapsedNanos the elapsed time in nanoseconds
-     */
-    public static void logTiming(@Nonnull String systemName, long elapsedNanos) {
-        if (!globalDebugEnabled) return;
-        if (pluginRef == null) return;
-        double elapsedMs = elapsedNanos / 1_000_000.0;
-        if (elapsedMs > 1.0) {
-            // Only log timings above 1ms to avoid log spam
-            pluginRef.getLogger().info(String.format("[DEBUG] [PERF] %s took %.2fms", systemName, elapsedMs));
-        }
-    }
-
-    /**
-     * Logs a performance timing message for a specific bot.
-     *
-     * @param bot          the bot
-     * @param systemName   the subsystem name
-     * @param elapsedNanos elapsed time in nanoseconds
-     */
-    public static void logTiming(@Nonnull TrainerBot bot, @Nonnull String systemName, long elapsedNanos) {
-        if (!isDebugEnabled(bot)) return;
-        if (pluginRef == null) return;
-        double elapsedMs = elapsedNanos / 1_000_000.0;
-        if (elapsedMs > 1.0) {
-            pluginRef.getLogger().info(String.format("[DEBUG] [PERF] [%s] %s took %.2fms",
-                    bot.getName(), systemName, elapsedMs));
-        }
-    }
-
-    /**
-     * Logs a warning-level debug message. These are always logged regardless
-     * of debug mode because they indicate potential issues.
+     * Logs a system-level debug message (no bot context).
      *
      * @param format the format string
-     * @param args   the format arguments
+     * @param args   format arguments
      */
-    public static void warn(@Nonnull String format, Object... args) {
-        if (pluginRef == null) return;
-        pluginRef.getLogger().warning("[SWT] " + String.format(format, args));
+    public static void logSystem(@Nonnull String format, Object... args) {
+        log(null, format, args);
     }
 
     /**
-     * Logs a warning with an exception. Always logged regardless of debug mode.
+     * Logs the execution time of a named subsystem tick. Useful for performance profiling.
      *
-     * @param message   the warning message
-     * @param throwable the exception
+     * @param bot        the bot context
+     * @param systemName the subsystem name
+     * @param startNanos the System.nanoTime() at the start of the tick
      */
-    public static void warn(@Nonnull String message, @Nonnull Throwable throwable) {
-        if (pluginRef == null) return;
-        pluginRef.getLogger().log(Level.WARNING, "[SWT] " + message, throwable);
+    public static void logTiming(@Nullable TrainerBot bot, @Nonnull String systemName, long startNanos) {
+        if (!isDebugEnabled(bot)) return;
+        if (pluginInstance == null) return;
+
+        double ms = (System.nanoTime() - startNanos) / 1_000_000.0;
+        if (ms > 1.0) { // Only log if > 1ms (to avoid noise)
+            String botName = (bot != null) ? bot.getName() : "SYSTEM";
+            pluginInstance.getLogger().info(
+                    String.format("[PERF] [%s] %s took %.2fms", botName, systemName, ms));
+        }
     }
 
     /**
-     * Clears the plugin reference. Called on plugin disable.
+     * Returns an unmodifiable view of all per-bot debug UUIDs.
+     *
+     * @return the set of bot UUIDs with debug enabled
      */
-    public static void shutdown() {
-        pluginRef = null;
-        globalDebugEnabled = false;
+    @Nonnull
+    public static Set<UUID> getPerBotDebugSet() {
+        return Collections.unmodifiableSet(perBotDebug);
+    }
+
+    /**
+     * Clears all per-bot debug toggles.
+     */
+    public static void clearAllPerBotDebug() {
+        perBotDebug.clear();
     }
 }

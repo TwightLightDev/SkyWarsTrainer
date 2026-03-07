@@ -73,6 +73,27 @@ difficulties:
     headMovementNoise: 0.3
     # Chance to panic-drop items when near death
     itemDropOnDeathPanic: 0.4
+    jumpBridgeChance: 0.0
+    stairBridgeSkill: 0.1
+    fakeBridgeChance: 0.0
+    bridgeSafetyRailChance: 0.0
+    diagonalApproachTendency: 0.0
+    verticalApproachTendency: 0.0
+    splitPathChance: 0.0
+    approachPatienceTicks: 20
+    edgeKnockSkill: 0.05
+    comboLockSkill: 0.1
+    kbCancelSkill: 0.0
+    preferredEngageDistance: 2.0
+    highGroundPriority: 0.05
+    islandRotationTendency: 0.0
+    thirdPartyTendency: 0.0
+    bridgeCutSkill: 0.0
+    projectileZoningTendency: 0.05
+    retreatHealSkill: 0.1
+    counterPlayIQ: 0.05
+    antiRushReaction: 0.1
+    baitDetectionSkill: 0.0
 
   EASY:
     reactionTimeMin: 400
@@ -108,6 +129,27 @@ difficulties:
     mistakeFrequency: 8.0
     headMovementNoise: 0.2
     itemDropOnDeathPanic: 0.25
+    jumpBridgeChance: 0.05
+    stairBridgeSkill: 0.25
+    fakeBridgeChance: 0.0
+    bridgeSafetyRailChance: 0.1
+    diagonalApproachTendency: 0.1
+    verticalApproachTendency: 0.0
+    splitPathChance: 0.0
+    approachPatienceTicks: 40
+    edgeKnockSkill: 0.15
+    comboLockSkill: 0.2
+    kbCancelSkill: 0.05
+    preferredEngageDistance: 2.5
+    highGroundPriority: 0.15
+    islandRotationTendency: 0.05
+    thirdPartyTendency: 0.1
+    bridgeCutSkill: 0.1
+    projectileZoningTendency: 0.15
+    retreatHealSkill: 0.2
+    counterPlayIQ: 0.15
+    antiRushReaction: 0.2
+    baitDetectionSkill: 0.1
 
   MEDIUM:
     reactionTimeMin: 250
@@ -143,6 +185,27 @@ difficulties:
     mistakeFrequency: 4.0
     headMovementNoise: 0.12
     itemDropOnDeathPanic: 0.1
+    jumpBridgeChance: 0.2
+    stairBridgeSkill: 0.5
+    fakeBridgeChance: 0.1
+    bridgeSafetyRailChance: 0.2
+    diagonalApproachTendency: 0.3
+    verticalApproachTendency: 0.15
+    splitPathChance: 0.05
+    approachPatienceTicks: 80
+    edgeKnockSkill: 0.35
+    comboLockSkill: 0.4
+    kbCancelSkill: 0.2
+    preferredEngageDistance: 3.0
+    highGroundPriority: 0.35
+    islandRotationTendency: 0.2
+    thirdPartyTendency: 0.3
+    bridgeCutSkill: 0.3
+    projectileZoningTendency: 0.35
+    retreatHealSkill: 0.4
+    counterPlayIQ: 0.35
+    antiRushReaction: 0.4
+    baitDetectionSkill: 0.3
 
   HARD:
     reactionTimeMin: 150
@@ -178,6 +241,27 @@ difficulties:
     mistakeFrequency: 2.0
     headMovementNoise: 0.07
     itemDropOnDeathPanic: 0.02
+    jumpBridgeChance: 0.5
+    stairBridgeSkill: 0.75
+    fakeBridgeChance: 0.3
+    bridgeSafetyRailChance: 0.15
+    diagonalApproachTendency: 0.6
+    verticalApproachTendency: 0.4
+    splitPathChance: 0.2
+    approachPatienceTicks: 120
+    edgeKnockSkill: 0.6
+    comboLockSkill: 0.7
+    kbCancelSkill: 0.45
+    preferredEngageDistance: 3.0
+    highGroundPriority: 0.6
+    islandRotationTendency: 0.4
+    thirdPartyTendency: 0.55
+    bridgeCutSkill: 0.6
+    projectileZoningTendency: 0.6
+    retreatHealSkill: 0.7
+    counterPlayIQ: 0.6
+    antiRushReaction: 0.65
+    baitDetectionSkill: 0.6
 
   EXPERT:
     reactionTimeMin: 80
@@ -213,3 +297,24 @@ difficulties:
     mistakeFrequency: 0.5
     headMovementNoise: 0.03
     itemDropOnDeathPanic: 0.0
+    jumpBridgeChance: 0.8
+    stairBridgeSkill: 0.95
+    fakeBridgeChance: 0.6
+    bridgeSafetyRailChance: 0.05
+    diagonalApproachTendency: 0.85
+    verticalApproachTendency: 0.7
+    splitPathChance: 0.5
+    approachPatienceTicks: 200
+    edgeKnockSkill: 0.9
+    comboLockSkill: 0.92
+    kbCancelSkill: 0.75
+    preferredEngageDistance: 3.0
+    highGroundPriority: 0.85
+    islandRotationTendency: 0.7
+    thirdPartyTendency: 0.8
+    bridgeCutSkill: 0.9
+    projectileZoningTendency: 0.85
+    retreatHealSkill: 0.9
+    counterPlayIQ: 0.9
+    antiRushReaction: 0.9
+    baitDetectionSkill: 0.85

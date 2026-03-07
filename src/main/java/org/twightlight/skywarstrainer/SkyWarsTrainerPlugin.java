@@ -140,7 +140,6 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
         SkyWarsTrainerAPI.clearInstance();
         instance = null;
         getLogger().info("SkyWarsTrainer disabled.");
-        DebugLogger.shutdown();
     }
 
     // ─── Dependency Validation ──────────────────────────────────
