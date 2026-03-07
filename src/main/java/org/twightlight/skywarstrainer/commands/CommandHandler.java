@@ -56,6 +56,7 @@ public class CommandHandler implements CommandExecutor {
         subCommands.put("test", new TestCommand(plugin));
         subCommands.put("reload", new ReloadCommand(plugin));
         subCommands.put("help", new HelpCommand(plugin, subCommands));
+        subCommands.put("debugtoggle", new DebugToggleCommand());
     }
 
     @Override

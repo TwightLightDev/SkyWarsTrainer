@@ -378,6 +378,7 @@ public class DifficultyConfig {
         private final double headMovementNoise;
         private final double itemDropOnDeathPanic;
 
+
         private DifficultyProfile(Builder builder) {
             this.difficulty = builder.difficulty;
             this.reactionTimeMin = builder.reactionTimeMin;

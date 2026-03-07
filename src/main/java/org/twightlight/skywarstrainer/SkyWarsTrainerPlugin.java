@@ -16,6 +16,7 @@ import net.citizensnpcs.api.trait.TraitInfo;
 
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.twightlight.skywarstrainer.util.DebugLogger;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -119,6 +120,8 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
         getLogger().info("SkyWarsTrainer v" + getDescription().getVersion() + " enabled successfully!");
         getLogger().info("Use /swt spawn <difficulty> to create a practice bot.");
 
+        DebugLogger.init(this);
+
         if (configManager.isDebugMode()) {
             getLogger().info("[DEBUG] Debug mode is ON.");
         }
@@ -137,6 +140,7 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
         SkyWarsTrainerAPI.clearInstance();
         instance = null;
         getLogger().info("SkyWarsTrainer disabled.");
+        DebugLogger.shutdown();
     }
 
     // ─── Dependency Validation ──────────────────────────────────
