@@ -6,12 +6,13 @@ import org.twightlight.skywarstrainer.bot.TrainerBot;
 import javax.annotation.Nonnull;
 
 /**
- * Interface for high-level engagement patterns that override the normal
- * per-tick combat strategy selection for a sequence of ticks.
+ * Interface for advanced engagement patterns. An engagement pattern is a
+ * multi-tick combat sequence that overrides normal per-tick strategy selection
+ * (e.g., a full edge-knock sequence, or a combo-lock chain).
  *
- * <p>Engagement patterns represent pro-level combat sequences like edge-knock
- * plays, combo locks, KB cancellation, and third-partying. When active, a
- * pattern takes control of combat behavior until it completes.</p>
+ * <p>While a pattern is active, it takes full control of combat actions.
+ * When the pattern completes (or fails), control returns to normal
+ * CombatEngine strategy selection.</p>
  */
 public interface EngagementPattern {
 
@@ -20,35 +21,40 @@ public interface EngagementPattern {
     String getName();
 
     /**
-     * Checks whether this pattern should activate given the current situation.
-     *
-     * @param bot     the bot
-     * @param target  the current combat target
-     * @param context engagement context (combo state, positioning, etc.)
-     * @return true if this pattern should activate
-     */
-    boolean shouldActivate(@Nonnull TrainerBot bot, @Nonnull LivingEntity target,
-                           @Nonnull EngagementContext context);
-
-    /**
-     * Ticks one frame of the pattern's execution.
+     * Checks whether this pattern should activate in the current situation.
      *
      * @param bot    the bot
      * @param target the current combat target
+     * @return true if this pattern should activate
+     */
+    boolean shouldActivate(@Nonnull TrainerBot bot, @Nonnull LivingEntity target);
+
+    /**
+     * Ticks one frame of this engagement pattern. Called every tick while active.
+     *
+     * @param bot    the bot
+     * @param target the combat target
      */
     void tick(@Nonnull TrainerBot bot, @Nonnull LivingEntity target);
 
     /**
-     * Returns the priority of this pattern. Higher = evaluated first.
+     * Returns the priority of this pattern. Higher priority patterns are
+     * preferred when multiple could activate.
      *
      * @param bot the bot
      * @return the priority score
      */
     double getPriority(@Nonnull TrainerBot bot);
 
-    /** @return true if the pattern has completed its sequence */
+    /**
+     * Returns whether this pattern has completed its sequence.
+     *
+     * @return true if the pattern is done
+     */
     boolean isComplete();
 
-    /** Resets the pattern for a new activation. */
+    /**
+     * Resets internal state. Called when the pattern ends or combat ends.
+     */
     void reset();
 }

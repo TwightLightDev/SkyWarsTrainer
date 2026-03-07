@@ -422,6 +422,33 @@ public class IslandGraph {
         return false;
     }
 
+    /**
+     * Returns the island that contains or is closest to the given location.
+     *
+     * <p>The method uses the same heuristic as island detection:
+     * if the horizontal distance to an island center is < 30 blocks,
+     * the location is considered part of that island.</p>
+     *
+     * @param loc location to check
+     * @return the island at the location, or null if none found
+     */
+    @Nullable
+    public Island getIslandAt(@Nonnull Location loc) {
+        double nearestDist = Double.MAX_VALUE;
+        Island nearest = null;
+
+        for (Island island : islands) {
+            double dist = MathUtil.horizontalDistance(loc, island.center);
+
+            if (dist < nearestDist && dist < 30) {
+                nearestDist = dist;
+                nearest = island;
+            }
+        }
+
+        return nearest;
+    }
+
     // ═════════════════════════════════════════════════════════════
     //  INNER: Island
     // ═════════════════════════════════════════════════════════════
