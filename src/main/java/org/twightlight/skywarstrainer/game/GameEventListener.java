@@ -20,7 +20,7 @@ import org.twightlight.skywars.api.event.player.SkyWarsPlayerJoinEvent;
 import org.twightlight.skywars.api.event.player.SkyWarsPlayerQuitEvent;
 import org.twightlight.skywars.api.server.SkyWarsServer;
 import org.twightlight.skywars.arena.Arena;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.decision.DecisionEngine;
 import org.twightlight.skywarstrainer.bot.BotManager;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
@@ -43,14 +43,14 @@ import java.util.logging.Level;
  */
 public class GameEventListener implements Listener {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
     /**
      * Creates a new GameEventListener.
      *
      * @param plugin the owning plugin
      */
-    public GameEventListener(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public GameEventListener(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
     }
 

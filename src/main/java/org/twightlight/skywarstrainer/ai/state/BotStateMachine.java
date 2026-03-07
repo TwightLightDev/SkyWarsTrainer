@@ -1,6 +1,6 @@
 package org.twightlight.skywarstrainer.ai.state;
 
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.engine.BehaviorTree;
 import org.twightlight.skywarstrainer.ai.engine.NodeStatus;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
@@ -12,8 +12,6 @@ import java.util.Deque;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.logging.Level;
-
-import org.twightlight.skywarstrainer.ai.state.BotState;
 
 
 /**
@@ -123,7 +121,7 @@ public class BotStateMachine {
             try {
                 oldTree.reset(bot);
             } catch (Exception e) {
-                SkyWarsTrainerPlugin.getInstance().getLogger().log(Level.WARNING,
+                SkyWarsTrainer.getInstance().getLogger().log(Level.WARNING,
                         "Error resetting BT for state " + oldState.name(), e);
             }
         }
@@ -149,7 +147,7 @@ public class BotStateMachine {
         }
 
         if (bot.getProfile().isDebugMode()) {
-            SkyWarsTrainerPlugin.getInstance().getLogger().info(
+            SkyWarsTrainer.getInstance().getLogger().info(
                     "[DEBUG] " + bot.getName() + " " + transition);
         }
 
@@ -202,7 +200,7 @@ public class BotStateMachine {
         try {
             return tree.tick(bot);
         } catch (Exception e) {
-            SkyWarsTrainerPlugin.getInstance().getLogger().log(Level.WARNING,
+            SkyWarsTrainer.getInstance().getLogger().log(Level.WARNING,
                     "Error ticking BT for state " + currentState.name() + " on bot " + bot.getName(), e);
             return NodeStatus.FAILURE;
         }

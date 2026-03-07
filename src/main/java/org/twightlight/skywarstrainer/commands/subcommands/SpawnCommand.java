@@ -3,7 +3,7 @@ package org.twightlight.skywarstrainer.commands.subcommands;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.commands.CommandHandler;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
@@ -19,9 +19,9 @@ import java.util.List;
  */
 public class SpawnCommand implements org.twightlight.skywarstrainer.commands.subcommands.SubCommand {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
-    public SpawnCommand(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public SpawnCommand(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
     }
 

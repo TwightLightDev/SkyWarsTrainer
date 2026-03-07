@@ -1,19 +1,16 @@
 package org.twightlight.skywarstrainer.config;
 
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.io.File;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.logging.Level;
 
 /**
  * Manages loading and access to all YAML configuration files for SkyWarsTrainer.
@@ -31,7 +28,7 @@ import java.util.logging.Level;
  */
 public class ConfigManager {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
     /** The main config.yml file configuration. */
     private FileConfiguration mainConfig;
@@ -68,7 +65,7 @@ public class ConfigManager {
      *
      * @param plugin the owning plugin instance
      */
-    public ConfigManager(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public ConfigManager(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
     }
 

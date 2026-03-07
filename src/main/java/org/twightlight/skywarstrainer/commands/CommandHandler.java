@@ -4,8 +4,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.commands.subcommands.*;
 
 import javax.annotation.Nonnull;
@@ -24,7 +23,7 @@ public class CommandHandler implements CommandExecutor {
 
     private static final String PREFIX = ChatColor.GOLD + "[SkyWarsTrainer] " + ChatColor.RESET;
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
     private final Map<String, SubCommand> subCommands;
 
     /**
@@ -32,7 +31,7 @@ public class CommandHandler implements CommandExecutor {
      *
      * @param plugin the owning plugin
      */
-    public CommandHandler(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public CommandHandler(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
         this.subCommands = new HashMap<>();
         registerSubCommands();

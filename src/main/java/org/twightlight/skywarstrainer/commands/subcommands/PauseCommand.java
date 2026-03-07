@@ -2,7 +2,7 @@ package org.twightlight.skywarstrainer.commands.subcommands;
 
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.commands.CommandHandler;
 
@@ -13,9 +13,9 @@ import javax.annotation.Nonnull;
  */
 public class PauseCommand implements SubCommand {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
-    public PauseCommand(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public PauseCommand(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
     }
 

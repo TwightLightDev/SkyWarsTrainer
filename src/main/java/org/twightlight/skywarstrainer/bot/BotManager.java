@@ -3,7 +3,7 @@ package org.twightlight.skywarstrainer.bot;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.twightlight.skywars.arena.Arena;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.personality.Personality;
 import org.twightlight.skywarstrainer.ai.personality.PersonalityConflictTable;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
  */
 public class BotManager {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
     /** All active bots, keyed by their unique bot ID. */
     private final Map<UUID, TrainerBot> activeBots;
@@ -47,7 +47,7 @@ public class BotManager {
      *
      * @param plugin the owning plugin instance
      */
-    public BotManager(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public BotManager(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
         this.activeBots = new ConcurrentHashMap<>();
         this.botsByName = new ConcurrentHashMap<>();
@@ -85,9 +85,9 @@ public class BotManager {
 
         BotSkin skin;
         if (name != null && !name.isEmpty()) {
-            skin = BotSkin.withName(plugin, name);
+            skin = BotSkin.withName(plugin, name, difficulty, personalities);
         } else {
-            skin = BotSkin.generateRandom(plugin);
+            skin = BotSkin.generateRandom(plugin, difficulty, personalities);
         }
 
         String displayName = skin.getDisplayName();

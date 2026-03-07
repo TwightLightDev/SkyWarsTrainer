@@ -3,7 +3,7 @@ package org.twightlight.skywarstrainer.config;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.personality.Personality;
 
 import javax.annotation.Nonnull;
@@ -37,7 +37,7 @@ import java.util.*;
  */
 public class PersonalityConfig {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
     /** Override modifiers loaded from config. Outer key: personality name, inner: modifier map. */
     private final Map<String, Map<String, Double>> overrides;
@@ -50,7 +50,7 @@ public class PersonalityConfig {
      *
      * @param plugin the owning plugin
      */
-    public PersonalityConfig(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public PersonalityConfig(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
         this.overrides = new HashMap<>();
         this.chatMessages = new HashMap<>();

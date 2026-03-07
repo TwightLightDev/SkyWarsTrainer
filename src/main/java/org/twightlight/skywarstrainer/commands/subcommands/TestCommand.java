@@ -4,23 +4,22 @@ import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.commands.CommandHandler;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
 
 import javax.annotation.Nonnull;
 import java.util.Arrays;
-import java.util.Collections;
 
 /**
  * /swt test <combat|bridge|loot|flee> — Spawns a bot in a test scenario.
  */
 public class TestCommand implements SubCommand {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
-    public TestCommand(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public TestCommand(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
     }
 

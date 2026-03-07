@@ -1,6 +1,6 @@
 package org.twightlight.skywarstrainer.ai.engine;
 
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 
 import javax.annotation.Nonnull;
@@ -46,7 +46,7 @@ public final class ActionNode extends BehaviorNode {
         } catch (Exception ex) {
             // Safety net: log and fail gracefully rather than crashing the entire tree
             if (bot.getProfile().isDebugMode()) {
-                SkyWarsTrainerPlugin.getInstance().getLogger().warning(
+                SkyWarsTrainer.getInstance().getLogger().warning(
                         "[BT] ActionNode '" + name + "' threw: " + ex.getMessage());
             }
             return NodeStatus.FAILURE;

@@ -1,6 +1,6 @@
 package org.twightlight.skywarstrainer.util;
 
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 
 import javax.annotation.Nonnull;
@@ -29,7 +29,7 @@ public final class DebugLogger {
     private static final Set<UUID> perBotDebug = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     /** Reference to the plugin for logging output. */
-    private static SkyWarsTrainerPlugin pluginInstance;
+    private static SkyWarsTrainer pluginInstance;
 
     private DebugLogger() {
         // Static utility class
@@ -40,7 +40,7 @@ public final class DebugLogger {
      *
      * @param plugin the plugin instance
      */
-    public static void init(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public static void init(@Nonnull SkyWarsTrainer plugin) {
         pluginInstance = plugin;
         globalDebugEnabled = plugin.getConfigManager().isDebugMode();
     }

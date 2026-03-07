@@ -2,7 +2,7 @@ package org.twightlight.skywarstrainer.commands.subcommands;
 
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.commands.CommandHandler;
 
 import javax.annotation.Nonnull;
@@ -12,9 +12,9 @@ import javax.annotation.Nonnull;
  */
 public class RemoveCommand implements SubCommand {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
-    public RemoveCommand(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public RemoveCommand(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
     }
 

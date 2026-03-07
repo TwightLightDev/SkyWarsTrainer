@@ -1,7 +1,7 @@
 package org.twightlight.skywarstrainer.api;
 
 import org.bukkit.Location;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.decision.UtilityScorer;
 import org.twightlight.skywarstrainer.ai.personality.PersonalityProfile;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
@@ -36,14 +36,14 @@ public class SkyWarsTrainerAPI {
 
     private static SkyWarsTrainerAPI instance;
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
     /**
      * Creates a new API instance. Should only be called by the plugin.
      *
      * @param plugin the owning plugin
      */
-    public SkyWarsTrainerAPI(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public SkyWarsTrainerAPI(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
         instance = this;
     }
@@ -225,7 +225,7 @@ public class SkyWarsTrainerAPI {
      * @return the plugin instance
      */
     @Nonnull
-    public SkyWarsTrainerPlugin getPlugin() {
+    public SkyWarsTrainer getPlugin() {
         return plugin;
     }
 }

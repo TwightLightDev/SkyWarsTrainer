@@ -1,7 +1,6 @@
 package org.twightlight.skywarstrainer.commands.subcommands;
 
 import org.bukkit.command.CommandSender;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
 import org.twightlight.skywarstrainer.util.DebugLogger;
 
 import javax.annotation.Nonnull;
@@ -24,7 +23,7 @@ public class DebugToggleCommand implements SubCommand {
         }
 
         boolean newState = !DebugLogger.isGlobalDebugEnabled();
-        DebugLogger.setGlobalDebugEnabled(newState);
+        DebugLogger.setGlobalDebug(newState);
         sender.sendMessage("§aGlobal debug mode: " + (newState ? "§2ENABLED" : "§cDISABLED"));
     }
 

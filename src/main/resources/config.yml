@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════
-# SkyWarsTrainer Configuration
+# SkyWarsTrainer Configuration — v2.0 (Extended)
 # ══════════════════════════════════════════════════════════════
 
 general:
@@ -12,83 +12,304 @@ general:
   enable-chat: true
   enable-skins: true
   debug-mode: false
+  # When true, bots auto-spawn when a game starts if player count < min-fill
+  auto-fill-enabled: false
+  auto-fill-min-players: 4
+  # Seconds after game start before bots become aggressive (overrides grace in arena)
+  bot-warmup-seconds: 0
 
 performance:
   max-pathfinding-ms-per-tick: 2
   stagger-bot-ticks: true
   cache-map-scan: true
   max-total-ms-per-tick: 8
+  # Cap subsystem tick durations; skip if exceeded
+  subsystem-timeout-ms: 3
+  # Enable performance metric logging every N ticks (0 = disabled)
+  perf-log-interval: 0
 
 game-hook:
   plugin: "auto"
 
+# ══════════════════════════════════════════════════════════════
+#  SKIN SYSTEM v2 — Multiple Skin Sources
+# ══════════════════════════════════════════════════════════════
 skins:
-  use-random-skins: true
-  skin-list:
-    - "Steve"
-    - "Alex"
-    - "Notch"
-    - "jeb_"
-    - "Dinnerbone"
-    - "Grumm"
-    - "MHF_Chicken"
-    - "MHF_Pig"
-    - "MHF_Sheep"
-    - "MHF_Cow"
-    - "MHF_Villager"
-    - "MHF_Blaze"
-    - "MHF_Spider"
-    - "MHF_Enderman"
-    - "MHF_Skeleton"
-    - "MHF_Zombie"
-    - "MHF_Creeper"
-    - "MHF_Golem"
-    - "MHF_Squid"
-    - "MHF_Slime"
+  # Master toggle for all skin features
+  enabled: true
 
+  # How to resolve skins. Options: USERNAME, TEXTURE, MIXED
+  #  USERNAME  — Citizens does a Mojang UUID+texture lookup by username (requires online-mode or API)
+  #  TEXTURE   — We supply raw base64 texture + signature directly (works offline, fastest)
+  #  MIXED     — Each entry can be either; detected automatically
+  mode: MIXED
+
+  # When true, a random skin from the appropriate pool is chosen per bot.
+  # When false, skins cycle sequentially (round-robin).
+  random-selection: true
+
+  # Global skin pool — used when no difficulty/personality-specific pool matches.
+  global-pool:
+    # Username-based entries (Citizens resolves the texture at runtime)
+    usernames:
+      - "Steve"
+      - "Alex"
+      - "Notch"
+      - "jeb_"
+      - "Dinnerbone"
+      - "Grumm"
+
+  # Difficulty-specific skin pools — override the global pool per difficulty.
+  # Bots in BEGINNER difficulty will pick from this pool instead of global.
+  difficulty-pools:
+    BEGINNER:
+      usernames:
+        - "Steve"
+        - "Alex"
+        - "MHF_Villager"
+    HARD:
+      usernames:
+        - "Technoblade"
+        - "Dream"
+        - "Sapnap"
+    EXPERT:
+      usernames:
+        - "Technoblade"
+        - "Dream"
+        - "Sapnap"
+        - "Stimpy"
+
+  # Personality-specific skin pools — picked AFTER difficulty pool.
+  # If a bot has BERSERKER personality and a pool exists here, use it.
+  # Priority order: personality-pool > difficulty-pool > global-pool
+  personality-pools:
+    BERSERKER:
+      usernames:
+        - "MHF_Blaze"
+        - "MHF_Golem"
+    SNIPER:
+      usernames:
+        - "MHF_Skeleton"
+
+  # Skin cache settings
+  cache:
+    # Cache resolved textures to disk so restarts don't re-query Mojang
+    enabled: true
+    # Max cached skins (LRU eviction)
+    max-entries: 200
+    # Hours before a cached skin texture is re-fetched
+    expiry-hours: 72
+
+# ══════════════════════════════════════════════════════════════
+#  NAME GENERATION v2 — Multiple Strategies
+# ══════════════════════════════════════════════════════════════
 random-names:
-  prefixes:
-    - ""
-    - "xX"
-    - "Pro"
-    - "The"
-    - "Mr"
-    - "ii"
-    - "_"
-    - "Not"
-    - "Im"
-    - "Ez"
-  roots:
-    - "Player"
-    - "Warrior"
-    - "Knight"
-    - "Ninja"
-    - "Shadow"
-    - "Dragon"
-    - "Storm"
-    - "Blaze"
-    - "Ice"
-    - "Fire"
-    - "Wolf"
-    - "Fox"
-    - "Eagle"
-    - "Hawk"
-    - "Tiger"
-    - "Lion"
-    - "Bear"
-    - "Panda"
-    - "Viper"
-    - "Cobra"
-  suffixes:
-    - ""
-    - "Xx"
-    - "_YT"
-    - "HD"
-    - "PvP"
-    - "123"
-    - "_"
-    - "MC"
-    - "God"
-    - "King"
-    - "Jr"
-    - "Pro"
+  # Strategy for generating names. Options:
+  #   COMPOSITE     — prefix+root+suffix (original)
+  #   REALISTIC     — mimics real player name patterns with varied formats
+  #   FIXED_POOL    — picks from a fixed list of full names
+  #   MIXED         — randomly picks a strategy per bot
+  strategy: MIXED
+
+  # ── COMPOSITE strategy parts (original system, improved) ──
+  composite:
+    prefixes:
+      - ""
+      - "xX"
+      - "Pro"
+      - "The"
+      - "Mr"
+      - "ii"
+      - "_"
+      - "Not"
+      - "Im"
+      - "Ez"
+      - "Its"
+      - "iRun"
+      - "qw"
+      - "Lil"
+    roots:
+      - "Player"
+      - "Warrior"
+      - "Knight"
+      - "Ninja"
+      - "Shadow"
+      - "Dragon"
+      - "Storm"
+      - "Blaze"
+      - "Ice"
+      - "Fire"
+      - "Wolf"
+      - "Fox"
+      - "Eagle"
+      - "Hawk"
+      - "Tiger"
+      - "Lion"
+      - "Bear"
+      - "Panda"
+      - "Viper"
+      - "Cobra"
+      - "Drift"
+      - "Pixel"
+      - "Swift"
+      - "Nova"
+      - "Blade"
+    suffixes:
+      - ""
+      - "Xx"
+      - "_YT"
+      - "HD"
+      - "PvP"
+      - "123"
+      - "_"
+      - "MC"
+      - "God"
+      - "King"
+      - "Jr"
+      - "Pro"
+      - "ツ"
+      - "V2"
+      - "_TTV"
+
+  # ── REALISTIC strategy ──
+  # Generates names that mimic common real-player username patterns:
+  #   - firstname + numbers (Jake2847)
+  #   - firstname + year (Emily2011)
+  #   - word + word (SilentArrow)
+  #   - word + numbers (Block987)
+  #   - all lowercase (shadowplay)
+  realistic:
+    first-names:
+      - "Jake"
+      - "Alex"
+      - "Max"
+      - "Emma"
+      - "Lily"
+      - "Noah"
+      - "Liam"
+      - "Luna"
+      - "Ethan"
+      - "Maya"
+      - "Owen"
+      - "Zoe"
+      - "Ryan"
+      - "Mia"
+      - "Leo"
+      - "Kai"
+      - "Sam"
+      - "Chloe"
+      - "Adam"
+      - "Tyler"
+    adjectives:
+      - "Silent"
+      - "Swift"
+      - "Dark"
+      - "Frozen"
+      - "Hidden"
+      - "Rapid"
+      - "Smooth"
+      - "Crazy"
+      - "Epic"
+      - "Lucky"
+      - "Cold"
+      - "Lost"
+      - "True"
+    nouns:
+      - "Arrow"
+      - "Blade"
+      - "Shield"
+      - "Dream"
+      - "Block"
+      - "Star"
+      - "Moon"
+      - "Stone"
+      - "Flame"
+      - "Dagger"
+      - "Wolf"
+      - "Raven"
+      - "Hawk"
+    # Year range appended to names: e.g. "Emma2012"
+    year-range:
+      min: 2005
+      max: 2014
+    # Number range appended to names: e.g. "Jake284"
+    number-range:
+      min: 1
+      max: 9999
+
+  # ── FIXED_POOL strategy ──
+  # Picks a complete name from this list. Good for curated bot rosters.
+  fixed-pool:
+    - "xShadowPvP"
+    - "NotDream"
+    - "ItzFrostyMC"
+    - "Blqze_YT"
+    - "silentbow"
+    - "MLGWater69"
+    - "BridgeGod"
+    - "combo_king"
+    - "tryhard_4k"
+    - "iPlaySW"
+    - "BlockMasterHD"
+    - "qwSnipe"
+    - "OmegaPvP"
+    - "GhostBridger"
+    - "FakeSweat"
+    - "CasualVibes"
+    - "ImNotABot"
+    - "jitter16cps"
+    - "ButterFly420"
+    - "SkyGod_"
+    - "Pearl_Clutch"
+    - "NotHacking"
+    - "LagPlayer"
+    - "ProNoob123"
+
+  # ── Name formatting options ──
+  formatting:
+    # Max length (Minecraft limit is 16)
+    max-length: 16
+    # Whether to randomly apply leet-speak substitutions (a->4, e->3, etc.)
+    leet-chance: 0.05
+    # Whether to randomly capitalize interior letters (e.g., "sHadOw")
+    random-caps-chance: 0.03
+    # Whether to sometimes append underscores between parts
+    underscore-separator-chance: 0.15
+
+# ══════════════════════════════════════════════════════════════
+#  BOT CHAT v2
+# ══════════════════════════════════════════════════════════════
+chat:
+  enabled: true
+  # Minimum seconds between messages from the same bot
+  cooldown-seconds: 5
+  # Typing speed range (ms per character) — simulates typing delay
+  typing-speed-min-ms: 20
+  typing-speed-max-ms: 80
+  # Max message delay in ticks (cap so bots don't send messages ages later)
+  max-delay-ticks: 80
+  # Chance that a bot sends a message for a given event (0.0 to 1.0)
+  # Prevents every single event from producing chat
+  message-chance:
+    game_start: 0.7
+    first_kill: 0.5
+    death: 0.6
+    win: 0.9
+    close_fight_won: 0.3
+    close_fight_lost: 0.3
+  # Whether to include typing indicator particles above bot head
+  show-typing-particles: false
+
+# ══════════════════════════════════════════════════════════════
+#  TICK TIMER TUNING — Advanced Subsystem Intervals
+# ══════════════════════════════════════════════════════════════
+timers:
+  void-detect-interval: 5
+  lava-detect-interval: 15
+  chest-update-interval: 60
+  island-graph-interval: 200
+  game-phase-interval: 30
+  behavior-tree-interval: 3
+  inventory-audit-interval: 100
+  positional-interval: 50
+  enemy-analyzer-interval: 20

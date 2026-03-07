@@ -2,7 +2,7 @@ package org.twightlight.skywarstrainer.commands.subcommands;
 
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.bot.BotProfile;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.commands.CommandHandler;
@@ -14,9 +14,9 @@ import javax.annotation.Nonnull;
  */
 public class StatsCommand implements SubCommand {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
-    public StatsCommand(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public StatsCommand(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
     }
 

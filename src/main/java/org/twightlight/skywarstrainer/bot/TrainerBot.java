@@ -10,7 +10,7 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.twightlight.skywars.arena.Arena;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.decision.DecisionEngine;
 import org.twightlight.skywarstrainer.ai.engine.*;
 import org.twightlight.skywarstrainer.ai.state.BotState;
@@ -50,7 +50,7 @@ import java.util.logging.Level;
  */
 public class TrainerBot {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
     private final Arena<?> arena;
     private final UUID botId;
     private NPC npc;
@@ -118,7 +118,7 @@ public class TrainerBot {
      * @param profile the bot's profile
      * @param skin    the skin to apply
      */
-    public TrainerBot(@Nonnull SkyWarsTrainerPlugin plugin, @Nonnull Arena<?> arena,
+    public TrainerBot(@Nonnull SkyWarsTrainer plugin, @Nonnull Arena<?> arena,
                       @Nonnull BotProfile profile, @Nonnull BotSkin skin) {
         this.plugin = plugin;
         this.botId = UUID.randomUUID();
@@ -153,8 +153,7 @@ public class TrainerBot {
             npc = CitizensAPI.getNPCRegistry().createNPC(EntityType.PLAYER, skin.getDisplayName());
 
             if (plugin.getConfigManager().isSkinsEnabled()) {
-                npc.data().set(NPC.Metadata.PLAYER_SKIN_UUID, skin.getSkinName());
-                npc.data().set("player-skin-name", skin.getSkinName());
+                skin.applyToNPC(npc);
             }
 
             npc.setProtected(false);
@@ -995,7 +994,7 @@ public class TrainerBot {
     @Nonnull public BotProfile getProfile() { return profile; }
     @Nonnull public BotSkin getSkin() { return skin; }
     @Nonnull public DifficultyProfile getDifficultyProfile() { return profile.getDifficultyProfile(); }
-    @Nonnull public SkyWarsTrainerPlugin getPlugin() { return plugin; }
+    @Nonnull public SkyWarsTrainer getPlugin() { return plugin; }
     public boolean isInitialized() { return initialized; }
     public boolean isDestroyed() { return destroyed; }
     public long getLocalTickCount() { return localTickCount; }

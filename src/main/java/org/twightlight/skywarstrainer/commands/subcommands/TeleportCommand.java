@@ -4,7 +4,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.commands.CommandHandler;
 
@@ -15,9 +15,9 @@ import javax.annotation.Nonnull;
  */
 public class TeleportCommand implements SubCommand {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
-    public TeleportCommand(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public TeleportCommand(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
     }
 

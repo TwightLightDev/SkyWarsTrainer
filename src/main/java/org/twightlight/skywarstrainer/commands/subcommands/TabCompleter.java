@@ -2,9 +2,8 @@ package org.twightlight.skywarstrainer.commands;
 
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.personality.Personality;
-import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
@@ -18,7 +17,7 @@ import java.util.stream.Collectors;
  */
 public class TabCompleter implements org.bukkit.command.TabCompleter {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
     private static final List<String> SUBCOMMANDS = Arrays.asList(
             "spawn", "remove", "list", "difficulty", "personality",
@@ -41,7 +40,7 @@ public class TabCompleter implements org.bukkit.command.TabCompleter {
     private static final List<String> PERSONALITY_ACTIONS = Arrays.asList("add", "remove", "set");
     private static final List<String> TEST_TYPES = Arrays.asList("combat", "bridge", "loot", "flee");
 
-    public TabCompleter(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public TabCompleter(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
     }
 

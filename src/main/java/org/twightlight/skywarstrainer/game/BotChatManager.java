@@ -3,7 +3,7 @@ package org.twightlight.skywarstrainer.game;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.personality.Personality;
 import org.twightlight.skywarstrainer.ai.personality.PersonalityProfile;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
@@ -65,7 +65,7 @@ public final class BotChatManager {
      *                  "close_fight_lost")
      */
     public static void sendChatMessage(@Nonnull TrainerBot bot, @Nonnull String eventType) {
-        SkyWarsTrainerPlugin plugin = bot.getPlugin();
+        SkyWarsTrainer plugin = bot.getPlugin();
 
         // Check if chat is enabled
         if (!plugin.getConfigManager().isChatEnabled()) return;
@@ -106,7 +106,7 @@ public final class BotChatManager {
      * @return the selected message, or null if none available
      */
     @Nullable
-    private static String selectMessage(@Nonnull SkyWarsTrainerPlugin plugin,
+    private static String selectMessage(@Nonnull SkyWarsTrainer plugin,
                                         @Nonnull TrainerBot bot,
                                         @Nonnull String eventType) {
         FileConfiguration messagesConfig = plugin.getConfigManager().getMessagesConfig();

@@ -2,7 +2,7 @@ package org.twightlight.skywarstrainer.commands.subcommands;
 
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.commands.CommandHandler;
 
@@ -14,9 +14,9 @@ import java.util.List;
  */
 public class ListCommand implements SubCommand {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
-    public ListCommand(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public ListCommand(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
     }
 

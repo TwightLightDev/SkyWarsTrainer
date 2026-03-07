@@ -29,9 +29,9 @@ import java.util.logging.Level;
  * the Citizens2 NPC API. It orchestrates all subsystems: configuration loading,
  * bot management, game state tracking, event listening, and the staggered tick loop.</p>
  */
-public final class SkyWarsTrainerPlugin extends JavaPlugin {
+public final class SkyWarsTrainer extends JavaPlugin {
 
-    private static SkyWarsTrainerPlugin instance;
+    private static SkyWarsTrainer instance;
 
     private ConfigManager configManager;
     private DifficultyConfig difficultyConfig;
@@ -157,7 +157,7 @@ public final class SkyWarsTrainerPlugin extends JavaPlugin {
     // ─── Accessors ──────────────────────────────────────────────
 
     @Nullable
-    public static SkyWarsTrainerPlugin getInstance() {
+    public static SkyWarsTrainer getInstance() {
         return instance;
     }
 

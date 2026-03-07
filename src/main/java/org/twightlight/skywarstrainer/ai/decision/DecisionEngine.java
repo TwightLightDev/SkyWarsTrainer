@@ -1,6 +1,6 @@
 package org.twightlight.skywarstrainer.ai.decision;
 
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.decision.considerations.*;
 import org.twightlight.skywarstrainer.ai.state.BotState;
 import org.twightlight.skywarstrainer.ai.state.BotStateMachine;
@@ -692,7 +692,7 @@ public class DecisionEngine {
             shown++;
         }
 
-        SkyWarsTrainerPlugin.getInstance().getLogger().info(sb.toString());
+        SkyWarsTrainer.getInstance().getLogger().info(sb.toString());
     }
 
     // ─── Queries ────────────────────────────────────────────────

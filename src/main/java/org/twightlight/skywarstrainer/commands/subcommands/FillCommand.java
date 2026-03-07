@@ -3,7 +3,7 @@ package org.twightlight.skywarstrainer.commands.subcommands;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.commands.CommandHandler;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
 
@@ -17,9 +17,9 @@ import java.util.List;
  */
 public class FillCommand implements SubCommand {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
-    public FillCommand(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public FillCommand(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
     }
 

@@ -2,8 +2,7 @@ package org.twightlight.skywarstrainer.commands.subcommands;
 
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
-import org.twightlight.skywarstrainer.commands.CommandHandler;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 
 import javax.annotation.Nonnull;
 import java.util.Map;
@@ -13,10 +12,10 @@ import java.util.Map;
  */
 public class HelpCommand implements SubCommand {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
     private final Map<String, SubCommand> subCommands;
 
-    public HelpCommand(@Nonnull SkyWarsTrainerPlugin plugin, @Nonnull Map<String, SubCommand> subCommands) {
+    public HelpCommand(@Nonnull SkyWarsTrainer plugin, @Nonnull Map<String, SubCommand> subCommands) {
         this.plugin = plugin;
         this.subCommands = subCommands;
     }

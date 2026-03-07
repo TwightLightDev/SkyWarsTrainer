@@ -2,7 +2,7 @@ package org.twightlight.skywarstrainer.config;
 
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -26,7 +26,7 @@ import java.util.logging.Level;
  */
 public class DifficultyConfig {
 
-    private final SkyWarsTrainerPlugin plugin;
+    private final SkyWarsTrainer plugin;
 
     /** Loaded profiles keyed by difficulty enum. */
     private final Map<Difficulty, DifficultyProfile> profiles;
@@ -36,7 +36,7 @@ public class DifficultyConfig {
      *
      * @param plugin the owning plugin instance
      */
-    public DifficultyConfig(@Nonnull SkyWarsTrainerPlugin plugin) {
+    public DifficultyConfig(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
         this.profiles = new EnumMap<>(Difficulty.class);
     }

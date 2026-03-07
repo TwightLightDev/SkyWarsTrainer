@@ -1,7 +1,7 @@
 package org.twightlight.skywarstrainer.api;
 
 import org.bukkit.Location;
-import org.twightlight.skywarstrainer.SkyWarsTrainerPlugin;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.personality.Personality;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
@@ -146,7 +146,7 @@ public class BotBuilder {
             throw new IllegalStateException("Arena must be set before building a bot. Use .arena(myArena).");
         }
 
-        SkyWarsTrainerPlugin plugin = SkyWarsTrainerPlugin.getInstance();
+        SkyWarsTrainer plugin = SkyWarsTrainer.getInstance();
         if (plugin == null) {
             throw new IllegalStateException("SkyWarsTrainer plugin is not enabled.");
         }
