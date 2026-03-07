@@ -2,6 +2,8 @@ package org.twightlight.skywarstrainer.movement.strategies;
 
 import org.bukkit.entity.LivingEntity;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
+import org.twightlight.skywarstrainer.combat.counter.CounterModifiers;
+import org.twightlight.skywarstrainer.combat.counter.EnemyProfile;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.movement.strategies.approaches.*;
 import org.twightlight.skywarstrainer.util.DebugLogger;
@@ -145,12 +147,21 @@ public class ApproachEngine {
      * Selects the best approach strategy using weighted priority scoring.
      *
      * <p>For each viable strategy:
-     * 1. Check shouldUse() — is it viable?
-     * 2. Get base priority
-     * 3. Apply personality multipliers
-     * 4. Apply situation multipliers
-     * 5. Apply decision quality noise
-     * 6. Pick highest</p>
+     * <br>1. Check shouldUse() — is it viable?
+     * <br>2. Get base priority
+     * <br>3. Apply personality multipliers
+     * <br>4. Apply situation multipliers
+     * <br>5. Apply decision quality noise
+     * <br>6. Now applies counter-play-aware situation
+     * <br>7. Pick highest</p>
+     *
+     * <ul>
+     *   <li>If the enemy is a known camper (counter recommends bridgeCut), prefer
+     *       DiagonalApproach or SplitPath to avoid getting zoned.</li>
+     *   <li>If the enemy uses projectiles heavily, boost DiagonalApproach (harder to hit).</li>
+     *   <li>If counter modifiers recommend use projectiles first, boost approaches that
+     *       keep distance initially (Vertical, Flanking).</li>
+     * </ul></p>
      */
     @Nullable
     private ApproachStrategy selectBestStrategy(@Nonnull LivingEntity target) {
@@ -165,6 +176,9 @@ public class ApproachEngine {
 
             double score = strategy.getPriority(bot);
 
+            // ═══ Phase 7: Counter-play-aware situation multipliers ═══
+            score *= getSituationMultiplier(strategy);
+
             // Apply decision quality noise
             double noiseRange = (1.0 - decisionQuality) * 0.3;
             score += RandomUtil.nextDouble(-noiseRange, noiseRange);
@@ -177,6 +191,104 @@ public class ApproachEngine {
 
         return best;
     }
+
+    /**
+     * Computes situation-based multipliers for a strategy's priority.
+     * Factors in enemy behavior analysis from the context's counter modifiers.
+     *
+     * @param strategy the strategy to compute multipliers for
+     * @return the combined situation multiplier
+     */
+    private double getSituationMultiplier(@Nonnull ApproachStrategy strategy) {
+        double mult = 1.0;
+        String name = strategy.getName();
+
+        // ── General situation multipliers ──
+        if ("DirectRush".equals(name)) {
+            if (context.targetDistracted) mult *= 1.5;
+            if (context.is1v1) mult *= 1.2;
+            if (context.targetHasBowAimed) mult *= 0.5;
+            if (context.targetHealthEstimate < 0.3) mult *= 1.3; // Low HP — rush!
+        } else if ("DiagonalApproach".equals(name)) {
+            if (context.targetHasBowAimed) mult *= 1.5;
+            if (context.multipleEnemies) mult *= 1.3;
+        } else if ("VerticalApproach".equals(name)) {
+            if (context.heightDifference < -2) mult *= 1.5; // Target is below — don't tower
+            if (context.heightDifference > 2) mult *= 0.7;  // Already need to go up
+        } else if ("PearlApproach".equals(name)) {
+            // Only pearl if the enemy is dangerous enough to warrant it
+            if (context.targetHealthEstimate > 0.7) mult *= 1.3;
+        }
+
+        // ── Phase 7: Counter-play-aware multipliers ──
+        if (context.counterMods != null) {
+            CounterModifiers cm = context.counterMods;
+
+            // If counter recommends projectiles first, prefer approaches that
+            // keep distance (Vertical, Flanking) over DirectRush
+            if (cm.useProjectilesFirst) {
+                if ("DirectRush".equals(name)) mult *= 0.7;
+                if ("VerticalApproach".equals(name)) mult *= 1.3;
+                if ("FlankingApproach".equals(name)) mult *= 1.2;
+            }
+
+            // If counter recommends avoiding void edge (trickster enemy),
+            // prefer wider approaches that give more room
+            if (cm.avoidVoidEdge) {
+                if ("DiagonalApproach".equals(name)) mult *= 1.3;
+                if ("DirectRush".equals(name)) mult *= 0.8;
+            }
+
+            // If counter recommends bridge cutting (enemy is aggressive bridger),
+            // prefer defensive/flanking approaches
+            if (cm.bridgeCut) {
+                if ("FlankingApproach".equals(name)) mult *= 1.4;
+                if ("DiagonalApproach".equals(name)) mult *= 1.2;
+            }
+
+            // If enemy uses bait, be careful with direct approaches
+            if (cm.watchForBait) {
+                if ("DirectRush".equals(name)) mult *= 0.7;
+                if ("SplitPathApproach".equals(name)) mult *= 1.3;
+            }
+
+            // If playing passive against a strong enemy, prefer non-committal approaches
+            if (cm.playPassive) {
+                if ("DirectRush".equals(name)) mult *= 0.5;
+                if ("FlankingApproach".equals(name)) mult *= 1.5;
+                if ("PearlApproach".equals(name)) mult *= 0.5; // Don't waste pearl
+            }
+        }
+
+        // ── Enemy profile-based multipliers ──
+        if (context.enemyProfile != null) {
+            EnemyProfile ep = context.enemyProfile;
+            switch (ep.observedCombatStyle) {
+                case AGGRESSIVE:
+                    // Against aggressors, don't rush (they want melee)
+                    if ("DirectRush".equals(name)) mult *= 0.8;
+                    break;
+                case PROJECTILE:
+                    // Against snipers, diagonal to dodge
+                    if ("DiagonalApproach".equals(name)) mult *= 1.4;
+                    if ("DirectRush".equals(name)) mult *= 0.6;
+                    break;
+                case PASSIVE:
+                    // Against passive players, direct rush is fine
+                    if ("DirectRush".equals(name)) mult *= 1.3;
+                    break;
+                case TRICKSTER:
+                    // Against tricksters, flanking avoids traps
+                    if ("FlankingApproach".equals(name)) mult *= 1.5;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return mult;
+    }
+
 
     // ─── Accessors ──────────────────────────────────────────────
 

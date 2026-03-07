@@ -5,6 +5,8 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
+import org.twightlight.skywarstrainer.bridging.movement.BridgeMovementController;
+import org.twightlight.skywarstrainer.bridging.movement.BridgeMovementDirective;
 import org.twightlight.skywarstrainer.bridging.strategies.*;
 import org.twightlight.skywarstrainer.bridging.strategies.BridgeStrategy;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
@@ -244,6 +246,13 @@ public class BridgeEngine {
      * Ticks one frame of the active bridge. Called by the behavior tree
      * each tick while in BRIDGING state.
      *
+     * <p><b>Phase 7 Integration:</b> Now queries the BridgeMovementController
+     * for a {@link org.twightlight.skywarstrainer.bridging.movement.BridgeMovementDirective}
+     * before delegating to the active strategy. The directive advises sprint/sneak/jump
+     * state and may request placement pauses (bait bridge) or side-block placement
+     * (safety rail). The strategy remains authoritative — it reads the directive
+     * and integrates what it can.</p>
+     *
      * @return the result of this bridge tick
      */
     @Nonnull
@@ -273,7 +282,7 @@ public class BridgeEngine {
             return BridgeTickResult.OUT_OF_BLOCKS;
         }
 
-        // Check if we've reached the destination (close enough horizontally and vertically)
+        // Check if we've reached the destination
         Location botLoc = bot.getLocation();
         if (botLoc != null && destination != null) {
             double horizDist = MathUtil.horizontalDistance(botLoc, destination);
@@ -284,24 +293,60 @@ public class BridgeEngine {
             }
         }
 
+        // ═══ Phase 7: BridgeMovementController directive integration ═══
+        // Query the movement controller for movement advice BEFORE strategy ticks.
+        // The directive communicates sprint/sneak/jump requests and may pause
+        // block placement (bait bridge) or request side blocks (safety rail).
+        BridgeMovementController movementCtrl = bot.getBridgeMovementController();
+        BridgeMovementDirective directive = null;
+        if (movementCtrl != null) {
+            directive = movementCtrl.computeDirective();
+
+            // If the directive requests a placement pause (bait bridge waiting),
+            // skip the strategy tick entirely — don't place any blocks this tick.
+            if (directive.pausePlacement) {
+                // Still apply movement state from the directive
+                applyDirectiveMovement(directive);
+                movementCtrl.postTick();
+                return BridgeTickResult.IN_PROGRESS;
+            }
+
+            // Apply movement state BEFORE strategy runs (sprint, sneak, jump)
+            applyDirectiveMovement(directive);
+        }
+        // ═══ End Phase 7 directive pre-processing ═══
+
         // Delegate to the active strategy
         try {
             BridgeStrategy.BridgeTickResult strategyResult = activeStrategy.tick(bot);
 
+            // ═══ Phase 7: Post-strategy processing ═══
+            if (movementCtrl != null) {
+                // Notify movement controller that a block was placed (bait tracking)
+                if (strategyResult == BridgeStrategy.BridgeTickResult.PLACED) {
+                    movementCtrl.onBlockPlaced();
+                }
+
+                // Handle safety rail: if directive requests a side block, place it
+                if (directive != null && directive.placeSideBlock) {
+                    placeSafetyRailBlock(directive.sideBlockDirection);
+                }
+
+                // Post-tick for state updates (bait timer, jump bridge cooldown)
+                movementCtrl.postTick();
+            }
+            // ═══ End Phase 7 post-processing ═══
+
             switch (strategyResult) {
                 case PLACED:
                     return BridgeTickResult.PLACED;
-                case MOVING:
-                    return BridgeTickResult.IN_PROGRESS;
                 case FAILED:
-                    // If ascending failed, try to recover with flat bridging
                     if (inAscendingPhase) {
                         return handleAscendingFailure();
                     }
                     stopBridge();
                     return BridgeTickResult.FAILED;
                 case COMPLETE:
-                    // If ascending is complete, transition to flat bridging
                     if (inAscendingPhase) {
                         return transitionToFlatBridge();
                     }
@@ -317,6 +362,79 @@ public class BridgeEngine {
             return BridgeTickResult.FAILED;
         }
     }
+
+    /**
+     * Applies the movement directive's sprint/sneak/jump requests to the
+     * MovementController. The strategy can override these if needed, since
+     * it ticks AFTER this call. But for directives like JUMP_BRIDGE, the jump
+     * must happen before the strategy tick to time correctly with block placement.
+     *
+     * @param directive the movement directive
+     */
+    private void applyDirectiveMovement(@Nonnull BridgeMovementDirective directive) {
+        MovementController mc = bot.getMovementController();
+        if (mc == null) return;
+
+        if (directive.requestSprint) {
+            mc.getSprintController().startSprinting();
+        }
+        if (directive.requestSneak) {
+            mc.setSneaking(true);
+        }
+        if (directive.requestJump) {
+            mc.getJumpController().jump();
+        }
+        if (!Float.isNaN(directive.pitchOverride)) {
+            mc.setCurrentPitch(directive.pitchOverride);
+        }
+    }
+
+    /**
+     * Places a safety rail block on the side of the bridge.
+     * Called when the BridgeMovementDirective requests a side block.
+     *
+     * @param sideDirection -1 for left, +1 for right
+     */
+    private void placeSafetyRailBlock(int sideDirection) {
+        Player player = bot.getPlayerEntity();
+        if (player == null) return;
+        Location botLoc = bot.getLocation();
+        if (botLoc == null || bridgeDirection == null) return;
+
+        // Calculate the side direction perpendicular to bridge direction
+        double sideX = -bridgeDirection.getZ() * sideDirection;
+        double sideZ = bridgeDirection.getX() * sideDirection;
+
+        // Place block 1 to the side, at feet level
+        Location railLoc = botLoc.clone().add(sideX, 0, sideZ);
+        org.bukkit.block.Block railBlock = railLoc.getBlock();
+        if (railBlock.getType() == Material.AIR && hasBlocksToPlace(player)) {
+            // Find a block material in inventory and place it
+            Material[] buildMats = {
+                    Material.COBBLESTONE, Material.STONE, Material.WOOL,
+                    Material.WOOD, Material.SANDSTONE, Material.DIRT
+            };
+            for (Material mat : buildMats) {
+                if (player.getInventory().contains(mat)) {
+                    railBlock.setType(mat);
+                    // Remove one block from inventory
+                    org.bukkit.inventory.ItemStack[] contents = player.getInventory().getContents();
+                    for (int i = 0; i < contents.length; i++) {
+                        if (contents[i] != null && contents[i].getType() == mat) {
+                            if (contents[i].getAmount() > 1) {
+                                contents[i].setAmount(contents[i].getAmount() - 1);
+                            } else {
+                                player.getInventory().setItem(i, null);
+                            }
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
 
     /**
      * Transitions from ascending bridge to flat bridge once the target height

@@ -15,13 +15,10 @@ import org.twightlight.skywarstrainer.combat.evaluation.ThreatEvaluator;
 import org.twightlight.skywarstrainer.combat.strategies.*;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.movement.MovementController;
-import org.twightlight.skywarstrainer.util.MathUtil;
-import org.twightlight.skywarstrainer.util.RandomUtil;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.logging.Level;
 
@@ -266,7 +263,7 @@ public class CombatEngine {
         }
         // ═══ End Phase 7 pattern check ═══
 
-        // Step 5 & 6: Select and execute best strategy (existing code unchanged)
+        // Step 5 & 6: Select and execute-best strategy (existing code unchanged)
         CombatStrategy bestStrategy = selectBestStrategy();
         if (bestStrategy != null) {
             if (activeStrategy != bestStrategy) activeStrategy = bestStrategy;
@@ -472,9 +469,8 @@ public class CombatEngine {
      * combo tracking, KB reduction, and interrupt-based re-evaluation.
      *
      * @param attacker the entity that hit the bot, or null if unknown
-     * @param damage   the damage dealt
      */
-    public void onBotHit(@Nullable LivingEntity attacker, double damage) {
+    public void onBotHit(@Nullable LivingEntity attacker) {
         comboTracker.onHitReceived();
 
         if (attacker != null) {

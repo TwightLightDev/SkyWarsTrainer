@@ -132,16 +132,24 @@ public class DecisionEngine {
     // ─── Evaluation ─────────────────────────────────────────────
 
     /**
-     * Performs a full utility evaluation: scores all actions, applies personality
-     * modifiers and decision noise, selects the best action, and transitions
-     * the state machine.
+     * Performs a full utility evaluation: scores all actions, applies positional
+     * strategy bonuses, counter-play modifiers, personality multipliers, and
+     * decision noise, then selects the best action and transitions the state machine.
+     *
+     * <p><b>Phase 7 Integration:</b> After computing base scores (step 3), now applies:
+     * <ul>
+     *   <li>Step 3b: PositionalEngine utility bonuses (e.g., IslandRotation boosts LOOT ×2.0)</li>
+     *   <li>Step 3c: CounterModifiers utility multipliers from EnemyBehaviorAnalyzer
+     *       (e.g., if enemy is a rusher, CAMP ×1.5)</li>
+     * </ul>
+     * These are applied as post-scoring multipliers before personality and noise.</p>
      */
     private void evaluate() {
         // 1. Populate context snapshot
         context.reset();
         context.populate(bot);
 
-        // 2. Grace period handling: only allow IDLE and LOOT actions
+        // 2. Grace period handling
         if (context.isGracePeriod) {
             handleGracePeriod();
             return;
@@ -152,7 +160,6 @@ public class DecisionEngine {
         DifficultyProfile diff = bot.getDifficultyProfile();
         double decisionQuality = diff.getDecisionQuality();
 
-        // Apply STRATEGIC personality's decision quality boost
         double qualityMultiplier = bot.getProfile().getPersonalityProfile()
                 .getModifier("decisionQuality");
         decisionQuality = MathUtil.clamp(decisionQuality * qualityMultiplier, 0.0, 1.0);
@@ -160,34 +167,36 @@ public class DecisionEngine {
         for (BotAction action : BotAction.values()) {
             double score = scoreAction(action);
 
-            // Apply personality multipliers from bot profile
+            // ═══ Step 3b: Apply PositionalEngine utility bonuses ═══
+            score = applyPositionalBonuses(action, score);
+
+            // ═══ Step 3c: Apply CounterModifiers utility multipliers ═══
+            score = applyCounterModifiers(action, score);
+
+            // Step 4: Apply personality multipliers
             score *= getPersonalityMultiplier(action);
 
-            // Apply decision quality noise: lower quality = more random noise
+            // Step 5: Apply decision quality noise
             double noiseRange = (1.0 - decisionQuality) * 0.3;
             double noise = RandomUtil.nextDouble(-noiseRange, noiseRange);
             score += noise;
 
-            // Clamp to valid range
             score = MathUtil.clamp(score, 0.0, 5.0);
             lastScores.put(action, score);
         }
 
-        // 4. Select the best action
+        // 6. Select the best action
         BotAction bestAction = selectBestAction(decisionQuality);
 
-        // 5. Fire BotDecisionEvent (cancellable)
+        // 7. Fire BotDecisionEvent
         if (bestAction != null) {
             BotDecisionEvent decisionEvent = new BotDecisionEvent(
                     bot, bestAction, new HashMap<>(lastScores));
             org.bukkit.Bukkit.getPluginManager().callEvent(decisionEvent);
-
-            if (decisionEvent.isCancelled()) {
-                return; // Another plugin cancelled this decision
-            }
+            if (decisionEvent.isCancelled()) return;
         }
 
-        // 6. Map action to state and transition
+        // 8. Map action to state and transition
         if (bestAction != null && bestAction != lastChosenAction) {
             BotState newState = actionToState(bestAction);
             if (newState != null) {
@@ -197,11 +206,102 @@ public class DecisionEngine {
             lastChosenAction = bestAction;
         }
 
-        // 7. Debug output
+        // 9. Debug output
         if (bot.getProfile().isDebugMode()) {
             logEvaluation();
         }
     }
+
+    /**
+     * Applies utility score bonuses from the active PositionalEngine strategy.
+     *
+     * <p>When a positional strategy is active, it provides a map of action key →
+     * multiplier. For example, IslandRotation provides {"LOOT": 2.0, "FIGHT": 0.3}.
+     * We match action keys to BotActions and multiply the score.</p>
+     *
+     * @param action the action being scored
+     * @param score  the current score
+     * @return the modified score
+     */
+    private double applyPositionalBonuses(@Nonnull BotAction action, double score) {
+        org.twightlight.skywarstrainer.movement.positional.PositionalEngine pm =
+                bot.getPositionalManager();
+        if (pm == null || !pm.hasActiveStrategy()) return score;
+
+        Map<String, Double> bonuses = pm.getActiveUtilityBonuses();
+        if (bonuses.isEmpty()) return score;
+
+        // Try matching on the generic key for this action
+        String genericKey = actionToGenericKey(action);
+        Double multiplier = bonuses.get(genericKey);
+        if (multiplier != null) {
+            score *= multiplier;
+        }
+
+        // Also try specific key
+        String specificKey = actionToSpecificKey(action);
+        if (!specificKey.equals(genericKey)) {
+            Double specificMult = bonuses.get(specificKey);
+            if (specificMult != null) {
+                score *= specificMult;
+            }
+        }
+
+        return score;
+    }
+
+    /**
+     * Applies CounterModifier utility multipliers from the EnemyBehaviorAnalyzer.
+     *
+     * <p>When the bot's primary threat has been analyzed, the counter modifiers
+     * may adjust FIGHT, FLEE, and CAMP utility scores. For example, if the enemy
+     * is a rusher, campUtilityMultiplier increases to encourage camping (stay
+     * defensive and counter-punch).</p>
+     *
+     * @param action the action being scored
+     * @param score  the current score
+     * @return the modified score
+     */
+    private double applyCounterModifiers(@Nonnull BotAction action, double score) {
+        org.twightlight.skywarstrainer.combat.counter.EnemyBehaviorAnalyzer analyzer =
+                bot.getEnemyAnalyzer();
+        if (analyzer == null) return score;
+
+        // Get primary threat's counter modifiers
+        org.twightlight.skywarstrainer.awareness.ThreatMap threatMap = bot.getThreatMap();
+        if (threatMap == null) return score;
+
+        org.twightlight.skywarstrainer.awareness.ThreatMap.ThreatEntry nearest =
+                threatMap.getNearestThreat();
+        if (nearest == null || nearest.playerId == null) return score;
+
+        org.twightlight.skywarstrainer.combat.counter.CounterModifiers mods =
+                analyzer.getCounterModifiers(nearest.playerId);
+
+        switch (action) {
+            case FIGHT_NEAREST:
+            case FIGHT_WEAKEST:
+            case FIGHT_TARGETED:
+            case HUNT_PLAYER:
+                score *= mods.fightUtilityMultiplier;
+                break;
+            case FLEE:
+                score *= mods.fleeUtilityMultiplier;
+                break;
+            case CAMP_POSITION:
+            case BUILD_FORTIFICATION:
+                score *= mods.campUtilityMultiplier;
+                break;
+            case BREAK_ENEMY_BRIDGE:
+                if (mods.bridgeCut) score *= 1.5;
+                break;
+            default:
+                break;
+        }
+
+        return score;
+    }
+
 
     /**
      * Handles decision-making during grace period. Only looting and idle are allowed.

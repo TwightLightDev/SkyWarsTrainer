@@ -278,7 +278,7 @@ public class GameEventListener implements Listener {
                 if (victimBot.getCombatEngine() != null) {
                     LivingEntity attackerEntity = (actualDamager instanceof LivingEntity)
                             ? (LivingEntity) actualDamager : null;
-                    victimBot.getCombatEngine().onBotHit(attackerEntity, event.getDamage());
+                    victimBot.getCombatEngine().onBotHit(attackerEntity);
                 }
                 DecisionEngine de = victimBot.getDecisionEngine();
                 if (de != null) {

@@ -55,12 +55,24 @@ public class PositionalEngine {
             return;
         }
 
-        // Evaluate for new strategy
+        // Evaluate ALL strategies and pick the highest-priority applicable one
         PositionalStrategy best = null;
+        double bestPriority = Double.NEGATIVE_INFINITY;
+
         for (PositionalStrategy strategy : strategies) {
-            if (strategy.shouldActivate(bot)) {
+            if (!strategy.shouldActivate(bot)) continue;
+
+            // Each strategy returns a priority via getUtilityBonus() magnitude
+            // Use a simple scoring: sum of absolute multiplier values as proxy for priority
+            Map<String, Double> bonuses = strategy.getUtilityBonus();
+            double priority = 0.0;
+            for (double mult : bonuses.values()) {
+                priority += Math.abs(mult - 1.0); // Distance from neutral (1.0)
+            }
+
+            if (priority > bestPriority) {
+                bestPriority = priority;
                 best = strategy;
-                break; // First match wins (strategies are in priority order)
             }
         }
 
