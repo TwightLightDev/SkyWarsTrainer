@@ -17,12 +17,18 @@ import org.twightlight.skywarstrainer.ai.state.BotState;
 import org.twightlight.skywarstrainer.ai.state.BotStateMachine;
 import org.twightlight.skywarstrainer.awareness.*;
 import org.twightlight.skywarstrainer.bridging.BridgeEngine;
+import org.twightlight.skywarstrainer.bridging.movement.BridgeMovementController;
 import org.twightlight.skywarstrainer.combat.CombatEngine;
+import org.twightlight.skywarstrainer.combat.counter.EnemyBehaviorAnalyzer;
+import org.twightlight.skywarstrainer.combat.defense.DefensiveActionEngine;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.game.BotChatManager;
 import org.twightlight.skywarstrainer.inventory.InventoryManager;
 import org.twightlight.skywarstrainer.loot.LootEngine;
 import org.twightlight.skywarstrainer.movement.MovementController;
+import org.twightlight.skywarstrainer.movement.positional.PositionalEngine;
+import org.twightlight.skywarstrainer.movement.strategies.ApproachEngine;
+import org.twightlight.skywarstrainer.movement.strategies.ApproachTickResult;
 import org.twightlight.skywarstrainer.util.RandomUtil;
 import org.twightlight.skywarstrainer.util.TickTimer;
 
@@ -93,6 +99,16 @@ public class TrainerBot {
     private TickTimer gamePhaseTimer;
     private TickTimer behaviorTreeTimer;
     private TickTimer inventoryAuditTimer;
+
+    private ApproachEngine approachManager;
+    private PositionalEngine positionalManager;
+    private DefensiveActionEngine defenseManager;
+    private EnemyBehaviorAnalyzer enemyAnalyzer;
+    private BridgeMovementController bridgeMovementController;
+
+    // ── New Tick Timers ──
+    private TickTimer positionalTimer;  // 50 ticks
+    private TickTimer enemyAnalyzerTimer;  // 20 ticks
 
     /**
      * Creates a new TrainerBot. Does NOT spawn the NPC yet — call {@link #spawn(Location)}.
@@ -171,7 +187,7 @@ public class TrainerBot {
      * Initializes ALL subsystems in the correct dependency order.
      */
     private void initializeAllSubsystems() {
-        // ── 1. Awareness ──
+        // ── 1. Awareness (UNCHANGED) ──
         int mapScanInterval = plugin.getConfigManager().getMapScanInterval();
         this.mapScanner = new MapScanner(this, mapScanInterval);
         this.threatMap = new ThreatMap(this);
@@ -182,28 +198,34 @@ public class TrainerBot {
         this.fallDamageEstimator = new FallDamageEstimator(this);
         this.gamePhaseTracker = new GamePhaseTracker(this);
 
-        // ── 2. Movement ──
+        // ── 2. Movement (UNCHANGED) ──
         this.movementController = new MovementController(this);
 
-        // ── 3. Combat ──
+        // ── 3. Combat + Extensions ──
         this.combatEngine = new CombatEngine(this);
 
-        // ── 4. Bridge ──
+        // ── 4. Bridge + Movement Controller ──
         this.bridgeEngine = new BridgeEngine(this);
+        this.bridgeMovementController = new BridgeMovementController(this);
 
-        // ── 5. Loot ──
+        // ── 5. Loot (UNCHANGED) ──
         this.lootEngine = new LootEngine(this);
 
-        // ── 6. Inventory ──
+        // ── 6. Inventory (UNCHANGED) ──
         this.inventoryManager = new InventoryManager(this);
 
-        // ── 7. AI Brain ──
+        // ── 7. Advanced Subsystems (Phase 7) ──
+        this.approachManager = new ApproachEngine(this);
+        this.positionalManager = new PositionalEngine(this);
+        this.defenseManager = new DefensiveActionEngine(this);
+        this.enemyAnalyzer = new EnemyBehaviorAnalyzer(this);
+
+        // ── 8. AI Brain (UNCHANGED init, but builds enhanced BTs) ──
         this.stateMachine = new BotStateMachine(this);
         this.decisionEngine = new DecisionEngine(this, stateMachine);
+        buildBehaviorTrees(); // Now builds the enhanced trees
 
-        buildBehaviorTrees();
-
-        // ── 8. Tick Timers ──
+        // ── 9. Tick Timers (existing + new) ──
         this.voidDetectTimer = new TickTimer(5, 1);
         this.lavaDetectTimer = new TickTimer(15, 3);
         this.chestUpdateTimer = new TickTimer(60, 10);
@@ -211,6 +233,8 @@ public class TrainerBot {
         this.gamePhaseTimer = new TickTimer(30, 5);
         this.behaviorTreeTimer = new TickTimer(3, 1);
         this.inventoryAuditTimer = new TickTimer(100, 20);
+        this.positionalTimer = new TickTimer(50, 10);      // NEW
+        this.enemyAnalyzerTimer = new TickTimer(20, 4);     // NEW
 
         mapScanner.forceRescan();
     }
@@ -274,7 +298,7 @@ public class TrainerBot {
                 )
         ));
 
-        // ── FIGHTING: fully delegated to CombatEngine ──
+        // ══ FIGHTING — ENHANCED with engagement patterns ══
         stateMachine.registerTree(BotState.FIGHTING, new BehaviorTree("FIGHTING",
                 new SequenceNode("fight-sequence",
                         new ActionNode("combat-tick", bot -> {
@@ -289,12 +313,20 @@ public class TrainerBot {
                                 }
                             }
 
+                            if (defenseManager != null) {
+                                LivingEntity entity = getLivingEntity();
+                                if (entity != null) {
+                                    double hp = entity.getHealth() / entity.getMaxHealth();
+                                    if (hp < 0.5 && getDifficultyProfile().getRetreatHealSkill() > 0.2) {
+                                        // Defense manager will evaluate RetreatHealer
+                                        defenseManager.tick(TrainerBot.this);
+                                    }
+                                }
+                            }
+
                             // Check if bot should flee
                             if (combatEngine.shouldFlee()) {
-                                // Trigger interrupt to re-evaluate — FLEE score will be high
-                                if (decisionEngine != null) {
-                                    decisionEngine.triggerInterrupt();
-                                }
+                                if (decisionEngine != null) decisionEngine.triggerInterrupt();
                             }
 
                             return NodeStatus.RUNNING;
@@ -302,7 +334,7 @@ public class TrainerBot {
                 )
         ));
 
-        // ── BRIDGING: determine destination, start bridge, tick ──
+        // ══ BRIDGING — ENHANCED with BridgeMovementController ══
         stateMachine.registerTree(BotState.BRIDGING, new BehaviorTree("BRIDGING",
                 new SequenceNode("bridge-sequence",
                         new ConditionNode("has-blocks", bot ->
@@ -311,26 +343,47 @@ public class TrainerBot {
                         new ActionNode("bridge-tick", bot -> {
                             if (bridgeEngine == null) return NodeStatus.FAILURE;
 
-                            // If bridge isn't active, determine destination and start
                             if (!bridgeEngine.isActive()) {
                                 Location destination = determineBridgeDestination();
                                 if (destination == null) return NodeStatus.FAILURE;
+
+                                // Select bridge movement type BEFORE starting bridge
+                                if (bridgeMovementController != null) {
+                                    bridgeMovementController.selectMovement(destination);
+                                }
 
                                 boolean started = bridgeEngine.startBridge(destination,
                                         inventoryManager.getBlockCounter().getTotalBlocks());
                                 if (!started) return NodeStatus.FAILURE;
 
-                                // Fire BotBridgeEvent safely
                                 String strategyName = bridgeEngine.getActiveStrategy() != null
-                                        ? bridgeEngine.getActiveStrategy().getName()
-                                        : "Unknown";
+                                        ? bridgeEngine.getActiveStrategy().getName() : "Unknown";
                                 Bukkit.getPluginManager().callEvent(
                                         new org.twightlight.skywarstrainer.api.events.BotBridgeEvent(
                                                 TrainerBot.this, strategyName, destination));
                             }
 
-                            // Tick the bridge engine
+                            // BridgeEngine now handles movement directive integration
+                            // (see BridgeEngine changes)
                             BridgeEngine.BridgeTickResult result = bridgeEngine.tick();
+
+                            // Check for incoming threats while bridging
+                            if (threatMap != null && threatMap.getVisibleEnemyCount() > 0) {
+                                ThreatMap.ThreatEntry nearest = threatMap.getNearestThreat();
+                                if (nearest != null && nearest.currentPosition != null) {
+                                    LivingEntity entity = getLivingEntity();
+                                    if (entity != null) {
+                                        double dist = entity.getLocation().distance(nearest.currentPosition);
+                                        if (dist < 6.0) {
+                                            // Enemy is very close — interrupt bridging for combat
+                                            bridgeEngine.stopBridge();
+                                            if (decisionEngine != null) decisionEngine.triggerInterrupt();
+                                            return NodeStatus.SUCCESS;
+                                        }
+                                    }
+                                }
+                            }
+
                             switch (result) {
                                 case COMPLETE:
                                 case TIMEOUT:
@@ -345,7 +398,7 @@ public class TrainerBot {
                 )
         ));
 
-        // ── FLEEING: sprint away, eat gapple, pearl escape ──
+        // ── FLEEING (enhanced — check for retreat-heal re-engage) ──
         stateMachine.registerTree(BotState.FLEEING, new BehaviorTree("FLEEING",
                 new ActionNode("flee-tick", bot -> {
                     LivingEntity entity = getLivingEntity();
@@ -353,7 +406,6 @@ public class TrainerBot {
                     MovementController mc = getMovementController();
                     if (mc == null) return NodeStatus.FAILURE;
 
-                    // Sprint away from nearest threat
                     mc.getSprintController().startSprinting();
                     ThreatMap tm = getThreatMap();
                     if (tm != null && !tm.getVisibleThreats().isEmpty()) {
@@ -365,21 +417,30 @@ public class TrainerBot {
                             double dz = botLoc.getZ() - threatLoc.getZ();
                             double len = Math.sqrt(dx * dx + dz * dz);
                             if (len > 0.01) {
-                                dx /= len;
-                                dz /= len;
+                                dx /= len; dz /= len;
                                 Location fleeTarget = botLoc.clone().add(dx * 10, 0, dz * 10);
                                 mc.setMoveTarget(fleeTarget);
                             }
                         }
                     }
 
-                    // Try to eat golden apple while fleeing
                     if (inventoryManager != null) {
                         inventoryManager.getFoodHandler().tick();
                     }
 
-                    // Check if health has recovered enough to stop fleeing
                     double healthFrac = entity.getHealth() / entity.getMaxHealth();
+
+                    // Phase 7: Retreat-heal re-engage check
+                    // If health recovers to 70%+ AND retreatHealSkill is high,
+                    // re-engage instead of staying in FLEE
+                    double retreatSkill = getDifficultyProfile().getRetreatHealSkill();
+                    if (healthFrac > 0.7 && retreatSkill > 0.3) {
+                        // Re-engage! Trigger interrupt — FIGHT score will be recalculated
+                        if (decisionEngine != null) decisionEngine.triggerInterrupt();
+                        return NodeStatus.SUCCESS;
+                    }
+
+                    // Original: stop fleeing if health recovers past threshold * 1.5
                     if (healthFrac > getDifficultyProfile().getFleeHealthThreshold() * 1.5) {
                         return NodeStatus.SUCCESS;
                     }
@@ -397,57 +458,122 @@ public class TrainerBot {
                 })
         ));
 
-        // ── HUNTING: find target, bridge/walk toward them ──
+        // ══ HUNTING — ENHANCED with ApproachManager ══
         stateMachine.registerTree(BotState.HUNTING, new BehaviorTree("HUNTING",
-                new ActionNode("hunt-tick", bot -> {
-                    LivingEntity target = findNearestThreat();
-                    if (target == null) return NodeStatus.FAILURE;
+                new SequenceNode("hunt-sequence",
+                        // Step 1: Find target
+                        new ActionNode("find-target", bot -> {
+                            LivingEntity target = findNearestThreat();
+                            if (target == null) return NodeStatus.FAILURE;
+                            return NodeStatus.SUCCESS;
+                        }),
+                        // Step 2: Navigate to target (same island or different)
+                        new SelectorNode("hunt-navigate",
+                                // Branch A: Target on same island — pathfind directly
+                                new SequenceNode("hunt-same-island",
+                                        new ConditionNode("on-same-island", bot -> {
+                                            LivingEntity target = findNearestThreat();
+                                            if (target == null || islandGraph == null) return false;
+                                            Location botLoc = getLocation();
+                                            if (botLoc == null) return false;
+                                            IslandGraph.Island botIsland = islandGraph.getIslandAt(botLoc);
+                                            IslandGraph.Island targetIsland = islandGraph.getIslandAt(target.getLocation());
+                                            return botIsland != null && botIsland.equals(targetIsland);
+                                        }),
+                                        new ActionNode("pathfind-to-target", bot -> {
+                                            LivingEntity target = findNearestThreat();
+                                            if (target == null) return NodeStatus.FAILURE;
+                                            LivingEntity entity = getLivingEntity();
+                                            if (entity == null) return NodeStatus.FAILURE;
 
-                    LivingEntity entity = getLivingEntity();
-                    if (entity == null) return NodeStatus.FAILURE;
+                                            double distance = entity.getLocation().distance(target.getLocation());
+                                            if (distance <= 4.0) {
+                                                if (decisionEngine != null) decisionEngine.triggerInterrupt();
+                                                return NodeStatus.SUCCESS;
+                                            }
 
-                    double distance = entity.getLocation().distance(target.getLocation());
-                    if (distance <= 4.0) {
-                        // Close enough — trigger re-eval which should pick FIGHT
-                        if (decisionEngine != null) decisionEngine.triggerInterrupt();
-                        return NodeStatus.SUCCESS;
-                    }
+                                            MovementController mc = getMovementController();
+                                            if (mc != null) {
+                                                mc.getSprintController().startSprinting();
+                                                mc.setMoveTarget(target.getLocation());
+                                                mc.setLookTarget(target.getLocation().add(0, 1.0, 0));
+                                            }
+                                            return NodeStatus.RUNNING;
+                                        })
+                                ),
+                                // Branch B: Target on different island — use ApproachManager
+                                new SequenceNode("hunt-approach",
+                                        new ActionNode("approach-tick", bot -> {
+                                            if (approachManager == null) return NodeStatus.FAILURE;
 
-                    MovementController mc = getMovementController();
-                    if (mc != null) {
-                        mc.getSprintController().startSprinting();
-                        mc.setMoveTarget(target.getLocation());
-                        mc.setLookTarget(target.getLocation().add(0, 1.0, 0));
-                    }
-                    return NodeStatus.RUNNING;
-                })
+                                            if (!approachManager.isActive()) {
+                                                // Start a new approach
+                                                LivingEntity target = findNearestThreat();
+                                                if (target == null) return NodeStatus.FAILURE;
+                                                boolean started = approachManager.startApproach(target);
+                                                if (!started) {
+                                                    // Fallback: use basic bridge
+                                                    return NodeStatus.FAILURE;
+                                                }
+                                            }
+
+                                            ApproachTickResult result = approachManager.tick();
+                                            switch (result) {
+                                                case ARRIVED:
+                                                    // We've reached the target's island — trigger re-eval for FIGHT
+                                                    if (decisionEngine != null) decisionEngine.triggerInterrupt();
+                                                    return NodeStatus.SUCCESS;
+                                                case FAILED:
+                                                case INTERRUPTED:
+                                                    return NodeStatus.FAILURE;
+                                                default:
+                                                    return NodeStatus.RUNNING;
+                                            }
+                                        })
+                                )
+                        )
+                )
         ));
 
-        // ── CAMPING: build fortification, watch for enemies ──
+        // ══ CAMPING — ENHANCED with DefensiveActionManager ══
         stateMachine.registerTree(BotState.CAMPING, new BehaviorTree("CAMPING",
-                new ActionNode("camp-tick", bot -> {
-                    if (movementController != null) {
-                        float yaw = movementController.getCurrentYaw() + 2.0f;
-                        movementController.setCurrentYaw(yaw);
-                    }
+                new ParallelNode("camp-parallel", ParallelNode.Policy.ONE_SUCCESS, // Succeed if ANY child succeeds
+                        // Branch 1: Existing watch behavior
+                        new ActionNode("camp-watch", bot -> {
+                            if (movementController != null) {
+                                float yaw = movementController.getCurrentYaw() + 2.0f;
+                                movementController.setCurrentYaw(yaw);
+                            }
 
-                    if (threatMap != null && threatMap.getVisibleEnemyCount() > 0) {
-                        ThreatMap.ThreatEntry nearest = threatMap.getNearestThreat();
-                        if (nearest != null) {
-                            double distance = 999;
-                            LivingEntity entity = getLivingEntity();
-                            if (entity != null && nearest.currentPosition != null) {
-                                distance = entity.getLocation().distance(nearest.currentPosition);
+                            if (threatMap != null && threatMap.getVisibleEnemyCount() > 0) {
+                                ThreatMap.ThreatEntry nearest = threatMap.getNearestThreat();
+                                if (nearest != null) {
+                                    double distance = 999;
+                                    LivingEntity entity = getLivingEntity();
+                                    if (entity != null && nearest.currentPosition != null) {
+                                        distance = entity.getLocation().distance(nearest.currentPosition);
+                                    }
+                                    if (distance < 15) {
+                                        if (decisionEngine != null) decisionEngine.triggerInterrupt();
+                                        return NodeStatus.SUCCESS;
+                                    }
+                                }
                             }
-                            if (distance < 15) {
-                                if (decisionEngine != null) decisionEngine.triggerInterrupt();
-                                return NodeStatus.SUCCESS;
-                            }
-                        }
-                    }
-                    return NodeStatus.RUNNING;
-                })
+                            return NodeStatus.RUNNING;
+                        }),
+                        new CooldownDecorator(
+                                "defense-cooldown",
+                                new ActionNode("defense-tick", bot -> {
+                                    if (defenseManager != null) {
+                                        defenseManager.tick(TrainerBot.this);
+                                    }
+                                    return NodeStatus.RUNNING;
+                                }),
+                                40
+                        )
+                )
         ));
+
 
         // ── END_GAME ──
         stateMachine.registerTree(BotState.END_GAME, new BehaviorTree("END_GAME",
@@ -566,6 +692,11 @@ public class TrainerBot {
         inventoryManager = null;
         stateMachine = null;
         decisionEngine = null;
+        approachManager = null;
+        positionalManager = null;
+        defenseManager = null;
+        enemyAnalyzer = null;
+        bridgeMovementController = null;
 
         if (npc != null) {
             if (npc.isSpawned()) {
@@ -686,7 +817,45 @@ public class TrainerBot {
             });
         }
 
-        // ── 13. Mistake injection ──
+        // ── 13. Positional Strategy (every 50 ticks) — NEW ──
+        if (positionalTimer != null && positionalTimer.tick()) {
+            tickSafe("positional", () -> {
+                if (positionalManager != null) positionalManager.tick();
+            });
+        }
+
+        // ── 14. Enemy Behavior Analysis (every 20 ticks) — NEW ──
+        if (enemyAnalyzerTimer != null && enemyAnalyzerTimer.tick()) {
+            tickSafe("enemyAnalysis", () -> {
+                if (enemyAnalyzer != null) enemyAnalyzer.tick();
+            });
+        }
+
+        // ── 15. Defense Manager interrupt check (every tick) — NEW ──
+        // Check if enemy is bridging toward us — trigger defensive action
+        tickSafe("defenseInterrupt", () -> {
+            if (defenseManager != null && threatMap != null
+                    && stateMachine != null
+                    && stateMachine.getCurrentState() != BotState.FIGHTING
+                    && stateMachine.getCurrentState() != BotState.FLEEING) {
+                // Check if any enemy is bridging toward us (velocity + direction check)
+                if (threatMap.getVisibleEnemyCount() > 0) {
+                    ThreatMap.ThreatEntry nearest = threatMap.getNearestThreat();
+                    if (nearest != null && nearest.currentPosition != null) {
+                        Location botLoc = getLocation();
+                        if (botLoc != null) {
+                            double dist = botLoc.distance(nearest.currentPosition);
+                            // If enemy is approaching on a bridge (10-25 block range, moving toward us)
+                            if (dist > 8 && dist < 25 && nearest.getHorizontalSpeed() > 0.15) {
+                                defenseManager.forceEvaluate(TrainerBot.this);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // ── 16. Mistake injection ──
         if (mistakeTimer != null && mistakeTimer.tick()) {
             injectMistake();
         }
@@ -870,6 +1039,11 @@ public class TrainerBot {
     @Nullable public GamePhaseTracker getGamePhaseTracker() { return gamePhaseTracker; }
     @Nullable public BotStateMachine getStateMachine() { return stateMachine; }
     @Nullable public DecisionEngine getDecisionEngine() { return decisionEngine; }
+    @Nullable public ApproachEngine getApproachManager() { return approachManager; }
+    @Nullable public PositionalEngine getPositionalManager() { return positionalManager; }
+    @Nullable public DefensiveActionEngine getDefenseManager() { return defenseManager; }
+    @Nullable public EnemyBehaviorAnalyzer getEnemyAnalyzer() { return enemyAnalyzer; }
+    @Nullable public BridgeMovementController getBridgeMovementController() { return bridgeMovementController; }
 
     private static String formatLocation(Location loc) {
         return String.format("(%.1f, %.1f, %.1f in %s)",

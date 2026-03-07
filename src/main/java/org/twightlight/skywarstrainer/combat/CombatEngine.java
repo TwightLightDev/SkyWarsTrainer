@@ -7,6 +7,9 @@ import org.bukkit.inventory.ItemStack;
 import org.twightlight.skywarstrainer.awareness.ThreatMap;
 import org.twightlight.skywarstrainer.awareness.VoidDetector;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
+import org.twightlight.skywarstrainer.combat.counter.EnemyBehaviorAnalyzer;
+import org.twightlight.skywarstrainer.combat.engagement.EngagementEngine;
+import org.twightlight.skywarstrainer.combat.engagement.EngagementPattern;
 import org.twightlight.skywarstrainer.combat.evaluation.EngagementScorer;
 import org.twightlight.skywarstrainer.combat.evaluation.ThreatEvaluator;
 import org.twightlight.skywarstrainer.combat.strategies.*;
@@ -81,6 +84,8 @@ public class CombatEngine {
     /** Tick counter for periodic re-evaluation of target selection. */
     private int targetEvalCounter;
 
+    private final EngagementEngine patternManager;
+
     /** How often (in ticks) to re-evaluate the target. */
     private static final int TARGET_EVAL_INTERVAL = 10;
 
@@ -99,6 +104,7 @@ public class CombatEngine {
         this.projectileHandler = new ProjectileHandler(bot, aimController);
         this.threatEvaluator = new ThreatEvaluator(bot);
         this.engagementScorer = new EngagementScorer(bot);
+        this.patternManager = new EngagementEngine(bot);
         this.strategies = new ArrayList<>();
         this.activeStrategy = null;
         this.currentTarget = null;
@@ -142,7 +148,7 @@ public class CombatEngine {
 
             org.bukkit.Bukkit.getPluginManager().callEvent(
                     new org.twightlight.skywarstrainer.api.events.BotCombatEvent(bot, target, null));
-        
+
 
         }
 
@@ -204,20 +210,12 @@ public class CombatEngine {
         if (!active) return;
 
         LivingEntity botEntity = bot.getLivingEntity();
-        if (botEntity == null || botEntity.isDead()) {
-            disengage();
-            return;
-        }
+        if (botEntity == null || botEntity.isDead()) { disengage(); return; }
 
         // Step 1: Validate target
         if (!isTargetValid()) {
-            // Try to find a new target
             currentTarget = selectBestTarget();
-            if (currentTarget == null) {
-                // No valid targets — disengage combat
-                disengage();
-                return;
-            }
+            if (currentTarget == null) { disengage(); return; }
             aimController.setTarget(currentTarget);
             clickController.rollNewEngagement();
         }
@@ -240,37 +238,62 @@ public class CombatEngine {
         // Step 4: Calculate range
         double range = botEntity.getLocation().distance(currentTarget.getLocation());
 
-        // Step 5 & 6: Select and execute best strategy
+        // ═══ Phase 7: Engagement Pattern Check (BEFORE normal strategies) ═══
+        // If an active pattern is running, let it handle this tick
+        if (patternManager.tickActivePattern(bot, currentTarget)) {
+            // Pattern handled the tick — still do combo tracker and melee
+            if (range <= 3.0) {
+                boolean hit = clickController.tryClick();
+                if (hit) {
+                    comboTracker.onHitLanded();
+                    applyAttackKnockback(currentTarget);
+                    // Notify enemy analyzer
+                    EnemyBehaviorAnalyzer analyzer = bot.getEnemyAnalyzer();
+                    if (analyzer != null) {
+                        analyzer.onHitLandedOnEnemy(currentTarget.getUniqueId());
+                    }
+                }
+            }
+            comboTracker.tick();
+            return;
+        }
+
+        // No active pattern — evaluate for a new one
+        EngagementPattern pattern = patternManager.evaluatePatterns(bot, currentTarget);
+        if (pattern != null) {
+            patternManager.activate(pattern);
+            // Pattern will run on next tick — continue with normal strategy this tick
+        }
+        // ═══ End Phase 7 pattern check ═══
+
+        // Step 5 & 6: Select and execute best strategy (existing code unchanged)
         CombatStrategy bestStrategy = selectBestStrategy();
         if (bestStrategy != null) {
-            if (activeStrategy != bestStrategy) {
-                activeStrategy = bestStrategy;
-            }
+            if (activeStrategy != bestStrategy) activeStrategy = bestStrategy;
             try {
                 bestStrategy.execute(bot);
             } catch (Exception e) {
                 bot.getPlugin().getLogger().log(Level.WARNING,
-                        "Error executing combat strategy " + bestStrategy.getName()
-                                + " for bot " + bot.getName(), e);
+                        "Error executing strategy " + bestStrategy.getName(), e);
             }
         }
 
-        // Step 7: Attempt melee attack if in range
+        // Step 7: Melee attack
         if (range <= 3.0) {
             boolean hit = clickController.tryClick();
             if (hit) {
                 comboTracker.onHitLanded();
                 applyAttackKnockback(currentTarget);
+                EnemyBehaviorAnalyzer analyzer = bot.getEnemyAnalyzer();
+                if (analyzer != null) {
+                    analyzer.onHitLandedOnEnemy(currentTarget.getUniqueId());
+                }
             }
         }
 
-        // Step 8: Survival checks
+        // Step 8-10: Existing survival, combo, positioning (unchanged)
         performSurvivalChecks(botEntity, range);
-
-        // Step 9: Update combo tracker
         comboTracker.tick();
-
-        // Step 10: Approach or maintain range
         handlePositioning(botEntity, range);
     }
 
@@ -454,7 +477,6 @@ public class CombatEngine {
     public void onBotHit(@Nullable LivingEntity attacker, double damage) {
         comboTracker.onHitReceived();
 
-        // Apply KB reduction based on difficulty
         if (attacker != null) {
             LivingEntity botEntity = bot.getLivingEntity();
             if (botEntity != null) {
@@ -462,13 +484,16 @@ public class CombatEngine {
                 org.bukkit.util.Vector reducedVel = knockbackCalculator.reduceIncomingKnockback(currentVel);
                 botEntity.setVelocity(reducedVel);
             }
+            // Phase 7: Notify enemy analyzer
+            EnemyBehaviorAnalyzer analyzer = bot.getEnemyAnalyzer();
+            if (analyzer != null) {
+                analyzer.onHitReceivedFromEnemy(attacker.getUniqueId());
+            }
         }
 
-        // If not currently targeting the attacker, consider switching
         if (attacker != null && active && currentTarget != null
                 && !currentTarget.equals(attacker)) {
-            // Threat from new source — may need to retarget
-            targetEvalCounter = TARGET_EVAL_INTERVAL; // Force re-evaluation next tick
+            targetEvalCounter = TARGET_EVAL_INTERVAL;
         }
     }
 
@@ -542,5 +567,9 @@ public class CombatEngine {
     /** @return all registered combat strategies */
     @Nonnull
     public List<CombatStrategy> getStrategies() { return strategies; }
+
+    /** @return the engagement engine */
+    @Nonnull
+    public EngagementEngine getPatternManager() { return patternManager; }
 }
 

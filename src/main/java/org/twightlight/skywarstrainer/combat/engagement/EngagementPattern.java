@@ -13,6 +13,10 @@ import javax.annotation.Nonnull;
  * <p>While a pattern is active, it takes full control of combat actions.
  * When the pattern completes (or fails), control returns to normal
  * CombatEngine strategy selection.</p>
+ *
+ * <p><b>UPDATED (Phase 7):</b> {@code shouldActivate} now accepts an
+ * {@link EngagementContext} parameter so patterns can inspect combo state,
+ * void proximity, health fractions, etc. without re-querying every subsystem.</p>
  */
 public interface EngagementPattern {
 
@@ -22,12 +26,16 @@ public interface EngagementPattern {
 
     /**
      * Checks whether this pattern should activate in the current situation.
+     * Receives a pre-populated {@link EngagementContext} containing combo state,
+     * void proximity, health fractions, and enemy count information.
      *
-     * @param bot    the bot
-     * @param target the current combat target
+     * @param bot     the bot
+     * @param target  the current combat target
+     * @param context the pre-populated engagement context snapshot
      * @return true if this pattern should activate
      */
-    boolean shouldActivate(@Nonnull TrainerBot bot, @Nonnull LivingEntity target);
+    boolean shouldActivate(@Nonnull TrainerBot bot, @Nonnull LivingEntity target,
+                           @Nonnull EngagementContext context);
 
     /**
      * Ticks one frame of this engagement pattern. Called every tick while active.

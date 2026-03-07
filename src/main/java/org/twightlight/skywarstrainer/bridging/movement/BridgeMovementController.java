@@ -3,38 +3,41 @@ package org.twightlight.skywarstrainer.bridging.movement;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.twightlight.skywarstrainer.awareness.ThreatMap;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
-import org.twightlight.skywarstrainer.bridging.strategies.BridgeStrategy;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.util.DebugLogger;
-import org.twightlight.skywarstrainer.util.MathUtil;
 import org.twightlight.skywarstrainer.util.RandomUtil;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
- * Sits between BridgeEngine and MovementController to add a movement
- * behavior layer on top of bridge strategies.
+ * Produces {@link BridgeMovementDirective}s that advise the BridgeEngine on
+ * how the bot should move while bridging.
  *
- * <p>The bridge strategy controls WHAT blocks are placed; this controller
- * controls HOW the bot physically moves while placing them. It manages
- * jump bridging, stair climbing, bait bridging, and safety rail placement.</p>
+ * <p><b>REWRITTEN (Phase 7):</b> No longer directly manipulates the
+ * MovementController. Instead, produces a directive object each tick that the
+ * BridgeEngine passes to the active BridgeStrategy. This eliminates the
+ * state-collision between movement controller and bridge strategy.</p>
+ *
+ * <p>The bridge strategy is AUTHORITATIVE: it can accept the directive's
+ * sprint/sneak/jump suggestions, or ignore them if they conflict with its
+ * block placement logic. The directive also carries a speed multiplier and
+ * fail rate multiplier that the engine applies to its block count / timeout
+ * calculations.</p>
  */
 public class BridgeMovementController {
 
     private final TrainerBot bot;
-
-    /** The currently active movement type. */
+    private final BridgeMovementSelector selector;
     private BridgeMovementType activeMovementType;
 
-    /** The selector used to pick the best movement type. */
-    private final BridgeMovementSelector selector;
+    /** Reusable directive — allocated once, reset each tick. */
+    private final BridgeMovementDirective directive;
 
     // ── Bait Bridge State ──
     private int baitBlocksPlaced;
@@ -43,34 +46,34 @@ public class BridgeMovementController {
     private boolean baitTriggered;
 
     // ── Jump Bridge State ──
-    private boolean jumpBridgeJumping;
     private int jumpBridgeCooldown;
+    private boolean jumpBridgeAirborne;
 
     // ── Safety Rail State ──
     private int blocksSinceLastRail;
+    private int nextRailAt;
     private static final int RAIL_INTERVAL_MIN = 3;
     private static final int RAIL_INTERVAL_MAX = 5;
-    private int nextRailAt;
 
     // ── Stair Climb State ──
     private int stairsBuilt;
     private int targetStairs;
 
     /**
-     * Creates a new BridgeMovementController for the given bot.
+     * Creates a new BridgeMovementController.
      *
-     * @param bot the owning trainer bot
+     * @param bot the owning bot
      */
     public BridgeMovementController(@Nonnull TrainerBot bot) {
         this.bot = bot;
         this.selector = new BridgeMovementSelector();
+        this.directive = new BridgeMovementDirective();
         this.activeMovementType = BridgeMovementType.SAFE_SNEAK;
         reset();
     }
 
     /**
-     * Selects the best movement type for the current situation. Called when
-     * a new bridge starts or when conditions change significantly.
+     * Selects the best movement type for the current situation.
      *
      * @param destination the bridge destination
      */
@@ -81,312 +84,228 @@ public class BridgeMovementController {
     }
 
     /**
-     * Pre-processes movement before the bridge strategy ticks.
-     * Called every bridge tick BEFORE activeStrategy.tick().
+     * Computes the movement directive for this tick. Called by BridgeEngine
+     * BEFORE the active strategy ticks. The directive is then passed to the
+     * strategy so it can integrate the movement advice.
      *
-     * <p>This can modify the bot's movement state (sneaking, sprinting,
-     * jumping) which the bridge strategy then operates within.</p>
-     *
-     * @param strategy the active bridge strategy
+     * @return the computed directive for this tick
      */
-    public void preProcess(@Nonnull BridgeStrategy strategy) {
-        if (activeMovementType == null) return;
-
-        MovementController mc = bot.getMovementController();
-        if (mc == null) return;
+    @Nonnull
+    public BridgeMovementDirective computeDirective() {
+        directive.reset();
+        directive.movementTypeName = activeMovementType.name();
+        directive.speedMultiplier = activeMovementType.getSpeedMultiplier();
+        directive.failRateMultiplier = activeMovementType.getFailRateMultiplier();
 
         switch (activeMovementType) {
             case JUMP_BRIDGE:
-                preProcessJumpBridge(mc);
+                computeJumpBridgeDirective();
                 break;
             case STAIR_CLIMB:
-                preProcessStairClimb(mc);
+                computeStairClimbDirective();
                 break;
             case BAIT_BRIDGE:
-                preProcessBaitBridge(mc);
+                computeBaitBridgeDirective();
                 break;
             case SPEED_SPRINT:
-                preProcessSpeedSprint(mc);
+                computeSpeedSprintDirective();
                 break;
             case SAFETY_RAIL:
+                computeSafetyRailDirective();
+                break;
             case SAFE_SNEAK:
             default:
-                // No pre-processing needed; let strategy handle normally
+                // Default: no special directives — strategy controls everything
+                directive.requestSneak = true;
                 break;
         }
+
+        return directive;
     }
 
     /**
-     * Post-processes movement after the bridge strategy ticks.
-     * Called every bridge tick AFTER activeStrategy.tick().
-     *
-     * <p>Handles safety rail placement, jump bridge landing, and
-     * other overlay behaviors that happen after normal block placement.</p>
-     *
-     * @param strategy the active bridge strategy
+     * Post-tick callback. Called AFTER the strategy ticks to update internal
+     * state (e.g., bait timer, jump bridge cooldown).
      */
-    public void postProcess(@Nonnull BridgeStrategy strategy) {
-        if (activeMovementType == null) return;
-
+    public void postTick() {
         switch (activeMovementType) {
-            case SAFETY_RAIL:
-                postProcessSafetyRail(strategy);
+            case BAIT_BRIDGE:
+                postTickBaitBridge();
                 break;
             case JUMP_BRIDGE:
-                postProcessJumpBridge();
-                break;
-            case BAIT_BRIDGE:
-                postProcessBaitBridge();
+                postTickJumpBridge();
                 break;
             default:
                 break;
         }
     }
 
-    // ─── Jump Bridge ────────────────────────────────────────────
+    // ─── Jump Bridge Directive ──────────────────────────────────
 
-    /**
-     * Pre-processes jump bridge movement: sprint toward bridge direction,
-     * jump at block edge, aim downward mid-air for placement.
-     */
-    private void preProcessJumpBridge(@Nonnull MovementController mc) {
+    private void computeJumpBridgeDirective() {
         if (jumpBridgeCooldown > 0) {
             jumpBridgeCooldown--;
+            directive.requestSprint = true;
             return;
         }
 
         LivingEntity entity = bot.getLivingEntity();
         if (entity == null) return;
 
-        // Sprint forward
-        mc.getSprintController().startSprinting();
-        mc.setSneaking(false);
-
-        // Check if at block edge — if so, jump
         Location botLoc = entity.getLocation();
-        Block below = botLoc.clone().add(0, -1, 0).getBlock();
+        MovementController mc = bot.getMovementController();
+        if (mc == null) return;
+
+        // Detect block edge: ahead-below is air
         Block aheadBelow = botLoc.clone().add(
                 mc.getForwardDirection().getX() * 0.6, -1,
                 mc.getForwardDirection().getZ() * 0.6
         ).getBlock();
+        Block below = botLoc.clone().add(0, -1, 0).getBlock();
+
+        directive.requestSprint = true;
+        directive.requestSneak = false;
 
         if (below.getType() != Material.AIR && aheadBelow.getType() == Material.AIR) {
-            // At edge — jump and set cooldown
-            mc.getJumpController().jump();
-            jumpBridgeJumping = true;
-            jumpBridgeCooldown = 8; // 8 ticks between jump bridge cycles
+            // At edge — request jump
+            directive.requestJump = true;
+            jumpBridgeAirborne = true;
+            jumpBridgeCooldown = 8;
 
-            // Apply fail rate check
+            // Check fail rate
             DifficultyProfile diff = bot.getDifficultyProfile();
-            double failRate = diff.getBridgeFailRate() * BridgeMovementType.JUMP_BRIDGE.getFailRateMultiplier();
+            double failRate = diff.getBridgeFailRate() * activeMovementType.getFailRateMultiplier();
             if (RandomUtil.chance(failRate)) {
-                // Simulated miss: don't place the block (strategy will handle the miss)
-                DebugLogger.log(bot, "Jump bridge: simulated placement miss");
+                directive.pausePlacement = true; // Simulated miss
+                DebugLogger.log(bot, "Jump bridge: simulated miss");
             }
         }
     }
 
-    private void postProcessJumpBridge() {
-        LivingEntity entity = bot.getLivingEntity();
-        if (entity == null) return;
-
-        // If mid-air after jump bridge, aim downward for placement
-        if (jumpBridgeJumping && entity.getVelocity().getY() < 0) {
-            // Descending — look down to place block
-            MovementController mc = bot.getMovementController();
-            if (mc != null) {
-                mc.setCurrentPitch(75.0f); // Look sharply down
+    private void postTickJumpBridge() {
+        if (jumpBridgeAirborne) {
+            LivingEntity entity = bot.getLivingEntity();
+            if (entity != null && entity.getVelocity().getY() < 0) {
+                // Descending — pitch override to look down for block placement
+                directive.pitchOverride = 75.0f;
+                jumpBridgeAirborne = false;
             }
-            jumpBridgeJumping = false;
         }
     }
 
-    // ─── Stair Climb ────────────────────────────────────────────
+    // ─── Stair Climb Directive ──────────────────────────────────
 
-    /**
-     * Pre-processes stair climb: jump and look down to place block under feet.
-     */
-    private void preProcessStairClimb(@Nonnull MovementController mc) {
+    private void computeStairClimbDirective() {
         LivingEntity entity = bot.getLivingEntity();
         if (entity == null) return;
 
-        // Check if bot is on the ground
         if (entity.isOnGround() && stairsBuilt < targetStairs) {
             DifficultyProfile diff = bot.getDifficultyProfile();
-
-            // Skill check: can we successfully place under feet?
             if (RandomUtil.chance(diff.getStairBridgeSkill())) {
-                mc.getJumpController().jump();
-                // The bridge strategy's tick will handle the actual block placement
-                // We set the pitch to look down so placement goes under feet
-                mc.setCurrentPitch(90.0f); // Straight down
+                directive.requestJump = true;
+                directive.pitchOverride = 90.0f; // Look straight down
                 stairsBuilt++;
             } else {
-                // Failed stair attempt — minor delay
                 DebugLogger.log(bot, "Stair climb: missed step %d/%d", stairsBuilt, targetStairs);
             }
         }
     }
 
-    // ─── Bait Bridge ────────────────────────────────────────────
+    // ─── Bait Bridge Directive ──────────────────────────────────
 
-    /**
-     * Pre-processes bait bridge: place a few blocks, then stop and wait.
-     */
-    private void preProcessBaitBridge(@Nonnull MovementController mc) {
+    private void computeBaitBridgeDirective() {
         if (baitWaiting) {
-            // Waiting phase — freeze movement, watch for enemy response
-            mc.setSneaking(true);
-            mc.setMovingForward(false);
-            mc.setMovingBackward(false);
-            return;
-        }
-
-        // If we've placed enough bait blocks, switch to waiting
-        if (baitBlocksPlaced >= RandomUtil.nextInt(1, 3) && !baitTriggered) {
+            // PAUSE placement, sneak, don't move
+            directive.pausePlacement = true;
+            directive.requestSneak = true;
+            directive.requestSprint = false;
+        } else if (baitBlocksPlaced >= RandomUtil.nextInt(1, 3) && !baitTriggered) {
             baitWaiting = true;
             baitWaitTicks = RandomUtil.nextInt(20, 40);
+            directive.pausePlacement = true;
             DebugLogger.log(bot, "Bait bridge: placed %d blocks, waiting %d ticks",
                     baitBlocksPlaced, baitWaitTicks);
         }
     }
 
-    /**
-     * Post-processes bait bridge: count placed blocks and manage wait timer.
-     */
-    private void postProcessBaitBridge() {
-        if (baitWaiting) {
-            baitWaitTicks--;
+    private void postTickBaitBridge() {
+        if (!baitWaiting) return;
 
-            // Check if enemy committed (started running toward bot on bridge)
-            ThreatMap threatMap = bot.getThreatMap();
-            if (threatMap != null) {
-                ThreatMap.ThreatEntry nearest = threatMap.getNearestThreat();
-                if (nearest != null && nearest.currentPosition != null) {
-                    Location botLoc = bot.getLocation();
-                    if (botLoc != null) {
-                        double dist = botLoc.distance(nearest.currentPosition);
-                        // If enemy is approaching on the bridge (close + moving toward us)
-                        if (dist < 10 && nearest.getHorizontalSpeed() > 0.1) {
-                            DebugLogger.log(bot, "Bait bridge: enemy committed! Distance: %.1f", dist);
-                            baitTriggered = true;
-                            baitWaiting = false;
-                            // The behavior tree will handle the response (fight or retreat)
-                            return;
-                        }
+        baitWaitTicks--;
+
+        // Check if enemy committed
+        ThreatMap threatMap = bot.getThreatMap();
+        if (threatMap != null) {
+            ThreatMap.ThreatEntry nearest = threatMap.getNearestThreat();
+            if (nearest != null && nearest.currentPosition != null) {
+                Location botLoc = bot.getLocation();
+                if (botLoc != null) {
+                    double dist = botLoc.distance(nearest.currentPosition);
+                    if (dist < 10 && nearest.getHorizontalSpeed() > 0.1) {
+                        DebugLogger.log(bot, "Bait bridge: enemy committed! dist=%.1f", dist);
+                        baitTriggered = true;
+                        baitWaiting = false;
+                        return;
                     }
                 }
             }
+        }
 
-            // If wait timer expired, resume normal bridging
-            if (baitWaitTicks <= 0) {
-                baitWaiting = false;
-                baitTriggered = false;
-                DebugLogger.log(bot, "Bait bridge: enemy didn't commit, resuming bridge");
-                // Switch to normal movement so bridging continues
-                activeMovementType = BridgeMovementType.SAFE_SNEAK;
-            }
+        if (baitWaitTicks <= 0) {
+            baitWaiting = false;
+            baitTriggered = false;
+            activeMovementType = BridgeMovementType.SAFE_SNEAK;
+            DebugLogger.log(bot, "Bait bridge: enemy didn't commit, resuming");
         }
     }
 
-    // ─── Speed Sprint ───────────────────────────────────────────
+    // ─── Speed Sprint Directive ─────────────────────────────────
 
-    /**
-     * Pre-processes speed sprint: sprint between placements, sneak only
-     * right at the block edge for placement timing.
-     */
-    private void preProcessSpeedSprint(@Nonnull MovementController mc) {
+    private void computeSpeedSprintDirective() {
         LivingEntity entity = bot.getLivingEntity();
         if (entity == null) return;
 
         Location botLoc = entity.getLocation();
-        // Check distance to block edge
         double xFrac = botLoc.getX() - Math.floor(botLoc.getX());
         double zFrac = botLoc.getZ() - Math.floor(botLoc.getZ());
-
-        // Near block edge (last 0.3 of block) → sneak for placement
         boolean nearEdge = (xFrac > 0.7 || xFrac < 0.3) || (zFrac > 0.7 || zFrac < 0.3);
 
         if (nearEdge) {
-            mc.setSneaking(true);
-            mc.getSprintController().stopSprinting();
+            directive.requestSneak = true;
+            directive.requestSprint = false;
         } else {
-            mc.setSneaking(false);
-            mc.getSprintController().startSprinting();
+            directive.requestSneak = false;
+            directive.requestSprint = true;
         }
     }
 
-    // ─── Safety Rail ────────────────────────────────────────────
+    // ─── Safety Rail Directive ──────────────────────────────────
 
-    /**
-     * Post-processes safety rail: after normal block placement, periodically
-     * place a block on the side of the bridge for protection.
-     */
-    private void postProcessSafetyRail(@Nonnull BridgeStrategy strategy) {
+    private void computeSafetyRailDirective() {
         blocksSinceLastRail++;
-
         if (blocksSinceLastRail >= nextRailAt) {
             blocksSinceLastRail = 0;
             nextRailAt = RandomUtil.nextInt(RAIL_INTERVAL_MIN, RAIL_INTERVAL_MAX);
-
-            // Place a block on one side of the bridge
-            Player player = bot.getPlayerEntity();
-            if (player == null) return;
-
-            Location botLoc = bot.getLocation();
-            if (botLoc == null) return;
-
-            MovementController mc = bot.getMovementController();
-            if (mc == null) return;
-
-            // Choose left or right side randomly
-            org.bukkit.util.Vector right = mc.getRightDirection();
-            double side = RandomUtil.nextBoolean() ? 1.0 : -1.0;
-
-            Location railLoc = botLoc.clone().add(
-                    right.getX() * side, 0, right.getZ() * side
-            );
-
-            Block railBlock = railLoc.getBlock();
-            if (railBlock.getType() == Material.AIR) {
-                // Find a buildable material in inventory
-                Material buildMat = findBuildMaterial(player);
-                if (buildMat != null) {
-                    railBlock.setType(buildMat);
-                    DebugLogger.log(bot, "Safety rail placed at (%d, %d, %d)",
-                            railBlock.getX(), railBlock.getY(), railBlock.getZ());
-                }
-            }
+            directive.placeSideBlock = true;
+            directive.sideBlockDirection = RandomUtil.nextBoolean() ? 1 : -1;
         }
-    }
-
-    /**
-     * Finds the first available building material in the player's inventory.
-     */
-    @Nullable
-    private Material findBuildMaterial(@Nonnull Player player) {
-        Material[] buildMats = {
-                Material.COBBLESTONE, Material.STONE, Material.WOOL,
-                Material.WOOD, Material.SANDSTONE, Material.DIRT
-        };
-        for (Material mat : buildMats) {
-            if (player.getInventory().contains(mat)) return mat;
-        }
-        return null;
+        // Safety rail uses default sneak movement otherwise
+        directive.requestSneak = true;
     }
 
     // ─── State Management ───────────────────────────────────────
 
     /**
-     * Resets all movement state. Called when bridge starts or ends.
+     * Resets all movement state.
      */
     public void reset() {
+        directive.reset();
         baitBlocksPlaced = 0;
         baitWaitTicks = 0;
         baitWaiting = false;
         baitTriggered = false;
-        jumpBridgeJumping = false;
         jumpBridgeCooldown = 0;
+        jumpBridgeAirborne = false;
         blocksSinceLastRail = 0;
         nextRailAt = RandomUtil.nextInt(RAIL_INTERVAL_MIN, RAIL_INTERVAL_MAX);
         stairsBuilt = 0;
@@ -394,8 +313,7 @@ public class BridgeMovementController {
     }
 
     /**
-     * Notifies the controller that a block was placed by the strategy.
-     * Used for bait bridge counting and safety rail interval tracking.
+     * Called when the strategy places a block (for bait bridge tracking).
      */
     public void onBlockPlaced() {
         if (activeMovementType == BridgeMovementType.BAIT_BRIDGE) {
@@ -405,19 +323,12 @@ public class BridgeMovementController {
 
     // ─── Accessors ──────────────────────────────────────────────
 
-    /** @return the currently active movement type */
-    @Nonnull
-    public BridgeMovementType getActiveMovementType() {
+    @Nonnull public BridgeMovementType getActiveMovementType() {
         return activeMovementType != null ? activeMovementType : BridgeMovementType.SAFE_SNEAK;
     }
 
-    /** @return true if the bait bridge is in waiting mode */
     public boolean isBaitWaiting() { return baitWaiting; }
-
-    /** @return true if the bait bridge was triggered (enemy committed) */
     public boolean isBaitTriggered() { return baitTriggered; }
-
-    /** @return the selector used for movement type selection */
-    @Nonnull
-    public BridgeMovementSelector getSelector() { return selector; }
+    @Nonnull public BridgeMovementSelector getSelector() { return selector; }
+    @Nonnull public BridgeMovementDirective getLastDirective() { return directive; }
 }
