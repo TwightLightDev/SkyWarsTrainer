@@ -16,7 +16,7 @@ import java.util.Map;
  *
  * <p>Evaluated every 40-60 ticks (slower than combat — macro-level decisions).</p>
  */
-public class PositionalStrategyManager {
+public class PositionalEngine {
 
     private final TrainerBot bot;
     private final List<PositionalStrategy> strategies;
@@ -27,7 +27,7 @@ public class PositionalStrategyManager {
      *
      * @param bot the owning bot
      */
-    public PositionalStrategyManager(@Nonnull TrainerBot bot) {
+    public PositionalEngine(@Nonnull TrainerBot bot) {
         this.bot = bot;
         this.strategies = new ArrayList<>();
 

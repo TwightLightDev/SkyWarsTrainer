@@ -525,6 +525,75 @@ public class ProjectileHandler {
     }
 
     /**
+     * Returns whether the bot has any throwable projectiles available
+     * (snowballs or eggs). Used by zoning logic.
+     */
+    public boolean hasProjectiles() {
+        Player player = bot.getPlayerEntity();
+        if (player == null) return false;
+
+        return hasItemInInventory(player, Material.SNOW_BALL)
+                || hasItemInInventory(player, Material.EGG);
+    }
+
+    /**
+     * Throws a projectile toward a specific location.
+     * Used by zoning and tactical behaviors.
+     *
+     * Priority order:
+     * 1. Snowball
+     * 2. Egg
+     * 3. Bow (if far away)
+     */
+    public boolean throwProjectileAt(@Nonnull Location target) {
+
+        if (projectileCooldown > 0) return false;
+
+        Player player = bot.getPlayerEntity();
+        if (player == null) return false;
+
+        DifficultyProfile diff = bot.getDifficultyProfile();
+        Location eye = player.getEyeLocation();
+
+        Vector dir = MathUtil.directionTo(eye, target);
+
+        double spread = (1.0 - diff.getProjectileAccuracy()) * 4.0;
+        dir.add(new Vector(
+                RandomUtil.gaussian(0, spread * 0.015),
+                RandomUtil.gaussian(0, spread * 0.01),
+                RandomUtil.gaussian(0, spread * 0.015)
+        )).normalize();
+
+        // Prefer snowballs
+        if (hasItemInInventory(player, Material.SNOW_BALL)) {
+            Snowball s = player.launchProjectile(Snowball.class);
+            s.setVelocity(dir.multiply(1.5));
+            removeItem(player, Material.SNOW_BALL, 1);
+            PacketUtil.playArmSwing(player);
+            projectileCooldown = BASE_PROJECTILE_COOLDOWN / 2;
+            return true;
+        }
+
+        // Then eggs
+        if (hasItemInInventory(player, Material.EGG)) {
+            Egg e = player.launchProjectile(Egg.class);
+            e.setVelocity(dir.multiply(1.5));
+            removeItem(player, Material.EGG, 1);
+            PacketUtil.playArmSwing(player);
+            projectileCooldown = BASE_PROJECTILE_COOLDOWN / 2;
+            return true;
+        }
+
+        // Fallback: bow shot
+        LivingEntity target1 = aimController.getTarget();
+        if (target1 != null) {
+            return tryBowShot();
+        }
+
+        return false;
+    }
+
+    /**
      * Returns whether the bot has ender pearls available.
      *
      * @return true if pearls are available and off cooldown

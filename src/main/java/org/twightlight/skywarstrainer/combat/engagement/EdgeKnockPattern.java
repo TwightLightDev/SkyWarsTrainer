@@ -6,7 +6,6 @@ import org.twightlight.skywarstrainer.awareness.VoidDetector;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.util.DebugLogger;
-import org.twightlight.skywarstrainer.util.MathUtil;
 import org.twightlight.skywarstrainer.util.RandomUtil;
 
 import javax.annotation.Nonnull;

@@ -232,6 +232,33 @@ public class IslandGraph {
         }
     }
 
+    private List<Location> findBridgeBlocks(MapScanner scanner, Island a, Island b) {
+        List<Location> blocks = new ArrayList<>();
+
+        double dx = b.center.getX() - a.center.getX();
+        double dz = b.center.getZ() - a.center.getZ();
+        double distance = Math.sqrt(dx * dx + dz * dz);
+
+        dx /= distance;
+        dz /= distance;
+
+        int y = (int)((a.center.getY() + b.center.getY()) / 2.0);
+
+        for (double d = 0; d < distance; d += 1.0) {
+            int x = (int)(a.center.getX() + dx * d);
+            int z = (int)(a.center.getZ() + dz * d);
+
+            for (int dy = -1; dy <= 1; dy++) {
+                if (scanner.getBlockAt(x, y + dy, z) == MapScanner.BlockCategory.SOLID) {
+                    blocks.add(new Location(bot.getLocation().getWorld(), x, y + dy, z));
+                    break;
+                }
+            }
+        }
+
+        return blocks.size() > 3 ? blocks : null;
+    }
+
     /**
      * Detects bridges between islands. A bridge is a narrow strip of blocks
      * connecting two island bounding boxes.
@@ -252,7 +279,12 @@ public class IslandGraph {
 
                 // Check if there are solid blocks along the line between island centers
                 if (hasBridgeBetween(scanner, a, b)) {
-                    bridges.add(new Bridge(a, b));
+                    List<Location> blocks = findBridgeBlocks(scanner, a, b);
+
+                    if (blocks != null) {
+                        bridges.add(new Bridge(a, b, blocks));
+                    }
+                    bridges.add(new Bridge(a, b, blocks));
                 }
             }
         }
@@ -422,6 +454,18 @@ public class IslandGraph {
         return false;
     }
 
+    public List<Bridge> getBridgesFrom(Island island) {
+        List<Bridge> result = new ArrayList<>();
+
+        for (Bridge b : bridges) {
+            if (b.getFrom() == island || b.getTo() == island) {
+                result.add(b);
+            }
+        }
+
+        return result;
+    }
+
     /**
      * Returns the island that contains or is closest to the given location.
      *
@@ -477,19 +521,28 @@ public class IslandGraph {
     //  INNER: Bridge
     // ═════════════════════════════════════════════════════════════
 
-    /** Represents a connection (bridge) between two islands. */
     public static class Bridge {
-        public final Island islandA;
-        public final Island islandB;
 
-        public Bridge(@Nonnull Island a, @Nonnull Island b) {
-            this.islandA = a;
-            this.islandB = b;
+        private final Island islandA;
+        private final Island islandB;
+        private final List<Location> blockLocations;
+
+        public Bridge(Island from, Island to, List<Location> blocks) {
+            this.islandA = from;
+            this.islandB = to;
+            this.blockLocations = blocks;
         }
 
-        @Override
-        public String toString() {
-            return "Bridge{" + islandA.id + " <-> " + islandB.id + "}";
+        public Island getFrom() {
+            return islandA;
+        }
+
+        public Island getTo() {
+            return islandB;
+        }
+
+        public List<Location> getBlockLocations() {
+            return blockLocations;
         }
     }
 }

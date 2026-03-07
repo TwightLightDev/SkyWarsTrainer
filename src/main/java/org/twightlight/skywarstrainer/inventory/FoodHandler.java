@@ -63,6 +63,24 @@ public class FoodHandler {
         return -1;
     }
 
+    public boolean hasGoldenApple() {
+        Player p = bot.getPlayerEntity();
+        if (p == null) return false;
+
+        for (ItemStack item : p.getInventory().getContents()) {
+            if (item == null) continue;
+            if (item.getType() == Material.GOLDEN_APPLE) return true;
+        }
+        return false;
+    }
+
+    public boolean hasFood() {
+        Player p = bot.getPlayerEntity();
+        if (p == null) return false;
+
+        return findFood(p) > 0;
+    }
+
     /** @return true if the bot is currently eating */
     public boolean isEating() { return eating; }
 }

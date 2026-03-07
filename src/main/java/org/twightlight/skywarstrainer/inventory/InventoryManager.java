@@ -1,6 +1,8 @@
 package org.twightlight.skywarstrainer.inventory;
 
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 
 import javax.annotation.Nonnull;
@@ -82,6 +84,8 @@ public class InventoryManager {
         armorEquipper.equipBestArmor(player);
         swordSelector.selectBestSword(player);
     }
+
+
 
     @Nonnull public ArmorEquipper getArmorEquipper() { return armorEquipper; }
     @Nonnull public SwordSelector getSwordSelector() { return swordSelector; }

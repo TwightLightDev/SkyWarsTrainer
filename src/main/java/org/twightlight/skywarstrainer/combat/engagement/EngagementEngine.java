@@ -16,7 +16,7 @@ import java.util.List;
  * <p>An active engagement pattern overrides the normal per-tick strategy
  * selection in CombatEngine for its duration.</p>
  */
-public class EngagementPatternManager {
+public class EngagementEngine {
 
     private final TrainerBot bot;
 
@@ -34,7 +34,7 @@ public class EngagementPatternManager {
      *
      * @param bot the owning bot
      */
-    public EngagementPatternManager(@Nonnull TrainerBot bot) {
+    public EngagementEngine(@Nonnull TrainerBot bot) {
         this.bot = bot;
         this.patterns = new ArrayList<>();
         this.context = new EngagementContext();
