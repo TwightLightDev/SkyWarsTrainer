@@ -140,7 +140,7 @@ public class GameEventListener implements Listener {
 
         // Check if the dead entity is a bot
         if (dead != null) {
-            TrainerBot deadBot = botManager.getBotByEntityUuid(dead.getUniqueId());
+            TrainerBot deadBot = botManager.getBotByEntityUUID(dead.getUniqueId());
             if (deadBot != null) {
                 deadBot.getProfile().addDeath();
                 BotChatManager.sendChatMessage(deadBot, "death");
@@ -155,7 +155,7 @@ public class GameEventListener implements Listener {
 
         // Check if the killer is a bot
         if (killer != null) {
-            TrainerBot killerBot = botManager.getBotByEntityUuid(killer.getUniqueId());
+            TrainerBot killerBot = botManager.getBotByEntityUUID(killer.getUniqueId());
             if (killerBot != null) {
                 killerBot.getProfile().addKill();
                 BotChatManager.sendChatMessage(killerBot, "first_kill");
@@ -273,7 +273,7 @@ public class GameEventListener implements Listener {
 
         // Case 1: Bot was hit
         if (victim instanceof LivingEntity) {
-            TrainerBot victimBot = botManager.getBotByEntityUuid(victim.getUniqueId());
+            TrainerBot victimBot = botManager.getBotByEntityUUID(victim.getUniqueId());
             if (victimBot != null) {
                 if (victimBot.getCombatEngine() != null) {
                     LivingEntity attackerEntity = (actualDamager instanceof LivingEntity)
@@ -289,7 +289,7 @@ public class GameEventListener implements Listener {
 
         // Case 2: Bot dealt damage
         if (actualDamager instanceof LivingEntity) {
-            TrainerBot damagerBot = botManager.getBotByEntityUuid(actualDamager.getUniqueId());
+            TrainerBot damagerBot = botManager.getBotByEntityUUID(actualDamager.getUniqueId());
             if (damagerBot != null && damagerBot.getCombatEngine() != null) {
                 damagerBot.getCombatEngine().getComboTracker().onHitLanded();
             }
@@ -303,7 +303,7 @@ public class GameEventListener implements Listener {
     public void onEntityDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof LivingEntity)) return;
 
-        TrainerBot bot = plugin.getBotManager().getBotByEntityUuid(
+        TrainerBot bot = plugin.getBotManager().getBotByEntityUUID(
                 event.getEntity().getUniqueId());
         if (bot == null) return;
 
@@ -322,7 +322,7 @@ public class GameEventListener implements Listener {
         if (!(projectile.getShooter() instanceof Entity)) return;
 
         Entity shooter = (Entity) projectile.getShooter();
-        TrainerBot bot = plugin.getBotManager().getBotByEntityUuid(shooter.getUniqueId());
+        TrainerBot bot = plugin.getBotManager().getBotByEntityUUID(shooter.getUniqueId());
         if (bot == null) return;
 
         if (bot.getCombatEngine() != null) {

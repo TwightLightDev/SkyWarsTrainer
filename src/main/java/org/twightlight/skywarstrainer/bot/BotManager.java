@@ -304,7 +304,7 @@ public class BotManager {
      * @return the bot, or null if the entity is not a bot
      */
     @Nullable
-    public TrainerBot getBotByEntityUuid(@Nonnull UUID entityUuid) {
+    public TrainerBot getBotByEntityUUID(@Nonnull UUID entityUuid) {
         for (TrainerBot bot : activeBots.values()) {
             if (bot.getLivingEntity() != null
                     && bot.getLivingEntity().getUniqueId().equals(entityUuid)) {
@@ -321,7 +321,7 @@ public class BotManager {
      * @return true if this entity is a trainer bot
      */
     public boolean isBot(@Nonnull UUID entityUuid) {
-        return getBotByEntityUuid(entityUuid) != null;
+        return getBotByEntityUUID(entityUuid) != null;
     }
 
     @Nonnull
