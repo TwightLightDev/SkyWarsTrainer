@@ -51,6 +51,7 @@ public class BotProfile {
     // ── Runtime Flags ──
     private boolean paused;
     private boolean debugMode;
+    private int totalGamesForLearning;
 
     /**
      * Creates a new BotProfile with the specified difficulty.
@@ -69,6 +70,7 @@ public class BotProfile {
         this.gamesWon = 0;
         this.paused = false;
         this.debugMode = false;
+        this.totalGamesForLearning = 0;
     }
 
     // ─── Difficulty ─────────────────────────────────────────────
@@ -235,6 +237,12 @@ public class BotProfile {
 
     /** @param debugMode whether debug output is shown for this bot */
     public void setDebugMode(boolean debugMode) { this.debugMode = debugMode; }
+
+    /** @return total games tracked for learning (may differ from gamesPlayed if learning was paused) */
+    public int getTotalGamesForLearning() { return totalGamesForLearning; }
+
+    /** Increments the learning game counter. */
+    public void addGameForLearning() { totalGamesForLearning++; }
 
     @Override
     public String toString() {

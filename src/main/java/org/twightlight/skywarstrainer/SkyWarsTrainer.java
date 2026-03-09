@@ -1,5 +1,6 @@
 package org.twightlight.skywarstrainer;
 
+import org.twightlight.skywarstrainer.ai.learning.*;
 import org.twightlight.skywarstrainer.api.SkyWarsTrainerAPI;
 import org.twightlight.skywarstrainer.bot.BotManager;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
@@ -40,7 +41,7 @@ public final class SkyWarsTrainer extends JavaPlugin {
     private GameEventListener gameEventListener;
     private SkyWarsTrainerAPI api;
     private CommandHandler commandHandler;
-
+    private LearningManager learningManager;
     // ─── Lifecycle ──────────────────────────────────────────────
 
     @Override
@@ -96,6 +97,8 @@ public final class SkyWarsTrainer extends JavaPlugin {
             this.personalityConfig = new PersonalityConfig(this);
         }
 
+        this.learningManager = new LearningManager(this);
+
         // 6. Initialize bot manager
         this.botManager = new BotManager(this);
 
@@ -131,6 +134,7 @@ public final class SkyWarsTrainer extends JavaPlugin {
     public void onDisable() {
         if (botManager != null) {
             int removed = botManager.removeAllBots();
+            learningManager.shutdown();
             getLogger().info("Removed " + removed + " active bot(s).");
         }
 
@@ -189,5 +193,9 @@ public final class SkyWarsTrainer extends JavaPlugin {
     @Nullable
     public SkyWarsTrainerAPI getApi() {
         return api;
+    }
+
+    public LearningManager getLearningManager() {
+        return learningManager;
     }
 }

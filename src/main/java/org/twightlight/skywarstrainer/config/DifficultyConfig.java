@@ -203,6 +203,7 @@ public class DifficultyConfig {
         builder.counterPlayIQ(section.getDouble("counterPlayIQ", 0.35));
         builder.antiRushReaction(section.getDouble("antiRushReaction", 0.4));
         builder.baitDetectionSkill(section.getDouble("baitDetectionSkill", 0.3));
+        builder.learningRate(section.getDouble("learningRate", 0.1));
         return builder.build();
     }
 
@@ -233,7 +234,7 @@ public class DifficultyConfig {
                         .highGroundPriority(0.05).islandRotationTendency(0.0)
                         .thirdPartyTendency(0.0).bridgeCutSkill(0.0)
                         .projectileZoningTendency(0.05).retreatHealSkill(0.1)
-                        .counterPlayIQ(0.05).antiRushReaction(0.1).baitDetectionSkill(0.0);
+                        .counterPlayIQ(0.05).antiRushReaction(0.1).baitDetectionSkill(0.0).learningRate(0.15);
 
                 break;
             case EASY:
@@ -255,7 +256,7 @@ public class DifficultyConfig {
                         .highGroundPriority(0.15).islandRotationTendency(0.05)
                         .thirdPartyTendency(0.1).bridgeCutSkill(0.1)
                         .projectileZoningTendency(0.15).retreatHealSkill(0.2)
-                        .counterPlayIQ(0.15).antiRushReaction(0.2).baitDetectionSkill(0.1);
+                        .counterPlayIQ(0.15).antiRushReaction(0.2).baitDetectionSkill(0.1).learningRate(0.12);
                 break;
             case MEDIUM:
                 b.reactionTimeMin(250).reactionTimeMax(500).aimAccuracy(0.7).aimSpeedDegPerTick(10.0)
@@ -276,7 +277,7 @@ public class DifficultyConfig {
                         .highGroundPriority(0.35).islandRotationTendency(0.2)
                         .thirdPartyTendency(0.3).bridgeCutSkill(0.3)
                         .projectileZoningTendency(0.35).retreatHealSkill(0.4)
-                        .counterPlayIQ(0.35).antiRushReaction(0.4).baitDetectionSkill(0.3);
+                        .counterPlayIQ(0.35).antiRushReaction(0.4).baitDetectionSkill(0.3).learningRate(0.10);
                 break;
             case HARD:
                 b.reactionTimeMin(150).reactionTimeMax(300).aimAccuracy(0.85).aimSpeedDegPerTick(18.0)
@@ -297,7 +298,7 @@ public class DifficultyConfig {
                         .highGroundPriority(0.6).islandRotationTendency(0.4)
                         .thirdPartyTendency(0.55).bridgeCutSkill(0.6)
                         .projectileZoningTendency(0.6).retreatHealSkill(0.7)
-                        .counterPlayIQ(0.6).antiRushReaction(0.65).baitDetectionSkill(0.6);
+                        .counterPlayIQ(0.6).antiRushReaction(0.65).baitDetectionSkill(0.6).learningRate(0.08);
                 break;
             case EXPERT:
                 b.reactionTimeMin(80).reactionTimeMax(150).aimAccuracy(0.95).aimSpeedDegPerTick(25.0)
@@ -318,7 +319,7 @@ public class DifficultyConfig {
                         .highGroundPriority(0.85).islandRotationTendency(0.7)
                         .thirdPartyTendency(0.8).bridgeCutSkill(0.9)
                         .projectileZoningTendency(0.85).retreatHealSkill(0.9)
-                        .counterPlayIQ(0.9).antiRushReaction(0.9).baitDetectionSkill(0.85);
+                        .counterPlayIQ(0.9).antiRushReaction(0.9).baitDetectionSkill(0.85).learningRate(0.05);
                 break;
         }
         return b.build();
@@ -476,6 +477,8 @@ public class DifficultyConfig {
         private final double antiRushReaction;
         private final double baitDetectionSkill;
 
+        private final double learningRate;
+
         private DifficultyProfile(Builder builder) {
             this.difficulty = builder.difficulty;
             this.reactionTimeMin = builder.reactionTimeMin;
@@ -532,6 +535,7 @@ public class DifficultyConfig {
             this.counterPlayIQ = builder.counterPlayIQ;
             this.antiRushReaction = builder.antiRushReaction;
             this.baitDetectionSkill = builder.baitDetectionSkill;
+            this.learningRate = builder.learningRate;
         }
 
         // ── Getters ─────────────────────────────────────────────
@@ -703,6 +707,8 @@ public class DifficultyConfig {
         /** @return skill at detecting bait/trick plays [0.0, 1.0] */
         public double getBaitDetectionSkill() { return baitDetectionSkill; }
 
+        public double getLearningRate() { return learningRate; }
+
         /**
          * Returns a randomized reaction time within the profile's range.
          *
@@ -796,6 +802,7 @@ public class DifficultyConfig {
             private double counterPlayIQ = 0.35;
             private double antiRushReaction = 0.4;
             private double baitDetectionSkill = 0.3;
+            private double learningRate = 0.1;
 
             public Builder(@Nonnull Difficulty difficulty) {
                 this.difficulty = difficulty;
@@ -862,6 +869,7 @@ public class DifficultyConfig {
             public DifficultyProfile build() {
                 return new DifficultyProfile(this);
             }
+            public Builder learningRate(double v) { this.learningRate = v; return this; }
         }
     }
 }

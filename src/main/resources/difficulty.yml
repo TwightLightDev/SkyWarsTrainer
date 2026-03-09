@@ -94,6 +94,7 @@ difficulties:
     counterPlayIQ: 0.05
     antiRushReaction: 0.1
     baitDetectionSkill: 0.0
+    learningRate: 0.15
 
   EASY:
     reactionTimeMin: 400
@@ -150,6 +151,7 @@ difficulties:
     counterPlayIQ: 0.15
     antiRushReaction: 0.2
     baitDetectionSkill: 0.1
+    learningRate: 0.12
 
   MEDIUM:
     reactionTimeMin: 250
@@ -206,6 +208,7 @@ difficulties:
     counterPlayIQ: 0.35
     antiRushReaction: 0.4
     baitDetectionSkill: 0.3
+    learningRate: 0.10
 
   HARD:
     reactionTimeMin: 150
@@ -262,6 +265,7 @@ difficulties:
     counterPlayIQ: 0.6
     antiRushReaction: 0.65
     baitDetectionSkill: 0.6
+    learningRate: 0.08
 
   EXPERT:
     reactionTimeMin: 80
@@ -318,3 +322,4 @@ difficulties:
     counterPlayIQ: 0.9
     antiRushReaction: 0.9
     baitDetectionSkill: 0.85
+    learningRate: 0.05

@@ -22,6 +22,7 @@ import org.twightlight.skywars.api.server.SkyWarsServer;
 import org.twightlight.skywars.arena.Arena;
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.decision.DecisionEngine;
+import org.twightlight.skywarstrainer.ai.learning.LearningModule;
 import org.twightlight.skywarstrainer.bot.BotManager;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 
@@ -83,6 +84,10 @@ public class GameEventListener implements Listener {
                 if (de != null) {
                     de.triggerInterrupt();
                 }
+                LearningModule lm = bot.getLearningModule();
+                if (lm != null) {
+                    lm.onGameStart();
+                }
             } catch (Exception e) {
                 plugin.getLogger().log(Level.WARNING,
                         "Error notifying bot of game start: " + bot.getName(), e);
@@ -116,6 +121,17 @@ public class GameEventListener implements Listener {
                         BotChatManager.sendChatMessage(bot, "win");
                     }
                 }
+                LearningModule lm = bot.getLearningModule();
+                if (lm != null) {
+                    boolean won = false;
+                    if (event.hasWinner() && event.getWinnerTeam() != null) {
+                        Player botPlayer = bot.getPlayerEntity();
+                        if (botPlayer != null && event.getWinnerTeam().hasMember(botPlayer)) {
+                            won = true;
+                        }
+                    }
+                    lm.onGameEnd(won, bot.getProfile().getKills(), bot.getProfile().getDeaths(), 1.0);
+                }
                 plugin.getBotManager().removeBot(bot);
             } catch (Exception e) {
                 plugin.getLogger().log(Level.WARNING,
@@ -146,6 +162,10 @@ public class GameEventListener implements Listener {
                 BotChatManager.sendChatMessage(deadBot, "death");
                 Bukkit.getPluginManager().callEvent(
                         new org.twightlight.skywarstrainer.api.events.BotDeathEvent(deadBot, killer));
+                LearningModule lmDead = deadBot.getLearningModule();
+                if (lmDead != null) {
+                    lmDead.onSignificantEvent("death", 1.0);
+                }
                 if (plugin.getConfigManager().isDebugMode()) {
                     plugin.getLogger().info("[GameHook] Bot died: " + deadBot.getName()
                             + (killer != null ? " killed by " + killer.getName() : ""));
@@ -159,6 +179,10 @@ public class GameEventListener implements Listener {
             if (killerBot != null) {
                 killerBot.getProfile().addKill();
                 BotChatManager.sendChatMessage(killerBot, "first_kill");
+                LearningModule lmKiller = killerBot.getLearningModule();
+                if (lmKiller != null) {
+                    lmKiller.onSignificantEvent("kill", 1.0);
+                }
                 Bukkit.getPluginManager().callEvent(
                         new org.twightlight.skywarstrainer.api.events.BotKillPlayerEvent(killerBot, dead));
             }
@@ -279,6 +303,10 @@ public class GameEventListener implements Listener {
                     LivingEntity attackerEntity = (actualDamager instanceof LivingEntity)
                             ? (LivingEntity) actualDamager : null;
                     victimBot.getCombatEngine().onBotHit(attackerEntity);
+                    LearningModule lmVictim = victimBot.getLearningModule();
+                    if (lmVictim != null) {
+                        lmVictim.onSignificantEvent("health_lost", event.getDamage() / 2.0);
+                    }
                 }
                 DecisionEngine de = victimBot.getDecisionEngine();
                 if (de != null) {
@@ -292,6 +320,11 @@ public class GameEventListener implements Listener {
             TrainerBot damagerBot = botManager.getBotByEntityUUID(actualDamager.getUniqueId());
             if (damagerBot != null && damagerBot.getCombatEngine() != null) {
                 damagerBot.getCombatEngine().getComboTracker().onHitLanded();
+                LearningModule lmDamager = damagerBot.getLearningModule();
+                if (lmDamager != null) {
+                    lmDamager.onSignificantEvent("health_lost", -event.getDamage() / 2.0);
+                    // Note: negative health_lost for the damager = health damage dealt to enemy
+                }
             }
         }
     }

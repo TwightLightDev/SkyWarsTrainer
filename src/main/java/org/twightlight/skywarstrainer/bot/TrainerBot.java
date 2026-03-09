@@ -13,6 +13,7 @@ import org.twightlight.skywars.arena.Arena;
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.decision.DecisionEngine;
 import org.twightlight.skywarstrainer.ai.engine.*;
+import org.twightlight.skywarstrainer.ai.learning.LearningModule;
 import org.twightlight.skywarstrainer.ai.state.BotState;
 import org.twightlight.skywarstrainer.ai.state.BotStateMachine;
 import org.twightlight.skywarstrainer.awareness.*;
@@ -104,11 +105,13 @@ public class TrainerBot {
     private PositionalEngine positionalManager;
     private DefensiveActionEngine defenseManager;
     private EnemyBehaviorAnalyzer enemyAnalyzer;
+    private LearningModule learningModule;
     private BridgeMovementController bridgeMovementController;
 
     // ── New Tick Timers ──
     private TickTimer positionalTimer;  // 50 ticks
     private TickTimer enemyAnalyzerTimer;  // 20 ticks
+    private TickTimer learningModuleTimer;
 
     /**
      * Creates a new TrainerBot. Does NOT spawn the NPC yet — call {@link #spawn(Location)}.
@@ -219,6 +222,12 @@ public class TrainerBot {
         this.defenseManager = new DefensiveActionEngine(this);
         this.enemyAnalyzer = new EnemyBehaviorAnalyzer(this);
 
+        // ── 7b. Learning Module ──
+        if (plugin.getLearningManager().getLearningConfig() != null && plugin.getLearningManager().getLearningConfig().isEnabled()
+                && plugin.getLearningManager().getSharedMemoryBank() != null && plugin.getLearningManager().getSharedReplayBuffer() != null) {
+            this.learningModule = new LearningModule(this, plugin.getLearningManager().getSharedMemoryBank(), plugin.getLearningManager().getSharedReplayBuffer());
+        }
+
         // ── 8. AI Brain (UNCHANGED init, but builds enhanced BTs) ──
         this.stateMachine = new BotStateMachine(this);
         this.decisionEngine = new DecisionEngine(this, stateMachine);
@@ -234,6 +243,7 @@ public class TrainerBot {
         this.inventoryAuditTimer = new TickTimer(100, 20);
         this.positionalTimer = new TickTimer(50, 10);      // NEW
         this.enemyAnalyzerTimer = new TickTimer(20, 4);     // NEW
+        this.learningModuleTimer = new TickTimer(10, 2);  // every 10 ticks
 
         mapScanner.forceRescan();
     }
@@ -696,6 +706,7 @@ public class TrainerBot {
         defenseManager = null;
         enemyAnalyzer = null;
         bridgeMovementController = null;
+        learningModule = null;
 
         if (npc != null) {
             if (npc.isSpawned()) {
@@ -827,6 +838,13 @@ public class TrainerBot {
         if (enemyAnalyzerTimer != null && enemyAnalyzerTimer.tick()) {
             tickSafe("enemyAnalysis", () -> {
                 if (enemyAnalyzer != null) enemyAnalyzer.tick();
+            });
+        }
+
+        // ── 14b. Learning Module (every 10 ticks) ──
+        if (learningModuleTimer != null && learningModuleTimer.tick()) {
+            tickSafe("learning", () -> {
+                if (learningModule != null) learningModule.tick();
             });
         }
 
@@ -1043,6 +1061,7 @@ public class TrainerBot {
     @Nullable public DefensiveActionEngine getDefenseManager() { return defenseManager; }
     @Nullable public EnemyBehaviorAnalyzer getEnemyAnalyzer() { return enemyAnalyzer; }
     @Nullable public BridgeMovementController getBridgeMovementController() { return bridgeMovementController; }
+    @Nullable public LearningModule getLearningModule() { return learningModule; }
 
     private static String formatLocation(Location loc) {
         return String.format("(%.1f, %.1f, %.1f in %s)",

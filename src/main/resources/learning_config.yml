@@ -1,0 +1,64 @@
+# ═══════════════════════════════════════════════════════════════════
+# SkyWarsTrainer — Reinforcement Learning Configuration
+# ═══════════════════════════════════════════════════════════════════
+# All hyperparameters for the adaptive learning system.
+# Every numeric constant used by the learning system comes from this file.
+# Changes take effect on plugin reload (no recompile needed).
+
+learning:
+  enabled: true
+  learning-rate: 0.1
+  discount-factor: 0.9
+  weight-sensitivity: 0.5
+  max-adjustment-multiplier: 2.5
+  min-adjustment-multiplier: 0.3
+  lambda: 0.7
+  trace-prune-threshold: 0.001
+  max-games-before-stable: 200
+  stability-lr-multiplier: 0.1
+
+memory:
+  max-entries: 50000
+  bins-per-dimension: 3
+  recency-half-life-games: 75
+  min-visits-for-confidence: 3
+  confidence-patience-games: 15
+  contradiction-lookback: 20
+  contradiction-threshold: 0.6
+  consolidation-similarity: 0.95
+
+replay:
+  enabled: true
+  buffer-capacity: 8000
+  mini-batch-size: 32
+  replay-rounds-per-game: 5
+  priority-alpha: 0.6
+  importance-sampling-beta-start: 0.4
+  importance-sampling-beta-end: 1.0
+  beta-anneal-games: 200
+  priority-epsilon: 0.01
+  max-experience-age-games: 300
+
+rewards:
+  kill: 1.0
+  win: 3.0
+  death: -2.0
+  lose: -1.0
+  weapon-upgrade: 0.3
+  armor-upgrade: 0.2
+  health-gained-per-heart: 0.05
+  health-lost-per-heart: -0.1
+  chest-looted: 0.15
+  enemy-fled: 0.2
+  forced-to-flee: -0.3
+  bridge-completed: 0.1
+  idle-per-second: -0.01
+  survived-top-3: 0.5
+  knockback-dealt-edge: 0.4
+  combo-landed: 0.25
+
+shaping:
+  enabled: true
+  health-weight: 0.5
+  equipment-weight: 0.3
+  time-weight: 0.2

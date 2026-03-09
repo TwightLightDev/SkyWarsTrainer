@@ -2,6 +2,7 @@ package org.twightlight.skywarstrainer.ai.decision;
 
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.decision.considerations.*;
+import org.twightlight.skywarstrainer.ai.learning.LearningModule;
 import org.twightlight.skywarstrainer.ai.state.BotState;
 import org.twightlight.skywarstrainer.ai.state.BotStateMachine;
 import org.twightlight.skywarstrainer.api.events.BotDecisionEvent;
@@ -173,6 +174,16 @@ public class DecisionEngine {
             // ═══ Step 3c: Apply CounterModifiers utility multipliers ═══
             score = applyCounterModifiers(action, score);
 
+            // ═══ Step 3d: Apply learning-based weight adjustments ═══
+            LearningModule lm = bot.getLearningModule();
+            if (lm != null) {
+                Map<BotAction, Double> learnedAdj = lm.getWeightAdjustments();
+                Double learnedMult = learnedAdj.get(action);
+                if (learnedMult != null) {
+                    score *= learnedMult;
+                }
+            }
+
             // Step 4: Apply personality multipliers
             score *= getPersonalityMultiplier(action);
 
@@ -204,6 +215,14 @@ public class DecisionEngine {
                         + String.format(" (%.3f)", lastScores.getOrDefault(bestAction, 0.0)));
             }
             lastChosenAction = bestAction;
+        }
+
+        // ═══ Step 8b: Notify learning module of decision ═══
+        if (bestAction != null) {
+            LearningModule lm2 = bot.getLearningModule();
+            if (lm2 != null) {
+                lm2.onDecisionMade(bestAction, new HashMap<>(lastScores));
+            }
         }
 
         // 9. Debug output
