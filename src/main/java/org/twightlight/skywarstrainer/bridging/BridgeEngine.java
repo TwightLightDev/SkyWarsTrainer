@@ -124,7 +124,6 @@ public class BridgeEngine {
         Location botLoc = bot.getLocation();
         if (player == null || botLoc == null) return false;
 
-        // Check we have blocks to place
         if (!hasBlocksToPlace(player)) {
             if (bot.getProfile().isDebugMode()) {
                 bot.getPlugin().getLogger().info("[DEBUG] " + bot.getName()
@@ -137,30 +136,19 @@ public class BridgeEngine {
         this.maxBlocks = maxBlocks > 0 ? maxBlocks : 64;
         this.bridgeTicks = 0;
 
-        // Calculate bridge direction (XZ plane, normalized)
         this.bridgeDirection = new Vector(
                 destination.getX() - botLoc.getX(),
                 0,
                 destination.getZ() - botLoc.getZ()
         );
         if (bridgeDirection.lengthSquared() < 0.01) {
-            // Destination is directly above/below — use a default forward direction
             double yawRad = Math.toRadians(botLoc.getYaw());
             bridgeDirection = new Vector(-Math.sin(yawRad), 0, Math.cos(yawRad));
         }
         bridgeDirection.normalize();
 
-        // Store height difference for informational/accessor purposes
         this.heightDifference = destination.getBlockY() - botLoc.getBlockY();
 
-        // Notify the movement controller about the destination so it can
-        // select the appropriate movement type (including STAIR_CLIMB for ascent)
-        BridgeMovementController movementCtrl = bot.getBridgeMovementController();
-        if (movementCtrl != null) {
-            movementCtrl.selectMovement(destination);
-        }
-
-        // Select and start a flat bridge strategy
         boolean isDiagonal = isDiagonalDirection(bridgeDirection);
         activeStrategy = selectFlatStrategy(isDiagonal);
         if (activeStrategy == null) {
@@ -172,6 +160,7 @@ public class BridgeEngine {
         bridging = true;
 
         if (bot.getProfile().isDebugMode()) {
+            BridgeMovementController movementCtrl = bot.getBridgeMovementController();
             String movementType = movementCtrl != null
                     ? movementCtrl.getActiveMovementType().name() : "UNKNOWN";
             bot.getPlugin().getLogger().info("[DEBUG] " + bot.getName()
@@ -184,6 +173,7 @@ public class BridgeEngine {
 
         return true;
     }
+
 
     /**
      * Ticks one frame of the active bridge. Called by the behavior tree
