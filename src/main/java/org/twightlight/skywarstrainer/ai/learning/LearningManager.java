@@ -7,7 +7,7 @@ import javax.annotation.Nullable;
 import java.util.logging.Level;
 
 public class LearningManager {
-    private SkyWarsTrainer plugin;
+    private final SkyWarsTrainer plugin;
 
     private LearningConfig learningConfig;
     private MemoryBank sharedMemoryBank;
@@ -24,12 +24,9 @@ public class LearningManager {
 
             // 5c. Schedule periodic auto-save (every 10 minutes = 12000 ticks)
             if (learningConfig.isEnabled()) {
-                Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
-                    @Override
-                    public void run() {
-                        if (sharedMemoryBank != null && sharedReplayBuffer != null) {
-                            LearningSerializer.saveAsync(plugin, sharedMemoryBank, sharedReplayBuffer);
-                        }
+                Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+                    if (sharedMemoryBank != null && sharedReplayBuffer != null) {
+                        LearningSerializer.saveAsync(plugin, sharedMemoryBank, sharedReplayBuffer);
                     }
                 }, 12000L, 12000L);
             }

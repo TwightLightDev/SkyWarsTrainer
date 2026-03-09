@@ -9,7 +9,6 @@ import org.twightlight.skywarstrainer.ai.decision.DecisionEngine;
 import org.twightlight.skywarstrainer.ai.decision.DecisionEngine.BotAction;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.util.DebugLogger;
-import org.twightlight.skywarstrainer.util.MathUtil;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -38,7 +37,7 @@ import java.util.Map;
  * <p>The MemoryBank and ReplayBuffer are shared singletons across all bots. Knowledge
  * learned by one bot immediately benefits all others.</p>
  */
-public class LearningModule {
+public class LearningEngine {
 
     private final TrainerBot bot;
     private final MemoryBank memoryBank;
@@ -74,7 +73,7 @@ public class LearningModule {
      * @param sharedMemoryBank   the server-wide shared memory bank
      * @param sharedReplayBuffer the server-wide shared replay buffer
      */
-    public LearningModule(@Nonnull TrainerBot bot,
+    public LearningEngine(@Nonnull TrainerBot bot,
                           @Nonnull MemoryBank sharedMemoryBank,
                           @Nonnull ReplayBuffer sharedReplayBuffer) {
         this.bot = bot;

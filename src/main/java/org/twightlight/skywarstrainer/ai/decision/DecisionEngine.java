@@ -2,7 +2,7 @@ package org.twightlight.skywarstrainer.ai.decision;
 
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.decision.considerations.*;
-import org.twightlight.skywarstrainer.ai.learning.LearningModule;
+import org.twightlight.skywarstrainer.ai.learning.LearningEngine;
 import org.twightlight.skywarstrainer.ai.state.BotState;
 import org.twightlight.skywarstrainer.ai.state.BotStateMachine;
 import org.twightlight.skywarstrainer.api.events.BotDecisionEvent;
@@ -175,7 +175,7 @@ public class DecisionEngine {
             score = applyCounterModifiers(action, score);
 
             // ═══ Step 3d: Apply learning-based weight adjustments ═══
-            LearningModule lm = bot.getLearningModule();
+            LearningEngine lm = bot.getLearningModule();
             if (lm != null) {
                 Map<BotAction, Double> learnedAdj = lm.getWeightAdjustments();
                 Double learnedMult = learnedAdj.get(action);
@@ -219,7 +219,7 @@ public class DecisionEngine {
 
         // ═══ Step 8b: Notify learning module of decision ═══
         if (bestAction != null) {
-            LearningModule lm2 = bot.getLearningModule();
+            LearningEngine lm2 = bot.getLearningModule();
             if (lm2 != null) {
                 lm2.onDecisionMade(bestAction, new HashMap<>(lastScores));
             }
