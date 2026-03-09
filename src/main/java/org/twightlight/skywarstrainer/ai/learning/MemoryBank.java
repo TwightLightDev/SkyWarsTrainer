@@ -209,7 +209,7 @@ public class MemoryBank {
      *
      * @return the mutable Q-table map
      */
-    Map<Integer, QEntry> getEntriesMutable() {
+    public Map<Integer, QEntry> getEntriesMutable() {
         return qTable;
     }
 

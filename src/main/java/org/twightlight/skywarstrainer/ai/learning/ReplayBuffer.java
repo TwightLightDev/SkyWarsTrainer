@@ -348,7 +348,7 @@ public class ReplayBuffer {
      * @param loadedHead the head position
      * @param loadedSize the number of valid entries
      */
-    void restoreFromLoad(@Nonnull ReplayEntry[] entries, int loadedHead, int loadedSize) {
+    public void restoreFromLoad(@Nonnull ReplayEntry[] entries, int loadedHead, int loadedSize) {
         int count = Math.min(entries.length, capacity);
         for (int i = 0; i < count; i++) {
             buffer[i] = entries[i];

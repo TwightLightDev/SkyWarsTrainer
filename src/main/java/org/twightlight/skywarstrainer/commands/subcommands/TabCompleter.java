@@ -1,4 +1,4 @@
-package org.twightlight.skywarstrainer.commands;
+package org.twightlight.skywarstrainer.commands.subcommands;
 
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -22,7 +22,7 @@ public class TabCompleter implements org.bukkit.command.TabCompleter {
     private static final List<String> SUBCOMMANDS = Arrays.asList(
             "spawn", "remove", "list", "difficulty", "personality",
             "stats", "debug", "fill", "pause", "teleport", "test",
-            "reload", "help"
+            "reload", "help", "learning"
     );
 
     private static final List<String> DIFFICULTIES = Arrays.asList(
@@ -39,6 +39,11 @@ public class TabCompleter implements org.bukkit.command.TabCompleter {
 
     private static final List<String> PERSONALITY_ACTIONS = Arrays.asList("add", "remove", "set");
     private static final List<String> TEST_TYPES = Arrays.asList("combat", "bridge", "loot", "flee");
+
+    // ── NEW: Learning subcommand completions ──
+    private static final List<String> LEARNING_SUBCOMMANDS = Arrays.asList(
+            "status", "reset", "debug", "export", "pause", "resume"
+    );
 
     public TabCompleter(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
@@ -116,6 +121,24 @@ public class TabCompleter implements org.bukkit.command.TabCompleter {
                         completions.addAll(filterStartsWith(TEST_TYPES, partial));
                     } else if (args.length == 3) {
                         completions.addAll(filterStartsWith(DIFFICULTIES, partial));
+                    }
+                    break;
+
+                // ── NEW: learning subcommand tab completion ──
+                case "learning":
+                    if (args.length == 2) {
+                        // /swt learning <subcommand>
+                        completions.addAll(filterStartsWith(LEARNING_SUBCOMMANDS, partial));
+                    } else if (args.length == 3) {
+                        String learningSub = args[1].toLowerCase();
+                        if ("debug".equals(learningSub)) {
+                            // /swt learning debug <botname>
+                            completions.addAll(filterStartsWith(plugin.getBotManager().getBotNames(), partial));
+                        } else if ("reset".equals(learningSub)) {
+                            // /swt learning reset confirm
+                            completions.addAll(filterStartsWith(
+                                    Arrays.asList("confirm"), partial));
+                        }
                     }
                     break;
             }

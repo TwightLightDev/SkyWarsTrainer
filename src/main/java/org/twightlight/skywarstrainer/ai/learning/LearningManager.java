@@ -1,6 +1,5 @@
 package org.twightlight.skywarstrainer.ai.learning;
 
-import jdk.tools.jlink.plugin.Plugin;
 import org.bukkit.Bukkit;
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 
