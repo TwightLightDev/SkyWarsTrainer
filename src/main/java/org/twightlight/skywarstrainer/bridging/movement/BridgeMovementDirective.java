@@ -10,11 +10,6 @@ import javax.annotation.Nonnull;
  * to the BridgeEngine. The engine then feeds this into the active BridgeStrategy
  * via its tick method, allowing the strategy to ACCEPT or REJECT the movement
  * advice while retaining authority over block placement.</p>
- *
- * <p><b>This resolves the Phase 7 collision issue:</b> Previously, the
- * BridgeMovementController directly called MovementController.setSneaking() etc.,
- * which conflicted with BridgeStrategy also setting those same states. Now the
- * movement controller only produces a directive, and the strategy integrates it.</p>
  */
 public class BridgeMovementDirective {
 

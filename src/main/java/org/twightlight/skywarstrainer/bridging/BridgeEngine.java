@@ -23,34 +23,21 @@ import java.util.logging.Level;
  * Manages all bridge construction for a single bot.
  *
  * <p>BridgeEngine selects the appropriate bridge strategy based on the bot's
- * difficulty, personality, current situation, and the vertical relationship
- * between the bot and the destination. It delegates per-tick block placement
- * to the selected strategy, handling interruptions, block counting, and
- * state transitions.</p>
- *
- * <p>The engine supports three modes of bridging:</p>
- * <ul>
- *   <li><b>Flat bridging</b>: destination is at roughly the same Y level (±2 blocks).
- *       Uses standard strategies (Normal, Speed, Ninja, God, Moonwalk, Diagonal).</li>
- *   <li><b>Ascending bridging</b>: destination is significantly higher (>2 blocks above).
- *       Uses AscendingBridge to build a staircase upward, optionally transitioning to
- *       flat bridging once the target height is reached.</li>
- *   <li><b>Descending bridging</b>: destination is lower. The bot bridges flat and lets
- *       gravity handle the descent, or builds a gentle descending slope.</li>
- * </ul>
- *
- * <p>The engine runs when the bot's state machine is in the BRIDGING state.
- * It is ticked by the behavior tree's bridging action nodes.</p>
+ * difficulty, personality, current situation, and the bridge direction. It
+ * delegates per-tick block placement to the selected strategy, handling
+ * interruptions, block counting, and state transitions.</p>
  *
  * <h3>Strategy Selection Logic:</h3>
  * <ol>
- *   <li>Check vertical difference between bot and destination</li>
- *   <li>If ascending (>2 blocks up): use AscendingBridge first, then switch to flat</li>
  *   <li>Read bot's bridgeMaxType from DifficultyProfile</li>
  *   <li>Filter available strategies to those at or below the max type</li>
  *   <li>Select the fastest strategy the bot can use reliably</li>
  *   <li>Apply personality modifiers (RUSHER prefers fastest, CAUTIOUS prefers safest)</li>
  * </ol>
+ *
+ * <p>The BridgeMovementController independently decides HOW the bot moves
+ * while bridging (sneak, sprint, jump-bridge, stair-climb, bait, safety-rail)
+ * and communicates this via a {@link BridgeMovementDirective}.</p>
  */
 public class BridgeEngine {
 
@@ -58,9 +45,6 @@ public class BridgeEngine {
 
     /** All registered flat bridge strategies, ordered from slowest to fastest. */
     private final List<BridgeStrategy> flatStrategies;
-
-    /** The ascending bridge strategy instance. */
-    private final AscendingBridge ascendingStrategy;
 
     /** The currently active bridge strategy, or null if not bridging. */
     private BridgeStrategy activeStrategy;
@@ -83,14 +67,7 @@ public class BridgeEngine {
     /** Maximum ticks before we abandon the bridge attempt. */
     private static final int MAX_BRIDGE_TICKS = 600; // 30 seconds
 
-    /**
-     * Whether we are in the ascending phase of a multi-phase bridge.
-     * After ascending completes, we switch to flat bridging for the remaining
-     * horizontal distance.
-     */
-    private boolean inAscendingPhase;
-
-    /** The height difference the bot needs to ascend. */
+    /** The height difference between bot and destination (informational). */
     private int heightDifference;
 
     /**
@@ -116,12 +93,10 @@ public class BridgeEngine {
     public BridgeEngine(@Nonnull TrainerBot bot) {
         this.bot = bot;
         this.flatStrategies = new ArrayList<>();
-        this.ascendingStrategy = new AscendingBridge();
         this.bridging = false;
         this.activeStrategy = null;
         this.bridgeTicks = 0;
         this.maxBlocks = 64;
-        this.inAscendingPhase = false;
         this.heightDifference = 0;
 
         // Register all flat bridge strategies in order from slowest to fastest
@@ -136,10 +111,9 @@ public class BridgeEngine {
     /**
      * Starts a bridge from the bot's current position toward the given destination.
      *
-     * <p>Analyzes the vertical difference between the bot and destination to decide
-     * whether to use ascending bridging, flat bridging, or a combination. Selects
-     * the best strategy, calculates the direction, and initializes the strategy
-     * for block-by-block construction.</p>
+     * <p>Selects the best flat strategy and initializes it for block-by-block
+     * construction. Height gain is handled by the BridgeMovementController's
+     * STAIR_CLIMB directive, not by this engine.</p>
      *
      * @param destination the target location to bridge toward
      * @param maxBlocks   the maximum number of blocks to place (0 = unlimited up to 64)
@@ -176,51 +150,17 @@ public class BridgeEngine {
         }
         bridgeDirection.normalize();
 
-        // Calculate vertical difference
+        // Store height difference for informational/accessor purposes
         this.heightDifference = destination.getBlockY() - botLoc.getBlockY();
 
-        // Decide bridging mode based on height difference
-        if (heightDifference > 2) {
-            // Need to ascend — start with ascending bridge
-            return startAscendingBridge(botLoc);
-        } else {
-            // Flat or descending — use standard flat bridge
-            return startFlatBridge(botLoc);
-        }
-    }
-
-    /**
-     * Starts an ascending bridge sequence. The bot will build a staircase
-     * upward until reaching the destination's Y level, then optionally
-     * switch to flat bridging for remaining horizontal distance.
-     *
-     * @param botLoc the bot's current location
-     * @return true if ascending bridge started successfully
-     */
-    private boolean startAscendingBridge(@Nonnull Location botLoc) {
-        ascendingStrategy.initialize(bot, botLoc, bridgeDirection);
-        ascendingStrategy.setTargetY(destination.getBlockY());
-
-        activeStrategy = ascendingStrategy;
-        inAscendingPhase = true;
-        bridging = true;
-
-        if (bot.getProfile().isDebugMode()) {
-            bot.getPlugin().getLogger().info("[DEBUG] " + bot.getName()
-                    + " starting ASCENDING bridge (+" + heightDifference + " blocks) toward "
-                    + formatLoc(destination));
+        // Notify the movement controller about the destination so it can
+        // select the appropriate movement type (including STAIR_CLIMB for ascent)
+        BridgeMovementController movementCtrl = bot.getBridgeMovementController();
+        if (movementCtrl != null) {
+            movementCtrl.selectMovement(destination);
         }
 
-        return true;
-    }
-
-    /**
-     * Starts a flat bridge using the best available strategy.
-     *
-     * @param botLoc the bot's current location
-     * @return true if flat bridge started successfully
-     */
-    private boolean startFlatBridge(@Nonnull Location botLoc) {
+        // Select and start a flat bridge strategy
         boolean isDiagonal = isDiagonalDirection(bridgeDirection);
         activeStrategy = selectFlatStrategy(isDiagonal);
         if (activeStrategy == null) {
@@ -229,14 +169,17 @@ public class BridgeEngine {
         }
 
         activeStrategy.initialize(bot, botLoc, bridgeDirection);
-        inAscendingPhase = false;
         bridging = true;
 
         if (bot.getProfile().isDebugMode()) {
+            String movementType = movementCtrl != null
+                    ? movementCtrl.getActiveMovementType().name() : "UNKNOWN";
             bot.getPlugin().getLogger().info("[DEBUG] " + bot.getName()
-                    + " starting FLAT bridge with " + activeStrategy.getName()
+                    + " starting bridge with " + activeStrategy.getName()
+                    + " + " + movementType
                     + " toward " + formatLoc(destination)
-                    + " (maxBlocks=" + this.maxBlocks + ")");
+                    + " (maxBlocks=" + this.maxBlocks
+                    + ", heightDiff=" + heightDifference + ")");
         }
 
         return true;
@@ -246,12 +189,12 @@ public class BridgeEngine {
      * Ticks one frame of the active bridge. Called by the behavior tree
      * each tick while in BRIDGING state.
      *
-     * <p><b>Phase 7 Integration:</b> Now queries the BridgeMovementController
-     * for a {@link org.twightlight.skywarstrainer.bridging.movement.BridgeMovementDirective}
-     * before delegating to the active strategy. The directive advises sprint/sneak/jump
-     * state and may request placement pauses (bait bridge) or side-block placement
-     * (safety rail). The strategy remains authoritative — it reads the directive
-     * and integrates what it can.</p>
+     * <p>Queries the BridgeMovementController for a
+     * {@link BridgeMovementDirective} before delegating to the active strategy.
+     * The directive advises sprint/sneak/jump state and may request placement
+     * pauses (bait bridge), side-block placement (safety rail), or jump+place
+     * sequences (stair climb). The strategy remains authoritative — it reads
+     * the directive and integrates what it can.</p>
      *
      * @return the result of this bridge tick
      */
@@ -293,7 +236,7 @@ public class BridgeEngine {
             }
         }
 
-        // ═══ Phase 7: BridgeMovementController directive integration ═══
+        // ═══ BridgeMovementController directive integration ═══
         // Query the movement controller for movement advice BEFORE strategy ticks.
         // The directive communicates sprint/sneak/jump requests and may pause
         // block placement (bait bridge) or request side blocks (safety rail).
@@ -314,13 +257,13 @@ public class BridgeEngine {
             // Apply movement state BEFORE strategy runs (sprint, sneak, jump)
             applyDirectiveMovement(directive);
         }
-        // ═══ End Phase 7 directive pre-processing ═══
+        // ═══ End directive pre-processing ═══
 
         // Delegate to the active strategy
         try {
             BridgeStrategy.BridgeTickResult strategyResult = activeStrategy.tick(bot);
 
-            // ═══ Phase 7: Post-strategy processing ═══
+            // ═══ Post-strategy processing ═══
             if (movementCtrl != null) {
                 // Notify movement controller that a block was placed (bait tracking)
                 if (strategyResult == BridgeStrategy.BridgeTickResult.PLACED) {
@@ -335,21 +278,15 @@ public class BridgeEngine {
                 // Post-tick for state updates (bait timer, jump bridge cooldown)
                 movementCtrl.postTick();
             }
-            // ═══ End Phase 7 post-processing ═══
+            // ═══ End post-processing ═══
 
             switch (strategyResult) {
                 case PLACED:
                     return BridgeTickResult.PLACED;
                 case FAILED:
-                    if (inAscendingPhase) {
-                        return handleAscendingFailure();
-                    }
                     stopBridge();
                     return BridgeTickResult.FAILED;
                 case COMPLETE:
-                    if (inAscendingPhase) {
-                        return transitionToFlatBridge();
-                    }
                     stopBridge();
                     return BridgeTickResult.COMPLETE;
                 default:
@@ -366,8 +303,9 @@ public class BridgeEngine {
     /**
      * Applies the movement directive's sprint/sneak/jump requests to the
      * MovementController. The strategy can override these if needed, since
-     * it ticks AFTER this call. But for directives like JUMP_BRIDGE, the jump
-     * must happen before the strategy tick to time correctly with block placement.
+     * it ticks AFTER this call. But for directives like JUMP_BRIDGE or
+     * STAIR_CLIMB, the jump must happen before the strategy tick to time
+     * correctly with block placement.
      *
      * @param directive the movement directive
      */
@@ -435,100 +373,6 @@ public class BridgeEngine {
         }
     }
 
-
-    /**
-     * Transitions from ascending bridge to flat bridge once the target height
-     * has been reached. Calculates remaining horizontal distance and starts
-     * a flat bridge to cover it.
-     *
-     * @return the bridge tick result for this transition tick
-     */
-    @Nonnull
-    private BridgeTickResult transitionToFlatBridge() {
-        Location botLoc = bot.getLocation();
-        if (botLoc == null) {
-            stopBridge();
-            return BridgeTickResult.COMPLETE;
-        }
-
-        double remainingHorizDist = MathUtil.horizontalDistance(botLoc, destination);
-        if (remainingHorizDist < 2.0) {
-            // Close enough horizontally — we're done
-            stopBridge();
-            return BridgeTickResult.COMPLETE;
-        }
-
-        // Recalculate direction from current position
-        bridgeDirection = new Vector(
-                destination.getX() - botLoc.getX(),
-                0,
-                destination.getZ() - botLoc.getZ()
-        ).normalize();
-
-        // Switch to flat bridging
-        boolean isDiagonal = isDiagonalDirection(bridgeDirection);
-        activeStrategy = selectFlatStrategy(isDiagonal);
-        if (activeStrategy == null) {
-            stopBridge();
-            return BridgeTickResult.COMPLETE;
-        }
-
-        activeStrategy.initialize(bot, botLoc, bridgeDirection);
-        inAscendingPhase = false;
-
-        if (bot.getProfile().isDebugMode()) {
-            bot.getPlugin().getLogger().info("[DEBUG] " + bot.getName()
-                    + " transitioned from ascending to flat bridge with "
-                    + activeStrategy.getName() + " (" + String.format("%.1f", remainingHorizDist)
-                    + " blocks remaining)");
-        }
-
-        return BridgeTickResult.IN_PROGRESS;
-    }
-
-    /**
-     * Handles ascending bridge failure by attempting to switch to flat bridging
-     * if possible, or failing the entire bridge operation.
-     *
-     * @return the bridge tick result
-     */
-    @Nonnull
-    private BridgeTickResult handleAscendingFailure() {
-        Location botLoc = bot.getLocation();
-        if (botLoc == null) {
-            stopBridge();
-            return BridgeTickResult.FAILED;
-        }
-
-        // If we gained some height, try continuing with flat bridging
-        double horizDist = MathUtil.horizontalDistance(botLoc, destination);
-        if (horizDist > 2.0) {
-            bridgeDirection = new Vector(
-                    destination.getX() - botLoc.getX(),
-                    0,
-                    destination.getZ() - botLoc.getZ()
-            ).normalize();
-
-            boolean isDiagonal = isDiagonalDirection(bridgeDirection);
-            BridgeStrategy flatStrategy = selectFlatStrategy(isDiagonal);
-            if (flatStrategy != null) {
-                activeStrategy = flatStrategy;
-                activeStrategy.initialize(bot, botLoc, bridgeDirection);
-                inAscendingPhase = false;
-
-                if (bot.getProfile().isDebugMode()) {
-                    bot.getPlugin().getLogger().info("[DEBUG] " + bot.getName()
-                            + " ascending failed, falling back to flat bridge");
-                }
-
-                return BridgeTickResult.IN_PROGRESS;
-            }
-        }
-
-        stopBridge();
-        return BridgeTickResult.FAILED;
-    }
-
     /**
      * Stops the current bridge, resetting strategy state and sneaking.
      */
@@ -538,11 +382,16 @@ public class BridgeEngine {
         }
         activeStrategy = null;
         bridging = false;
-        inAscendingPhase = false;
         destination = null;
         bridgeDirection = null;
         bridgeTicks = 0;
         heightDifference = 0;
+
+        // Reset the movement controller
+        BridgeMovementController movementCtrl = bot.getBridgeMovementController();
+        if (movementCtrl != null) {
+            movementCtrl.reset();
+        }
 
         // Stop sneaking when bridge ends
         MovementController mc = bot.getMovementController();
@@ -683,9 +532,6 @@ public class BridgeEngine {
     /** @return true if the engine is currently bridging */
     public boolean isBridging() { return bridging; }
 
-    /** @return true if currently in the ascending phase of a bridge */
-    public boolean isAscending() { return inAscendingPhase; }
-
     /** @return the currently active strategy, or null */
     @Nullable
     public BridgeStrategy getActiveStrategy() { return activeStrategy; }
@@ -695,7 +541,7 @@ public class BridgeEngine {
     public Location getDestination() { return destination; }
 
     /**
-     * Returns the total number of blocks placed across all phases (ascending + flat).
+     * Returns the total number of blocks placed by the active strategy.
      *
      * @return total blocks placed
      */

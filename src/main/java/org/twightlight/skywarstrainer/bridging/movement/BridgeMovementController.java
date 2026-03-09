@@ -4,7 +4,6 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Player;
 import org.twightlight.skywarstrainer.awareness.ThreatMap;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
@@ -18,11 +17,6 @@ import javax.annotation.Nullable;
 /**
  * Produces {@link BridgeMovementDirective}s that advise the BridgeEngine on
  * how the bot should move while bridging.
- *
- * <p><b>REWRITTEN (Phase 7):</b> No longer directly manipulates the
- * MovementController. Instead, produces a directive object each tick that the
- * BridgeEngine passes to the active BridgeStrategy. This eliminates the
- * state-collision between movement controller and bridge strategy.</p>
  *
  * <p>The bridge strategy is AUTHORITATIVE: it can accept the directive's
  * sprint/sneak/jump suggestions, or ignore them if they conflict with its
