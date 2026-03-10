@@ -532,4 +532,11 @@ public final class NMSHelper {
         }
     }
 
+    public static boolean isEating(Player player) {
+        if (player == null) return false;
+
+        EntityPlayer ep = ((CraftPlayer) player).getHandle();
+        return ep.bS(); // true if player is consuming ANY item
+    }
+
 }

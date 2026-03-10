@@ -29,7 +29,7 @@ public class InventoryManager {
 
     /** Ticks since last full inventory audit. */
     private int ticksSinceAudit;
-    private static final int AUDIT_INTERVAL = 100;
+    private static final int AUDIT_INTERVAL = 1;
 
     public InventoryManager(@Nonnull TrainerBot bot) {
         this.bot = bot;

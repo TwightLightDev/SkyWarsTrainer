@@ -6,20 +6,6 @@ package org.twightlight.skywarstrainer.ai.state;
  * <p>Each state corresponds to one BehaviorTree that governs the bot's
  * micro-actions while in that state. The {@link BotStateMachine} manages
  * transitions between states based on the Utility AI's decisions.</p>
- *
- * <h3>State descriptions</h3>
- * <ul>
- *   <li>{@link #IDLE}       — Waiting; doing nothing meaningful (grace period idle,
- *       or pre-game cage wait).</li>
- *   <li>{@link #LOOTING}    — Actively searching for and opening chests.</li>
- *   <li>{@link #FIGHTING}   — In active combat with a target entity.</li>
- *   <li>{@link #BRIDGING}   — Building a bridge toward a destination.</li>
- *   <li>{@link #FLEEING}    — Running away from a threat.</li>
- *   <li>{@link #ENCHANTING} — Using an enchanting table.</li>
- *   <li>{@link #HUNTING}    — Seeking out a specific target to fight.</li>
- *   <li>{@link #CAMPING}    — Fortifying a position and waiting for enemies.</li>
- *   <li>{@link #END_GAME}   — Game ending: victory celebration or death cleanup.</li>
- * </ul>
  */
 public enum BotState {
 
@@ -67,6 +53,21 @@ public enum BotState {
      * watches for enemies, harasses with bow. Waits for enemies to come to it.
      */
     CAMPING,
+
+    /**
+     * Bot is consuming an item: eating food, drinking a potion, or eating a golden
+     * apple for healing. Transitions back once consumption is complete.
+     * Added to fix issues #11 and #13 where HEAL/EAT_FOOD/DRINK_POTION mapped
+     * to IDLE and never actually triggered the food/potion handlers.
+     */
+    CONSUMING,
+
+    /**
+     * Bot is organizing its inventory: equipping best armor, selecting best sword,
+     * reorganizing hotbar layout. Completes quickly then allows re-evaluation.
+     * Added to fix issue #11 where ORGANIZE_INVENTORY mapped to IDLE.
+     */
+    ORGANIZING,
 
     /**
      * Final phase state. Victory: jumps and chats. Defeat: death messages.

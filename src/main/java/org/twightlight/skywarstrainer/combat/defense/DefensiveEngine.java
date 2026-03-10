@@ -20,7 +20,7 @@ import java.util.List;
  * and scores them based on the current situation, difficulty parameters, and
  * personality multipliers.</p>
  */
-public class DefensiveActionEngine {
+public class DefensiveEngine {
 
     private final TrainerBot bot;
 
@@ -39,7 +39,7 @@ public class DefensiveActionEngine {
      *
      * @param bot the owning trainer bot
      */
-    public DefensiveActionEngine(@Nonnull TrainerBot bot) {
+    public DefensiveEngine(@Nonnull TrainerBot bot) {
         this.bot = bot;
         this.behaviors = new ArrayList<>();
         this.activeBehavior = null;

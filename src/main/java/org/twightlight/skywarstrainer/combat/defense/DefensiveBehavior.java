@@ -11,7 +11,7 @@ import javax.annotation.Nonnull;
  *
  * <p>Defensive behaviors follow a lifecycle: evaluate (shouldActivate) → reset
  * → tick until complete → reset. Only one defensive behavior is active at a
- * time, managed by {@link DefensiveActionEngine}.</p>
+ * time, managed by {@link DefensiveEngine}.</p>
  */
 public interface DefensiveBehavior {
 

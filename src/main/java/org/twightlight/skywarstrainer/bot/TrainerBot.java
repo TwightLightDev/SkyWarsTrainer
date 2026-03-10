@@ -21,10 +21,13 @@ import org.twightlight.skywarstrainer.bridging.BridgeEngine;
 import org.twightlight.skywarstrainer.bridging.movement.BridgeMovementController;
 import org.twightlight.skywarstrainer.combat.CombatEngine;
 import org.twightlight.skywarstrainer.combat.counter.EnemyBehaviorAnalyzer;
-import org.twightlight.skywarstrainer.combat.defense.DefensiveActionEngine;
+import org.twightlight.skywarstrainer.combat.defense.DefensiveEngine;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.game.BotChatManager;
+import org.twightlight.skywarstrainer.inventory.EnchantmentHandler;
+import org.twightlight.skywarstrainer.inventory.FoodHandler;
 import org.twightlight.skywarstrainer.inventory.InventoryManager;
+import org.twightlight.skywarstrainer.inventory.PotionHandler;
 import org.twightlight.skywarstrainer.loot.LootEngine;
 import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.movement.positional.PositionalEngine;
@@ -103,7 +106,7 @@ public class TrainerBot {
 
     private ApproachEngine approachManager;
     private PositionalEngine positionalManager;
-    private DefensiveActionEngine defenseManager;
+    private DefensiveEngine defenseEngine;
     private EnemyBehaviorAnalyzer enemyAnalyzer;
     private LearningEngine learningEngine;
     private BridgeMovementController bridgeMovementController;
@@ -219,7 +222,7 @@ public class TrainerBot {
         // ── 7. Advanced Subsystems (Phase 7) ──
         this.approachManager = new ApproachEngine(this);
         this.positionalManager = new PositionalEngine(this);
-        this.defenseManager = new DefensiveActionEngine(this);
+        this.defenseEngine = new DefensiveEngine(this);
         this.enemyAnalyzer = new EnemyBehaviorAnalyzer(this);
 
         // ── 7b. Learning Module ──
@@ -322,13 +325,12 @@ public class TrainerBot {
                                 }
                             }
 
-                            if (defenseManager != null) {
+                            if (defenseEngine != null) {
                                 LivingEntity entity = getLivingEntity();
                                 if (entity != null) {
                                     double hp = entity.getHealth() / entity.getMaxHealth();
                                     if (hp < 0.5 && getDifficultyProfile().getRetreatHealSkill() > 0.2) {
-                                        // Defense manager will evaluate RetreatHealer
-                                        defenseManager.tick(TrainerBot.this);
+                                        defenseEngine.tick(TrainerBot.this);
                                     }
                                 }
                             }
@@ -457,13 +459,198 @@ public class TrainerBot {
                 })
         ));
 
-        // ── ENCHANTING ──
+        // ══ ENCHANTING — FIXED (issue #10) ══
+        // Was: just called inventoryManager.tick() and returned RUNNING forever.
+        // Now: pathfinds to enchanting table, interacts with it, applies enchantment,
+        //      then completes with SUCCESS so the DecisionEngine can re-evaluate.
         stateMachine.registerTree(BotState.ENCHANTING, new BehaviorTree("ENCHANTING",
-                new ActionNode("enchant-tick", bot -> {
-                    if (inventoryManager != null) {
-                        inventoryManager.tick();
+                new SequenceNode("enchant-sequence",
+                        // Step 1: Verify enchanting is worthwhile
+                        new ConditionNode("should-enchant", bot -> {
+                            if (inventoryManager == null) return false;
+                            return inventoryManager.getEnchantmentHandler().shouldEnchant();
+                        }),
+                        // Step 2: Find and pathfind to enchanting table
+                        new ActionNode("pathfind-to-enchant-table", bot -> {
+                            LivingEntity entity = getLivingEntity();
+                            if (entity == null) return NodeStatus.FAILURE;
+                            Location botLoc = entity.getLocation();
+                            if (botLoc == null || botLoc.getWorld() == null) return NodeStatus.FAILURE;
+
+                            // Find nearest enchanting table
+                            Location tableLocation = null;
+                            int radius = 10;
+                            double closestDist = Double.MAX_VALUE;
+                            for (int x = -radius; x <= radius; x++) {
+                                for (int y = -3; y <= 3; y++) {
+                                    for (int z = -radius; z <= radius; z++) {
+                                        Location check = botLoc.clone().add(x, y, z);
+                                        if (check.getBlock().getType() == org.bukkit.Material.ENCHANTMENT_TABLE) {
+                                            double dist = botLoc.distanceSquared(check);
+                                            if (dist < closestDist) {
+                                                closestDist = dist;
+                                                tableLocation = check;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (tableLocation == null) return NodeStatus.FAILURE;
+
+                            double distance = botLoc.distance(tableLocation);
+                            if (distance <= 2.5) {
+                                // Close enough to enchant — look at the table
+                                if (movementController != null) {
+                                    movementController.setLookTarget(tableLocation.clone().add(0.5, 0.75, 0.5));
+                                }
+                                return NodeStatus.SUCCESS;
+                            }
+
+                            // Pathfind toward the table
+                            if (movementController != null) {
+                                // Target one block adjacent to the table (not inside it)
+                                Location walkTarget = tableLocation.clone().add(0.5, 0, 1.5);
+                                movementController.setMoveTarget(walkTarget);
+                                movementController.setLookTarget(tableLocation.clone().add(0.5, 0.75, 0.5));
+                            }
+                            return NodeStatus.RUNNING;
+                        }),
+                        // Step 3: Apply enchantment (simulated — NPCs can't open GUIs)
+                        new ActionNode("apply-enchantment", bot -> {
+                            Player player = getPlayerEntity();
+                            if (player == null) return NodeStatus.FAILURE;
+                            if (inventoryManager == null) return NodeStatus.FAILURE;
+
+                            EnchantmentHandler handler = inventoryManager.getEnchantmentHandler();
+                            if (!handler.shouldEnchant()) return NodeStatus.SUCCESS; // Nothing to enchant
+
+                            int level = player.getLevel();
+                            if (level < 1) return NodeStatus.FAILURE;
+
+                            // Find the item to enchant (sword in slot 0)
+                            org.bukkit.inventory.ItemStack weapon = player.getInventory().getItem(0);
+                            if (weapon == null || !weapon.getType().name().endsWith("_SWORD")
+                                    || !weapon.getEnchantments().isEmpty()) {
+                                // Try armor pieces
+                                boolean enchantedSomething = false;
+                                for (org.bukkit.inventory.ItemStack armor : player.getInventory().getArmorContents()) {
+                                    if (armor != null && armor.getEnchantments().isEmpty()) {
+                                        inventoryManager.getEnchantmentHandler().applySimulatedEnchant(armor, level);
+                                        enchantedSomething = true;
+                                        break;
+                                    }
+                                }
+                                if (!enchantedSomething) return NodeStatus.SUCCESS;
+                            } else {
+                                inventoryManager.getEnchantmentHandler().applySimulatedEnchant(weapon, level);
+                            }
+
+                            // Consume levels (simplified: 1-3 levels depending on enchant tier)
+                            int cost = Math.min(level, RandomUtil.nextInt(1, 3));
+                            player.setLevel(level - cost);
+
+                            if (getProfile().isDebugMode()) {
+                                plugin.getLogger().info("[DEBUG] " + getName()
+                                        + " enchanted an item (cost " + cost + " levels)");
+                            }
+
+                            return NodeStatus.SUCCESS;
+                        })
+                )
+        ));
+
+        // ══ CONSUMING — NEW (fixes #13: HEAL/EAT_FOOD/DRINK_POTION) ══
+        // These actions were mapped to IDLE which did nothing useful.
+        // Now they map to CONSUMING which actively triggers eating/drinking.
+        stateMachine.registerTree(BotState.CONSUMING, new BehaviorTree("CONSUMING",
+                new ActionNode("consume-tick", bot -> {
+                    if (inventoryManager == null) return NodeStatus.FAILURE;
+                    Player player = getPlayerEntity();
+                    if (player == null) return NodeStatus.FAILURE;
+
+                    FoodHandler foodHandler = inventoryManager.getFoodHandler();
+                    PotionHandler potionHandler = inventoryManager.getPotionHandler();
+
+                    // Determine what to consume based on the chosen action
+                    DecisionEngine.BotAction lastAction = decisionEngine != null
+                            ? decisionEngine.getLastChosenAction() : null;
+
+                    if (lastAction == DecisionEngine.BotAction.DRINK_POTION) {
+                        // Force potion tick regardless of cooldown/RNG
+                        potionHandler.tick();
+                        return NodeStatus.SUCCESS; // One-shot: potion consumption is instant
                     }
-                    return NodeStatus.RUNNING;
+
+                    if (lastAction == DecisionEngine.BotAction.HEAL) {
+                        // Prefer golden apple if available, otherwise regular food
+                        if (foodHandler.hasGoldenApple()) {
+                            // Find and eat golden apple
+                            int gaSlot = inventoryManager.getEnchantmentHandler().findGoldenAppleSlot(player);
+                            if (gaSlot >= 0) {
+                                player.getInventory().setHeldItemSlot(gaSlot < 9 ? gaSlot : 0);
+                                if (gaSlot >= 9) {
+                                    // Move to hotbar
+                                    org.bukkit.inventory.ItemStack ga = player.getInventory().getItem(gaSlot);
+                                    org.bukkit.inventory.ItemStack swap = player.getInventory().getItem(0);
+                                    player.getInventory().setItem(0, ga);
+                                    player.getInventory().setItem(gaSlot, swap);
+                                    player.getInventory().setHeldItemSlot(0);
+                                }
+
+                                if (!foodHandler.isEating())
+                                    org.twightlight.skywarstrainer.util.NMSHelper.useItem(player, true);
+                                // Golden apple eating takes 32 ticks
+                                return NodeStatus.RUNNING;
+                            }
+                        }
+                        // Fall through to regular food
+                        foodHandler.tick();
+                        if (foodHandler.isEating()) {
+                            return NodeStatus.RUNNING;
+                        }
+                        return NodeStatus.SUCCESS;
+                    }
+
+                    if (lastAction == DecisionEngine.BotAction.EAT_FOOD) {
+                        foodHandler.tick();
+                        if (foodHandler.isEating()) {
+                            return NodeStatus.RUNNING;
+                        }
+                        return NodeStatus.SUCCESS;
+                    }
+
+                    // Default: try food then potion
+                    foodHandler.tick();
+                    if (foodHandler.isEating()) {
+                        return NodeStatus.RUNNING;
+                    }
+                    potionHandler.tick();
+                    return NodeStatus.SUCCESS;
+                })
+        ));
+
+        // ══ ORGANIZING — NEW (fixes #11: ORGANIZE_INVENTORY) ══
+        // Was mapped to IDLE which just did random head movements.
+        // Now actually performs a full inventory audit and completes.
+        stateMachine.registerTree(BotState.ORGANIZING, new BehaviorTree("ORGANIZING",
+                new ActionNode("organize-tick", bot -> {
+                    if (inventoryManager == null) return NodeStatus.FAILURE;
+                    Player player = getPlayerEntity();
+                    if (player == null) return NodeStatus.FAILURE;
+
+                    // Perform a full inventory audit: equip best armor, select best
+                    // sword, organize hotbar, count blocks
+                    inventoryManager.performFullAudit(player);
+
+                    if (getProfile().isDebugMode()) {
+                        plugin.getLogger().info("[DEBUG] " + getName()
+                                + " organized inventory (full audit)");
+                    }
+
+                    // Organizing is a one-shot action — SUCCESS lets the DecisionEngine
+                    // re-evaluate on the next cycle
+                    return NodeStatus.SUCCESS;
                 })
         ));
 
@@ -573,8 +760,8 @@ public class TrainerBot {
                         new CooldownDecorator(
                                 "defense-cooldown",
                                 new ActionNode("defense-tick", bot -> {
-                                    if (defenseManager != null) {
-                                        defenseManager.tick(TrainerBot.this);
+                                    if (defenseEngine != null) {
+                                        defenseEngine.tick(TrainerBot.this);
                                     }
                                     return NodeStatus.RUNNING;
                                 }),
@@ -703,7 +890,7 @@ public class TrainerBot {
         decisionEngine = null;
         approachManager = null;
         positionalManager = null;
-        defenseManager = null;
+        defenseEngine = null;
         enemyAnalyzer = null;
         bridgeMovementController = null;
         learningEngine = null;
@@ -851,7 +1038,7 @@ public class TrainerBot {
         // ── 15. Defense Manager interrupt check (every tick) — NEW ──
         // Check if enemy is bridging toward us — trigger defensive action
         tickSafe("defenseInterrupt", () -> {
-            if (defenseManager != null && threatMap != null
+            if (defenseEngine != null && threatMap != null
                     && stateMachine != null
                     && stateMachine.getCurrentState() != BotState.FIGHTING
                     && stateMachine.getCurrentState() != BotState.FLEEING) {
@@ -864,7 +1051,7 @@ public class TrainerBot {
                             double dist = botLoc.distance(nearest.currentPosition);
                             // If enemy is approaching on a bridge (10-25 block range, moving toward us)
                             if (dist > 8 && dist < 25 && nearest.getHorizontalSpeed() > 0.15) {
-                                defenseManager.forceEvaluate(TrainerBot.this);
+                                defenseEngine.forceEvaluate(TrainerBot.this);
                             }
                         }
                     }
@@ -1058,7 +1245,7 @@ public class TrainerBot {
     @Nullable public DecisionEngine getDecisionEngine() { return decisionEngine; }
     @Nullable public ApproachEngine getApproachManager() { return approachManager; }
     @Nullable public PositionalEngine getPositionalManager() { return positionalManager; }
-    @Nullable public DefensiveActionEngine getDefenseManager() { return defenseManager; }
+    @Nullable public DefensiveEngine getDefenseEngine() { return defenseEngine; }
     @Nullable public EnemyBehaviorAnalyzer getEnemyAnalyzer() { return enemyAnalyzer; }
     @Nullable public BridgeMovementController getBridgeMovementController() { return bridgeMovementController; }
     @Nullable public LearningEngine getLearningModule() { return learningEngine; }

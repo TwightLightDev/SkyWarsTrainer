@@ -15,13 +15,9 @@ import javax.annotation.Nonnull;
 public class FoodHandler {
 
     private final TrainerBot bot;
-    private boolean eating;
-    private int eatingTicksLeft;
 
     public FoodHandler(@Nonnull TrainerBot bot) {
         this.bot = bot;
-        this.eating = false;
-        this.eatingTicksLeft = 0;
     }
 
     /**
@@ -31,23 +27,12 @@ public class FoodHandler {
         Player player = bot.getPlayerEntity();
         if (player == null) return;
 
-        if (eating) {
-            eatingTicksLeft--;
-            if (eatingTicksLeft <= 0) {
-                eating = false;
-                NMSHelper.useItem(player, false);
-            }
-            return;
-        }
-
         // Check hunger level (below 80% = 16 hunger points)
         if (player.getFoodLevel() < 16) {
             int foodSlot = findFood(player);
             if (foodSlot >= 0) {
                 player.getInventory().setHeldItemSlot(foodSlot);
                 NMSHelper.useItem(player, true);
-                eating = true;
-                eatingTicksLeft = 32; // 1.6 seconds eating duration
             }
         }
     }
@@ -82,5 +67,7 @@ public class FoodHandler {
     }
 
     /** @return true if the bot is currently eating */
-    public boolean isEating() { return eating; }
+    public boolean isEating() {
+        return NMSHelper.isEating(bot.getPlayerEntity());
+    }
 }

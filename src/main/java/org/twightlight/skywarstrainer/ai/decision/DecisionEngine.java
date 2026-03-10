@@ -1,13 +1,18 @@
 package org.twightlight.skywarstrainer.ai.decision;
 
+import org.bukkit.Location;
+import org.bukkit.entity.LivingEntity;
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.decision.considerations.*;
 import org.twightlight.skywarstrainer.ai.learning.LearningEngine;
 import org.twightlight.skywarstrainer.ai.state.BotState;
 import org.twightlight.skywarstrainer.ai.state.BotStateMachine;
 import org.twightlight.skywarstrainer.api.events.BotDecisionEvent;
+import org.twightlight.skywarstrainer.awareness.IslandGraph;
+import org.twightlight.skywarstrainer.awareness.ThreatMap;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
+import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.util.MathUtil;
 import org.twightlight.skywarstrainer.util.RandomUtil;
 
@@ -136,13 +141,6 @@ public class DecisionEngine {
      * Performs a full utility evaluation: scores all actions, applies positional
      * strategy bonuses, counter-play modifiers, personality multipliers, and
      * decision noise, then selects the best action and transitions the state machine.
-     *
-     * <p><b>Phase 7 Integration:</b> After computing base scores (step 3), now applies:
-     * <ul>
-     *   <li>Step 3b: PositionalEngine utility bonuses (e.g., IslandRotation boosts LOOT ×2.0)</li>
-     *   <li>Step 3c: CounterModifiers utility multipliers from EnemyBehaviorAnalyzer
-     *       (e.g., if enemy is a rusher, CAMP ×1.5)</li>
-     * </ul>
      * These are applied as post-scoring multipliers before personality and noise.</p>
      */
     private void evaluate() {
@@ -213,6 +211,8 @@ public class DecisionEngine {
             if (newState != null) {
                 stateMachine.transitionTo(newState, "Utility: " + bestAction.name()
                         + String.format(" (%.3f)", lastScores.getOrDefault(bestAction, 0.0)));
+            } else {
+                executeImmediateAction(bestAction);
             }
             lastChosenAction = bestAction;
         }
@@ -482,6 +482,12 @@ public class DecisionEngine {
 
     /**
      * Maps a utility action to the corresponding BotState for state machine transition.
+     *
+     * FIX for issues #10-#13:
+     * - HEAL, EAT_FOOD, DRINK_POTION now map to CONSUMING instead of IDLE
+     * - ORGANIZE_INVENTORY now maps to ORGANIZING instead of IDLE
+     * - USE_ENDER_PEARL still returns null but is handled by executeImmediateAction()
+     * - ENCHANTING already mapped correctly; the BT itself was the problem (fixed in TrainerBot)
      */
     @Nullable
     private BotState actionToState(@Nonnull BotAction action) {
@@ -506,7 +512,7 @@ public class DecisionEngine {
             case HEAL:
             case EAT_FOOD:
             case DRINK_POTION:
-                return BotState.IDLE; // Healing is handled within states
+                return BotState.CONSUMING;
 
             case ENCHANT:
                 return BotState.ENCHANTING;
@@ -518,14 +524,138 @@ public class DecisionEngine {
             case HUNT_PLAYER:
                 return BotState.HUNTING;
 
+            case ORGANIZE_INVENTORY:
+                return BotState.ORGANIZING;
+
             case USE_ENDER_PEARL:
-                return null; // Pearl is an immediate action, not a state
+                return null;
 
             case BREAK_ENEMY_BRIDGE:
-                return BotState.HUNTING; // Bridge breaking is done while hunting
+                return BotState.HUNTING;
 
             default:
                 return BotState.IDLE;
+        }
+    }
+
+    /**
+     * Executes actions that are immediate (single-tick) and don't need a state transition.
+     * Called from evaluate() when actionToState() returns null.
+     *
+     * FIX for issue #12: USE_ENDER_PEARL was a dead action — selected by the utility
+     * system, returned null from actionToState(), and then nothing happened. Now
+     * the pearl is actually thrown here.
+     *
+     * @param action the immediate action to execute
+     */
+    private void executeImmediateAction(@Nonnull BotAction action) {
+        switch (action) {
+            case USE_ENDER_PEARL:
+                executeEnderPearlThrow();
+                break;
+            default:
+                // No other immediate actions currently
+                break;
+        }
+    }
+
+    /**
+     * Actually throws an ender pearl toward the best target location.
+     * Targets the nearest threat's position, or mid island if no threat is visible.
+     */
+    private void executeEnderPearlThrow() {
+        org.bukkit.entity.Player player = bot.getPlayerEntity();
+        if (player == null) return;
+
+        // Find ender pearl in inventory
+        int pearlSlot = -1;
+        for (int i = 0; i < 36; i++) {
+            org.bukkit.inventory.ItemStack item = player.getInventory().getItem(i);
+            if (item != null && item.getType() == org.bukkit.Material.ENDER_PEARL) {
+                pearlSlot = i;
+                break;
+            }
+        }
+        if (pearlSlot < 0) return; // No pearl found
+
+        // Determine throw target
+        Location target = null;
+
+        // Priority 1: Throw at nearest threat (escape or engage)
+        ThreatMap tm = bot.getThreatMap();
+        if (tm != null) {
+            ThreatMap.ThreatEntry nearest = tm.getNearestThreat();
+            if (nearest != null && nearest.currentPosition != null) {
+                LivingEntity entity = bot.getLivingEntity();
+                if (entity != null) {
+                    double dist = entity.getLocation().distance(nearest.currentPosition);
+                    // If fleeing (health low), throw AWAY from threat
+                    double healthFrac = entity.getHealth() / entity.getMaxHealth();
+                    if (healthFrac < bot.getDifficultyProfile().getFleeHealthThreshold()) {
+                        // Throw away: opposite direction from threat
+                        Location botLoc = entity.getLocation();
+                        double dx = botLoc.getX() - nearest.currentPosition.getX();
+                        double dz = botLoc.getZ() - nearest.currentPosition.getZ();
+                        double len = Math.sqrt(dx * dx + dz * dz);
+                        if (len > 0.01) {
+                            dx /= len; dz /= len;
+                            target = botLoc.clone().add(dx * 20, 2, dz * 20);
+                        }
+                    } else if (dist > 8) {
+                        // Throw toward threat to close distance
+                        target = nearest.currentPosition.clone().add(0, 1, 0);
+                    }
+                }
+            }
+        }
+
+        // Priority 2: Throw toward mid-island
+        if (target == null && bot.getIslandGraph() != null) {
+            IslandGraph.Island mid = bot.getIslandGraph().getMidIsland();
+            if (mid != null && mid.center != null) {
+                target = mid.center.clone().add(0, 1, 0);
+            }
+        }
+
+        if (target == null) return; // Nowhere useful to throw
+
+        // Switch to pearl slot, look at target, and throw
+        int previousSlot = player.getInventory().getHeldItemSlot();
+        player.getInventory().setHeldItemSlot(pearlSlot < 9 ? pearlSlot : previousSlot);
+
+        // If pearl isn't in hotbar, move it there first
+        if (pearlSlot >= 9) {
+            org.bukkit.inventory.ItemStack pearl = player.getInventory().getItem(pearlSlot);
+            org.bukkit.inventory.ItemStack swap = player.getInventory().getItem(previousSlot);
+            player.getInventory().setItem(previousSlot, pearl);
+            player.getInventory().setItem(pearlSlot, swap);
+        }
+
+        // Look at target and throw
+        MovementController mc = bot.getMovementController();
+        if (mc != null) {
+            mc.setLookTarget(target);
+        }
+
+        // Launch the pearl via NMS/entity throw
+        org.bukkit.entity.EnderPearl pearl = player.launchProjectile(
+                org.bukkit.entity.EnderPearl.class,
+                target.toVector().subtract(player.getEyeLocation().toVector()).normalize().multiply(1.5));
+
+        // Consume the pearl from inventory
+        org.bukkit.inventory.ItemStack pearlItem = player.getInventory().getItemInHand();
+        if (pearlItem != null && pearlItem.getType() == org.bukkit.Material.ENDER_PEARL) {
+            if (pearlItem.getAmount() > 1) {
+                pearlItem.setAmount(pearlItem.getAmount() - 1);
+            } else {
+                player.getInventory().setItemInHand(null);
+            }
+        }
+
+        if (bot.getProfile().isDebugMode()) {
+            SkyWarsTrainer.getInstance().getLogger().info(
+                    "[DEBUG] " + bot.getName() + " threw ender pearl toward " +
+                            String.format("(%.1f, %.1f, %.1f)", target.getX(), target.getY(), target.getZ()));
         }
     }
 
