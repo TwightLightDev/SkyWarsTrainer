@@ -494,7 +494,7 @@ public class TrainerBot {
                             if (len > 0.01) {
                                 dx /= len; dz /= len;
                                 Location fleeTarget = botLoc.clone().add(dx * 10, 0, dz * 10);
-                                mc.setMoveTarget(fleeTarget);
+                                mc.setMoveTarget(fleeTarget, MovementController.MovementAuthority.FLEE);
                             }
                         }
                     }
@@ -575,7 +575,7 @@ public class TrainerBot {
                             if (movementController != null) {
                                 // Target one block adjacent to the table (not inside it)
                                 Location walkTarget = tableLocation.clone().add(0.5, 0, 1.5);
-                                movementController.setMoveTarget(walkTarget);
+                                movementController.setMoveTarget(walkTarget, MovementController.MovementAuthority.AI_GENERAL);
                                 movementController.setLookTarget(tableLocation.clone().add(0.5, 0.75, 0.5));
                             }
                             return NodeStatus.RUNNING;
@@ -755,7 +755,7 @@ public class TrainerBot {
                                             MovementController mc = getMovementController();
                                             if (mc != null) {
                                                 mc.getSprintController().startSprinting();
-                                                mc.setMoveTarget(target.getLocation());
+                                                mc.setMoveTarget(target.getLocation(), MovementController.MovementAuthority.HUNTING);
                                                 mc.setLookTarget(target.getLocation().add(0, 1.0, 0));
                                             }
                                             return NodeStatus.RUNNING;

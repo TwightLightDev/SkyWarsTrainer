@@ -233,12 +233,13 @@ public class ChestLocator {
             chest.lootedByBot = false;
             chest.lootedByEnemy = false;
             chest.itemQualityRating = -1;
+            chest.failed = false;  // [FIX-A3] Reset failure flag on refill
         }
     }
 
-    // ═════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
     //  INNER: ChestInfo
-    // ═════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
 
     /** Metadata about a single chest. */
     public static class ChestInfo {
@@ -257,19 +258,30 @@ public class ChestLocator {
         /** Quality rating of items found (0-10, set after looting). */
         public int itemQualityRating;
 
+        /**
+         * Whether a loot attempt on this chest has failed (e.g., timeout due to
+         * unreachable pathing). Set by LootEngine when a loot attempt times out.
+         * Reset by {@link ChestLocator#markAllUnlooted()} during chest refills,
+         * so previously-unreachable chests get a fresh chance after refill.
+         */
+        public boolean failed;  // [FIX-A3] Per-chest failure tracking
+
         public ChestInfo(@Nonnull Location location) {
             this.location = location;
             this.isLooted = false;
             this.lootedByBot = false;
             this.lootedByEnemy = false;
-            this.itemQualityRating = -1; // Unknown
+            this.itemQualityRating = -1;
+            this.failed = false;
         }
 
         @Override
         public String toString() {
-            return "ChestInfo{" + location.getBlockX() + "," + location.getBlockY() + "," + location.getBlockZ()
-                    + ", looted=" + isLooted + "}";
+            return "ChestInfo{" + location.getBlockX() + "," + location.getBlockY()
+                    + "," + location.getBlockZ()
+                    + ", looted=" + isLooted + ", failed=" + failed + "}";
         }
     }
+
 }
 

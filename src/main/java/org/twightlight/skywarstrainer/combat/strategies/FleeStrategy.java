@@ -116,8 +116,8 @@ public class FleeStrategy implements CombatStrategy {
                     .add(mc.getForwardDirection().multiply(10.0));
         }
 
-        // Sprint away
-        mc.setMoveTarget(fleeDirection);
+        // [FIX-C1] Use FLEE authority — highest priority, overrides COMBAT and DEFENSE
+        mc.setMoveTarget(fleeDirection, MovementController.MovementAuthority.FLEE);
         mc.getSprintController().startSprinting();
 
         // Eat golden apple while fleeing

@@ -424,13 +424,10 @@ public class MovementController {
      * @param target the target location, or null to stop
      */
     public void setMoveTarget(@Nullable Location target) {
-        this.moveTarget = target;
-        if (target != null) {
-            this.movingForward = false;
-            this.movingBackward = false;
-        } else {
-            this.inSprintJumpCycle = false;
-        }
+        // [FIX-C1 hardening] Delegate to authority-aware overload with AI_GENERAL.
+        // Previously this bypassed the authority system entirely, causing movement
+        // flickering when multiple systems called it on the same tick.
+        setMoveTarget(target, MovementAuthority.AI_GENERAL);
     }
 
     /**

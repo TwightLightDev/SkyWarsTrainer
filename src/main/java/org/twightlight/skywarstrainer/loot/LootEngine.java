@@ -1,3 +1,8 @@
+// ── LootEngine.java ──
+// Two changes:
+// 1. resetLoot() uses raw setMoveTarget(null) — fix to use LOOT authority
+// 2. Remove failedChests Set entirely — move the "failed" flag to ChestInfo
+
 package org.twightlight.skywarstrainer.loot;
 
 import org.bukkit.Location;
@@ -34,8 +39,9 @@ public class LootEngine {
     private LootPhase phase;
     private int lootTicks;
     private boolean strategyInitialized;
-    // [FIX-A3] Track chests that failed (timed out) to prevent infinite retry
-    private final java.util.Set<Location> failedChests = new java.util.HashSet<>();
+    // [FIX-A3 REMOVED] failedChests set removed — failure tracking is now
+    // stored per-chest in ChestInfo.failed, which is automatically reset
+    // by ChestLocator.markAllUnlooted() during chest refills.
 
     private static final int MAX_LOOT_TICKS = 200;
     private static final double INTERACT_DISTANCE = 3.0;
@@ -71,6 +77,12 @@ public class LootEngine {
         lootTicks++;
 
         if (lootTicks > MAX_LOOT_TICKS) {
+            // [FIX-A3] Mark the target chest as failed before resetting.
+            // The failed flag lives on ChestInfo now, so it will be cleared
+            // automatically when markAllUnlooted() is called on chest refill.
+            if (targetChest != null) {
+                targetChest.failed = true;
+            }
             resetLoot();
             return;
         }
@@ -100,8 +112,9 @@ public class LootEngine {
 
         ChestLocator.ChestInfo nearest = locator.getNearestUnlootedChest();
 
-        // [FIX-A3] Skip chests that previously failed (timed out / unreachable)
-        if (nearest != null && failedChests.contains(nearest.location)) {
+        // [FIX-A3] Skip chests that previously failed (timed out / unreachable).
+        // Now uses the per-chest `failed` flag instead of a separate Set.
+        if (nearest != null && nearest.failed) {
             // This chest previously failed — mark it as "looted" in the locator
             // so it won't be returned again, and try the next one
             locator.markLooted(nearest.location);
@@ -111,7 +124,7 @@ public class LootEngine {
         if (nearest == null) return;
 
         // [FIX-A3] Also check if the new nearest is failed
-        if (failedChests.contains(nearest.location)) {
+        if (nearest.failed) {
             locator.markLooted(nearest.location);
             return; // No viable chests — BT will return FAILURE
         }
@@ -225,7 +238,6 @@ public class LootEngine {
             switch (personality.toUpperCase()) {
                 case "AGGRESSIVE":
                 case "BERSERKER":
-                    // At medium+ difficulty, aggressive/berserker bots break chests
                     if (diff.getDifficulty().ordinal() >=
                             org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty.MEDIUM.ordinal()) {
                         return findStrategy("AggressiveLoot");
@@ -252,14 +264,6 @@ public class LootEngine {
     }
 
     private void resetLoot() {
-        // [FIX-A3] If we're resetting due to timeout (lootTicks > MAX_LOOT_TICKS)
-        // and we had a target chest, mark it as "failed" so we don't retry it
-        // immediately. This prevents the infinite loop where the bot times out
-        // on an unreachable chest, then immediately re-targets the same chest.
-        if (lootTicks >= MAX_LOOT_TICKS && targetChest != null) {
-            failedChests.add(targetChest.location); // [FIX-A3]
-        }
-
         phase = LootPhase.IDLE;
         targetChest = null;
         if (activeStrategy != null) {
@@ -269,7 +273,8 @@ public class LootEngine {
         lootTicks = 0;
         strategyInitialized = false;
         MovementController mc = bot.getMovementController();
-        if (mc != null) mc.setMoveTarget(null);
+        // [FIX-C1] Use LOOT authority when releasing movement
+        if (mc != null) mc.setMoveTarget(null, MovementController.MovementAuthority.LOOT);
     }
 
 

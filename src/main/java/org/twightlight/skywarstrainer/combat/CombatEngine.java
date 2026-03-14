@@ -431,7 +431,8 @@ public class CombatEngine {
                     Location botLoc = botEntity.getLocation();
                     Location safeTarget = botLoc.clone().add(
                             -Math.sin(safeYawRad) * 3, 0, Math.cos(safeYawRad) * 3);
-                    mc.setMoveTarget(safeTarget);
+                    // [FIX-C1] Use COMBAT authority for void-edge repositioning
+                    mc.setMoveTarget(safeTarget, MovementController.MovementAuthority.COMBAT);
                 }
             }
         }

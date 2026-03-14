@@ -177,7 +177,8 @@ public class BridgeCutter implements DefensiveBehavior {
         if (dist > 4.0) {
             // Need to walk closer
             mc.getSprintController().startSprinting();
-            mc.setMoveTarget(target);
+            // [FIX-C1] Use DEFENSE authority for bridge-cutting movement
+            mc.setMoveTarget(target, MovementController.MovementAuthority.DEFENSE);
             mc.setLookTarget(target);
         } else {
             // Close enough — start breaking
