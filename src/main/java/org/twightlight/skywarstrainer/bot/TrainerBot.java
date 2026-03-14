@@ -1024,21 +1024,27 @@ public class TrainerBot {
             if (decisionEngine != null) decisionEngine.tick();
         });
 
-        // ── 5. Behavior Tree (every 2-4 ticks) ──
+        // Step 5: Behavior Tree
         if (behaviorTreeTimer != null && behaviorTreeTimer.tick()) {
             tickSafe("behaviorTree", () -> {
                 if (stateMachine != null) {
-                    // [FIX-B2/B3] Check BT return status. If the tree completed
-                    // (SUCCESS or FAILURE), immediately trigger a DecisionEngine
-                    // re-evaluation so the bot doesn't idle for up to 10 ticks
-                    // in a completed/failed state.
                     NodeStatus status = stateMachine.tick();
-                    if (status != NodeStatus.RUNNING && decisionEngine != null) {
-                        decisionEngine.triggerInterrupt(); // [FIX-B2/B3]
+                    if (status != NodeStatus.RUNNING) {
+                        // [FIX] Stop all movement when BT completes/fails to prevent
+                        // micro-lurch from stale move targets during the gap between
+                        // BT completion and the next DecisionEngine evaluation.
+                        if (movementController != null) {
+                            movementController.stopAll();
+                            movementController.resetAuthority();
+                        }
+                        if (decisionEngine != null) {
+                            decisionEngine.triggerInterrupt();
+                        }
                     }
                 }
             });
         }
+
 
         // ── 6. Void/edge detection (every 5 ticks) ──
         if (voidDetectTimer != null && voidDetectTimer.tick()) {

@@ -53,13 +53,19 @@ public class ConfigManager {
     private boolean staggerBotTicks;
     private boolean cacheMapScan;
     private long maxTotalMsPerTick;
-    private String gameHookPlugin;
     private boolean useRandomSkins;
     private List<String> skinList;
     private List<String> namePrefixes;
     private List<String> nameRoots;
     private List<String> nameSuffixes;
-
+    private int chatCooldownSeconds;
+    private int chatTypingSpeedMin;
+    private int chatTypingSpeedMax;
+    private int chatMaxDelayTicks;
+    private boolean autoFillEnabled;
+    private int autoFillMinPlayers;
+    private int botWarmupSeconds;
+    private long subsystemTimeoutMs;
     /**
      * Creates a new ConfigManager for the given plugin.
      *
@@ -163,14 +169,21 @@ public class ConfigManager {
         this.cacheMapScan = mainConfig.getBoolean("performance.cache-map-scan", true);
         this.maxTotalMsPerTick = mainConfig.getLong("performance.max-total-ms-per-tick", 8);
 
-        this.gameHookPlugin = mainConfig.getString("game-hook.plugin", "auto");
-
         this.useRandomSkins = mainConfig.getBoolean("skins.use-random-skins", true);
         this.skinList = mainConfig.getStringList("skins.skin-list");
 
         this.namePrefixes = mainConfig.getStringList("random-names.prefixes");
         this.nameRoots = mainConfig.getStringList("random-names.roots");
         this.nameSuffixes = mainConfig.getStringList("random-names.suffixes");
+
+        this.chatCooldownSeconds = mainConfig.getInt("chat.cooldown-seconds", 5);
+        this.chatTypingSpeedMin = mainConfig.getInt("chat.typing-speed-min-ms", 20);
+        this.chatTypingSpeedMax = mainConfig.getInt("chat.typing-speed-max-ms", 80);
+        this.chatMaxDelayTicks = mainConfig.getInt("chat.max-delay-ticks", 80);
+        this.autoFillEnabled = mainConfig.getBoolean("general.auto-fill-enabled", false);
+        this.autoFillMinPlayers = mainConfig.getInt("general.auto-fill-min-players", 4);
+        this.botWarmupSeconds = mainConfig.getInt("general.bot-warmup-seconds", 0);
+        this.subsystemTimeoutMs = mainConfig.getLong("performance.subsystem-timeout-ms", 3);
     }
 
     // ─── Reloading ──────────────────────────────────────────────
@@ -253,14 +266,6 @@ public class ConfigManager {
     /** @return max total milliseconds per tick for all bot processing */
     public long getMaxTotalMsPerTick() {
         return maxTotalMsPerTick;
-    }
-
-    // ─── Accessors: Game Hook ───────────────────────────────────
-
-    /** @return the configured game hook plugin name or "auto" */
-    @Nonnull
-    public String getGameHookPlugin() {
-        return gameHookPlugin;
     }
 
     // ─── Accessors: Skins ───────────────────────────────────────

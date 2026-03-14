@@ -12,9 +12,6 @@ general:
   enable-chat: true
   enable-skins: true
   debug-mode: false
-  # When true, bots auto-spawn when a game starts if player count < min-fill
-  auto-fill-enabled: false
-  auto-fill-min-players: 4
   # Seconds after game start before bots become aggressive (overrides grace in arena)
   bot-warmup-seconds: 0
 
@@ -27,9 +24,6 @@ performance:
   subsystem-timeout-ms: 3
   # Enable performance metric logging every N ticks (0 = disabled)
   perf-log-interval: 0
-
-game-hook:
-  plugin: "auto"
 
 # ══════════════════════════════════════════════════════════════
 #  SKIN SYSTEM v2 — Multiple Skin Sources

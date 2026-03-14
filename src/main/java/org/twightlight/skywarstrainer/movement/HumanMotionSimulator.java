@@ -144,13 +144,15 @@ public class HumanMotionSimulator {
                 + currentVel.getZ() * currentVel.getZ());
 
         if (horizontalSpeed < 0.01) {
-            // Already stopped
+            // [FIX-2D] Fully zero out horizontal velocity to prevent drift
+            currentVel.setX(0);
+            currentVel.setZ(0);
+            entity.setVelocity(currentVel);
             wasMoving = false;
             accelerationFactor = 0.0;
             return;
         }
 
-        // Decelerate: reduce horizontal velocity by ~50% per tick
         DifficultyProfile diff = bot.getDifficultyProfile();
         double decelFactor = MathUtil.lerp(0.4, 0.6, diff.getDifficulty().asFraction());
 
@@ -158,11 +160,13 @@ public class HumanMotionSimulator {
         currentVel.setZ(currentVel.getZ() * decelFactor);
         entity.setVelocity(currentVel);
 
-        if (horizontalSpeed < 0.02) {
+        // [FIX-2D] Lowered threshold to match the early-return check
+        if (horizontalSpeed * decelFactor < 0.01) {
             wasMoving = false;
             accelerationFactor = 0.0;
         }
     }
+
 
     /**
      * Returns the current acceleration factor (0.0 = just started, 1.0 = full speed).

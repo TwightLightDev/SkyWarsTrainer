@@ -134,11 +134,15 @@ public class WaterMLGController {
         // Trigger MLG when close enough to the ground
         if (distanceToGround <= MLG_TRIGGER_HEIGHT && distanceToGround > 0.5) {
             mlgInProgress = true;
-
-            // Switch to water bucket hotbar slot
             player.getInventory().setHeldItemSlot(waterSlot);
 
-            // Place water at the block below
+            // [FIX-2E] Aim straight down for MLG
+            MovementController mc = bot.getMovementController();
+            if (mc != null) {
+                mc.setCurrentPitch(90.0f); // Look straight down
+                mc.setLookTarget(null);     // Override any existing look target
+            }
+
             Location targetBlock = entity.getLocation().clone();
             targetBlock.setY(groundY);
             Block block = targetBlock.getBlock();

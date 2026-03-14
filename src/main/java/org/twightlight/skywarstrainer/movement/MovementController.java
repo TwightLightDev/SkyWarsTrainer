@@ -149,38 +149,40 @@ public class MovementController {
         // Update sub-controllers
         sprintController.tick();
         jumpController.tick();
+        strafeController.tick();
         waterMLGController.tick();
 
         // Update look direction
         updateLookDirection(entity);
 
         if (frozen) {
-            // When frozen, still update look but don't move
             applyLookToEntity(entity);
             return;
         }
 
-        // Calculate and apply movement
         if (moveTarget != null || movingForward || movingBackward) {
-            // Check if sprint-jump travel should be active
             updateSprintJumpTravel(entity);
             applyMovement(entity);
         } else {
-            // No movement target — stop sprint-jump cycle and decelerate
             inSprintJumpCycle = false;
             humanMotion.applyDeceleration(entity);
         }
 
-        // Apply sneaking state
+        if (moveTarget != null || movingForward || movingBackward) {
+            updateSprintJumpTravel(entity);
+            applyMovement(entity);
+        } else if (strafeController.isStrafing()) {
+            Vector rightDir = getRightDirection();
+            Vector strafeVelocity = strafeController.getStrafeVelocity(rightDir);
+            strafeVelocity.setY(entity.getVelocity().getY());
+            entity.setVelocity(strafeVelocity);
+        } else {
+            inSprintJumpCycle = false;
+            humanMotion.applyDeceleration(entity);
+        }
+
         updateSneakState(entity);
-
-        // Apply the final look angles to the entity
         applyLookToEntity(entity);
-
-        // In tick() method, after sprintController.tick():
-
-        // Update strafe controller (must be ticked for combat strafing to work)
-        strafeController.tick();
 
     }
 
@@ -354,7 +356,6 @@ public class MovementController {
         Vector moveDirection;
         if (moveTarget != null) {
             moveDirection = MathUtil.directionTo(currentLoc, moveTarget);
-            // Check if we've reached the target (within 0.5 blocks)
             if (MathUtil.horizontalDistance(currentLoc, moveTarget) < 0.5) {
                 moveTarget = null;
                 inSprintJumpCycle = false;
@@ -362,32 +363,46 @@ public class MovementController {
                 return;
             }
         } else if (movingForward) {
-            // Move in the direction the bot is currently facing
             moveDirection = getForwardDirection();
         } else if (movingBackward) {
-            // Move opposite to facing direction
             moveDirection = getForwardDirection().multiply(-1);
         } else {
+            if (strafeController.isStrafing()) {
+                Vector rightDir = getRightDirection();
+                Vector strafeVelocity = strafeController.getStrafeVelocity(rightDir);
+                strafeVelocity.setY(entity.getVelocity().getY());
+                entity.setVelocity(strafeVelocity);
+            } else {
+                humanMotion.applyDeceleration(entity);
+            }
             return;
         }
 
         // Calculate base speed
         double baseSpeed = getBaseMovementSpeed();
         if (sneaking) {
-            baseSpeed *= 0.3; // Sneaking speed multiplier (vanilla is ~0.3)
+            baseSpeed *= 0.3;
         }
         if (sprintController.isSprinting()) {
-            baseSpeed *= 1.3; // Sprint speed multiplier (vanilla is ~1.3)
+            baseSpeed *= 1.3;
         }
         baseSpeed *= speedMultiplier;
 
         // Apply human motion simulation (noise, acceleration)
         Vector velocity = humanMotion.processMovement(entity, moveDirection, baseSpeed);
 
+        // [FIX-2A] Apply strafe velocity during combat
+        if (strafeController.isStrafing()) {
+            Vector rightDir = getRightDirection();
+            Vector strafeVelocity = strafeController.getStrafeVelocity(rightDir);
+            velocity.add(strafeVelocity);
+        }
+
         // Apply the velocity
         velocity.setY(entity.getVelocity().getY()); // Preserve vertical velocity
         entity.setVelocity(velocity);
     }
+
 
     /**
      * Updates the sneaking state on the entity via NMS.
