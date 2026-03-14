@@ -1,8 +1,8 @@
 package org.twightlight.skywarstrainer.game;
 
 import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Player;
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.personality.Personality;
 import org.twightlight.skywarstrainer.ai.personality.PersonalityProfile;

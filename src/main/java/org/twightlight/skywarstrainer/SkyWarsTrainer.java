@@ -1,6 +1,10 @@
 package org.twightlight.skywarstrainer;
 
-import org.twightlight.skywarstrainer.ai.learning.*;
+import net.citizensnpcs.api.CitizensAPI;
+import net.citizensnpcs.api.trait.TraitInfo;
+import org.bukkit.Bukkit;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.twightlight.skywarstrainer.ai.learning.LearningManager;
 import org.twightlight.skywarstrainer.api.SkyWarsTrainerAPI;
 import org.twightlight.skywarstrainer.bot.BotManager;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
@@ -11,12 +15,6 @@ import org.twightlight.skywarstrainer.config.DifficultyConfig;
 import org.twightlight.skywarstrainer.config.PersonalityConfig;
 import org.twightlight.skywarstrainer.game.BotChatManager;
 import org.twightlight.skywarstrainer.game.GameEventListener;
-
-import net.citizensnpcs.api.CitizensAPI;
-import net.citizensnpcs.api.trait.TraitInfo;
-
-import org.bukkit.Bukkit;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.twightlight.skywarstrainer.util.DebugLogger;
 
 import javax.annotation.Nonnull;

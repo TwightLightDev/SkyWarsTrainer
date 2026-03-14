@@ -9,7 +9,6 @@ import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.util.RandomUtil;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 /**
  * Arranges the hotbar like a real player based on hotbarOrganization skill.

@@ -2,7 +2,6 @@ package org.twightlight.skywarstrainer.ai.personality;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.EnumMap;
 import java.util.Map;
 
 /**

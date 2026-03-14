@@ -1,10 +1,8 @@
 package org.twightlight.skywarstrainer.ai.learning;
 
 import org.twightlight.skywarstrainer.ai.decision.DecisionEngine.BotAction;
-import org.twightlight.skywarstrainer.util.DebugLogger;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;

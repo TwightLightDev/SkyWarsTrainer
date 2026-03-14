@@ -9,7 +9,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
-import org.twightlight.skywarstrainer.util.MathUtil;
 import org.twightlight.skywarstrainer.util.NMSHelper;
 import org.twightlight.skywarstrainer.util.RandomUtil;
 

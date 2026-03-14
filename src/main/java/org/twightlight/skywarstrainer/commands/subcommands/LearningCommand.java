@@ -4,12 +4,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.decision.DecisionEngine.BotAction;
-import org.twightlight.skywarstrainer.ai.learning.LearningConfig;
-import org.twightlight.skywarstrainer.ai.learning.LearningManager;
-import org.twightlight.skywarstrainer.ai.learning.LearningEngine;
-import org.twightlight.skywarstrainer.ai.learning.MemoryBank;
-import org.twightlight.skywarstrainer.ai.learning.ReplayBuffer;
-import org.twightlight.skywarstrainer.ai.learning.StateEncoder;
+import org.twightlight.skywarstrainer.ai.learning.*;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.commands.CommandHandler;
 
@@ -17,11 +12,7 @@ import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * /swt learning <subcommand> — Observability and control commands for the

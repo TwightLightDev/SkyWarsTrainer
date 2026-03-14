@@ -2,7 +2,6 @@ package org.twightlight.skywarstrainer.ai.decision.considerations;
 
 import org.twightlight.skywarstrainer.ai.decision.DecisionContext;
 import org.twightlight.skywarstrainer.ai.decision.UtilityScorer;
-import org.twightlight.skywarstrainer.util.MathUtil;
 
 import javax.annotation.Nonnull;
 

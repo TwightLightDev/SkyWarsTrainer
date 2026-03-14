@@ -1,9 +1,8 @@
 package org.twightlight.skywarstrainer.config;
 
-import org.twightlight.skywarstrainer.SkyWarsTrainer;
-
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.twightlight.skywarstrainer.SkyWarsTrainer;
 
 import javax.annotation.Nonnull;
 import java.io.File;

@@ -1,7 +1,5 @@
 package org.twightlight.skywarstrainer.ai.learning;
 
-import org.twightlight.skywarstrainer.util.MathUtil;
-
 import javax.annotation.Nonnull;
 import java.util.List;
 

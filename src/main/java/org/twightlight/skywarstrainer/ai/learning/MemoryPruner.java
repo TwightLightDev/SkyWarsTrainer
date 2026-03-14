@@ -8,12 +8,7 @@ import org.twightlight.skywarstrainer.ai.decision.DecisionEngine.BotAction;
 import org.twightlight.skywarstrainer.util.DebugLogger;
 
 import javax.annotation.Nonnull;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Implements the 5-tier brain-like forgetting system for the MemoryBank.

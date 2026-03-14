@@ -2,7 +2,6 @@ package org.twightlight.skywarstrainer.ai.state;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import org.twightlight.skywarstrainer.ai.state.BotState;
 /**
  * Immutable record of a state-machine transition that has occurred.
  *

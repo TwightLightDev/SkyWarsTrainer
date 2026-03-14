@@ -1,7 +1,6 @@
 package org.twightlight.skywarstrainer.combat.strategies;
 
 import org.twightlight.skywarstrainer.bot.TrainerBot;
-import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 
 import javax.annotation.Nonnull;
 

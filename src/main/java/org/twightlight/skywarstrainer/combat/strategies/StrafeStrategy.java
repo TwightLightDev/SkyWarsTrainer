@@ -1,6 +1,5 @@
 package org.twightlight.skywarstrainer.combat.strategies;
 
-import org.bukkit.Location;
 import org.bukkit.entity.LivingEntity;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;

@@ -4,7 +4,6 @@ import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.twightlight.skywarstrainer.awareness.IslandGraph;
 import org.twightlight.skywarstrainer.awareness.ThreatMap;
-import org.twightlight.skywarstrainer.awareness.VoidDetector;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.util.MathUtil;
 import org.twightlight.skywarstrainer.util.RandomUtil;

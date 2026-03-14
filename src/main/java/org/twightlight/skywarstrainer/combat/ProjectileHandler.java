@@ -8,12 +8,10 @@ import org.bukkit.util.Vector;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.util.MathUtil;
-import org.twightlight.skywarstrainer.util.NMSHelper;
 import org.twightlight.skywarstrainer.util.PacketUtil;
 import org.twightlight.skywarstrainer.util.RandomUtil;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.List;
 
 /**

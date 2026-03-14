@@ -2,7 +2,6 @@ package org.twightlight.skywarstrainer.util;
 
 import net.minecraft.server.v1_8_R3.EntityLiving;
 import net.minecraft.server.v1_8_R3.EntityPlayer;
-
 import net.minecraft.server.v1_8_R3.ItemStack;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -18,7 +17,6 @@ import org.bukkit.util.Vector;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.lang.reflect.Field;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 

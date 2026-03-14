@@ -206,20 +206,14 @@ public class DecisionEngine {
         }
 
         // 8. Map action to state and transition
-        // [FIX-B1] When the same FIGHT action is chosen twice in a row but the
-        // underlying target may have changed (e.g., target died), we need to detect
-        // this. We check if the combat target is still valid and force a re-evaluation
-        // if the action is fight-related and the target is stale.
         if (bestAction != null) {
             boolean shouldTransition = (bestAction != lastChosenAction);
 
-            // [FIX-B1] Same fight action — check if target needs refresh
             if (!shouldTransition && isFightAction(bestAction)) {
                 if (bot.getCombatEngine() != null) {
                     LivingEntity currentTarget = bot.getCombatEngine().getCurrentTarget();
                     if (currentTarget == null || currentTarget.isDead()) {
-                        // Target is dead/gone — force state machine restart so combat
-                        // engine picks a new target immediately instead of waiting 10 ticks
+
                         shouldTransition = true;
                         if (stateMachine != null) {
                             stateMachine.forceTransition(
@@ -227,7 +221,6 @@ public class DecisionEngine {
                                     "Target dead, re-engaging: " + bestAction.name());
                         }
                         lastChosenAction = bestAction;
-                        // Skip the normal transition below since we force-transitioned
                         LearningEngine lm2 = bot.getLearningModule();
                         if (lm2 != null) {
                             lm2.onDecisionMade(bestAction, new HashMap<>(lastScores));

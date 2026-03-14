@@ -5,7 +5,6 @@
 package org.twightlight.skywarstrainer.ai.learning;
 
 import com.google.gson.*;
-
 import org.bukkit.Bukkit;
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 
@@ -15,7 +14,6 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
 

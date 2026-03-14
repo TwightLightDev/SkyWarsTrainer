@@ -1,12 +1,9 @@
 package org.twightlight.skywarstrainer.inventory;
 
-import org.bukkit.Material;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 /**
  * Central inventory management for a trainer bot.

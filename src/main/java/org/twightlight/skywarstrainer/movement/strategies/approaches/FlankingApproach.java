@@ -6,7 +6,10 @@ import org.twightlight.skywarstrainer.awareness.IslandGraph;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.bridging.BridgeEngine;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
-import org.twightlight.skywarstrainer.movement.strategies.*;
+import org.twightlight.skywarstrainer.movement.strategies.ApproachContext;
+import org.twightlight.skywarstrainer.movement.strategies.ApproachPath;
+import org.twightlight.skywarstrainer.movement.strategies.ApproachStrategy;
+import org.twightlight.skywarstrainer.movement.strategies.ApproachTickResult;
 import org.twightlight.skywarstrainer.util.DebugLogger;
 import org.twightlight.skywarstrainer.util.RandomUtil;
 

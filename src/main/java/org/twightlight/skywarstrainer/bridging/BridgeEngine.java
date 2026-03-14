@@ -8,7 +8,6 @@ import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.bridging.movement.BridgeMovementController;
 import org.twightlight.skywarstrainer.bridging.movement.BridgeMovementDirective;
 import org.twightlight.skywarstrainer.bridging.strategies.*;
-import org.twightlight.skywarstrainer.bridging.strategies.BridgeStrategy;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.util.MathUtil;

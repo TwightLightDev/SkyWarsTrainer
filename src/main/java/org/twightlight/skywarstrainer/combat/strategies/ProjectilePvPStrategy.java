@@ -4,12 +4,10 @@ import org.bukkit.Material;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.twightlight.skywarstrainer.awareness.VoidDetector;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.combat.ProjectileHandler;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.movement.MovementController;
-import org.twightlight.skywarstrainer.util.RandomUtil;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;

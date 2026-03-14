@@ -3,7 +3,6 @@ package org.twightlight.skywarstrainer.ai.engine;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 /**
  * Container for a behavior tree rooted at a single {@link BehaviorNode}.

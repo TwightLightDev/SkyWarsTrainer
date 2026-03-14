@@ -5,11 +5,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
-import org.twightlight.skywarstrainer.awareness.ChestLocator;
-import org.twightlight.skywarstrainer.awareness.GamePhaseTracker;
-import org.twightlight.skywarstrainer.awareness.IslandGraph;
-import org.twightlight.skywarstrainer.awareness.ThreatMap;
-import org.twightlight.skywarstrainer.awareness.VoidDetector;
+import org.twightlight.skywarstrainer.awareness.*;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 
