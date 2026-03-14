@@ -165,19 +165,19 @@ public class RodComboStrategy implements CombatStrategy {
                 // Sprint toward target
                 LivingEntity approachTarget = findNearestEnemy(bot);
                 if (approachTarget != null) {
-                    mc.setMoveTarget(approachTarget.getLocation());
+                    // [FIX] Use COMBAT authority
+                    mc.setMoveTarget(approachTarget.getLocation(), MovementController.MovementAuthority.COMBAT);
                     mc.setLookTarget(approachTarget.getLocation().add(0, 1.0, 0));
 
                     double dist = player.getLocation().distance(approachTarget.getLocation());
                     if (dist <= 3.5) {
                         currentPhase = Phase.COMBOING;
-                        phaseTimer = 40; // Max combo duration
+                        phaseTimer = 40;
                     }
                 }
 
                 phaseTimer--;
                 if (phaseTimer <= 0) {
-                    // Failed to reach target in time
                     currentPhase = Phase.COOLDOWN;
                     phaseTimer = ROD_COMBO_COOLDOWN;
                 }

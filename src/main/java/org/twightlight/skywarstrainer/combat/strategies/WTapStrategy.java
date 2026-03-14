@@ -76,40 +76,51 @@ public class WTapStrategy implements CombatStrategy {
         SprintController sprint = mc.getSprintController();
         DifficultyProfile diff = bot.getDifficultyProfile();
 
+        // [FIX] Get the current target so we can use setMoveTarget with authority
+        // instead of setMovingForward which bypasses the authority system.
+        LivingEntity target = getCurrentTarget(bot);
+
         switch (currentPhase) {
             case SPRINTING:
-                // Sprint toward the enemy. When we land a hit, transition to RELEASING.
+                // Sprint toward the enemy
                 sprint.startSprinting();
-                mc.setMovingForward(true);
+                // [FIX] Use COMBAT authority move target instead of setMovingForward(true).
+                // setMovingForward bypasses authority and clears moveTarget, which causes
+                // handlePositioning()'s COMBAT-authority target to be overwritten every tick.
+                if (target != null) {
+                    mc.setMoveTarget(target.getLocation(), MovementController.MovementAuthority.COMBAT);
+                }
 
-                // Check if we should trigger the W-release
-                // This is evaluated per-hit in the combat engine; here we just
-                // check if the efficiency roll passes
                 if (hitLandedThisCycle && RandomUtil.chance(diff.getWTapEfficiency())) {
                     currentPhase = Phase.RELEASING;
-                    // Release duration: 1-3 ticks scaled by difficulty
                     int maxRelease = (int) Math.round(3.0 - 2.0 * diff.getDifficulty().asFraction());
                     phaseTimer = RandomUtil.nextInt(1, Math.max(1, maxRelease));
-                    mc.setMovingForward(false);
+                    // [FIX] Stop movement by clearing the target with COMBAT authority
+                    // instead of setMovingForward(false) which bypasses authority.
+                    mc.setMoveTarget(null, MovementController.MovementAuthority.COMBAT);
                     sprint.stopSprinting();
                     hitLandedThisCycle = false;
                 }
                 break;
 
             case RELEASING:
-                // W key is released — not moving forward, no sprint
-                mc.setMovingForward(false);
+                // W key released — not moving forward, no sprint.
+                // [FIX] Ensure movement stays cleared (don't let handlePositioning overwrite)
+                // The null target with COMBAT authority from above persists.
                 phaseTimer--;
                 if (phaseTimer <= 0) {
                     currentPhase = Phase.RECOVERING;
-                    phaseTimer = 1; // Brief re-sprint ramp
+                    phaseTimer = 1;
                 }
                 break;
 
             case RECOVERING:
                 // Re-engage sprint and forward movement
-                mc.setMovingForward(true);
                 sprint.startSprinting();
+                // [FIX] Use authority-aware movement toward target
+                if (target != null) {
+                    mc.setMoveTarget(target.getLocation(), MovementController.MovementAuthority.COMBAT);
+                }
                 phaseTimer--;
                 if (phaseTimer <= 0) {
                     currentPhase = Phase.SPRINTING;
@@ -117,6 +128,7 @@ public class WTapStrategy implements CombatStrategy {
                 break;
         }
     }
+
 
     @Override
     public double getPriority(@Nonnull TrainerBot bot) {

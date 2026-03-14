@@ -242,17 +242,16 @@ public class ProjectilePvPStrategy implements CombatStrategy {
      */
     private void executeApproachSpam(@Nonnull TrainerBot bot, @Nonnull Player player,
                                      @Nonnull ProjectileHandler handler) {
-        // Sprint toward the enemy while throwing projectiles
         MovementController mc = bot.getMovementController();
         LivingEntity target = findNearestEnemy(bot);
 
         if (mc != null && target != null) {
-            mc.setMoveTarget(target.getLocation());
+            // [FIX] Use COMBAT authority
+            mc.setMoveTarget(target.getLocation(), MovementController.MovementAuthority.COMBAT);
             mc.setLookTarget(target.getLocation().add(0, 1.0, 0));
             mc.getSprintController().startSprinting();
         }
 
-        // Alternate between snowball and egg based on availability
         if (!handler.isProjectileReady()) return;
 
         if (player.getInventory().contains(Material.SNOW_BALL)) {
@@ -265,6 +264,7 @@ public class ProjectilePvPStrategy implements CombatStrategy {
             }
         }
     }
+
 
     /**
      * Charges a bow fully and releases for maximum damage. Used at long range

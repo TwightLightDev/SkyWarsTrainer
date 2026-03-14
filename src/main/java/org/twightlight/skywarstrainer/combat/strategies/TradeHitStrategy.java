@@ -80,8 +80,8 @@ public class TradeHitStrategy implements CombatStrategy {
             return;
         }
 
-        // Walk directly toward the enemy to reduce their KB on us
-        mc.setMoveTarget(target.getLocation());
+        // [FIX] Use COMBAT authority
+        mc.setMoveTarget(target.getLocation(), MovementController.MovementAuthority.COMBAT);
         mc.setLookTarget(target.getLocation().add(0, 1.0, 0));
         mc.getSprintController().startSprinting();
 
@@ -91,6 +91,7 @@ public class TradeHitStrategy implements CombatStrategy {
             tradeTimer = 0;
         }
     }
+
 
     @Override
     public double getPriority(@Nonnull TrainerBot bot) {

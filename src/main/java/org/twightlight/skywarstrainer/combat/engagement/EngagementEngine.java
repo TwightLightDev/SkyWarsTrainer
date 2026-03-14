@@ -5,6 +5,7 @@ import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.combat.counter.CounterModifiers;
 import org.twightlight.skywarstrainer.combat.counter.EnemyBehaviorAnalyzer;
 import org.twightlight.skywarstrainer.combat.engagement.patterns.*;
+import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.util.DebugLogger;
 
 import javax.annotation.Nonnull;
@@ -64,12 +65,19 @@ public class EngagementEngine {
             DebugLogger.log(bot, "Engagement pattern %s completed", activePattern.getName());
             activePattern.reset();
             activePattern = null;
+
+            MovementController mc = bot.getMovementController();
+            if (mc != null) {
+                mc.releaseAuthority(MovementController.MovementAuthority.COMBAT);
+            }
+
             return false;
         }
 
         activePattern.tick(bot, target);
         return true;
     }
+
 
     /**
      * Evaluates all patterns against the current combat context and returns
@@ -166,6 +174,14 @@ public class EngagementEngine {
         if (activePattern != null) activePattern.reset();
         pattern.reset();
         this.activePattern = pattern;
+
+        // [FIX] Claim COMBAT authority so the pattern's movement calls succeed
+        // and aren't overwritten by handlePositioning() or strategies.
+        MovementController mc = bot.getMovementController();
+        if (mc != null) {
+            mc.claimAuthority(MovementController.MovementAuthority.COMBAT);
+        }
+
         DebugLogger.log(bot, "Engagement pattern activated: %s", pattern.getName());
     }
 

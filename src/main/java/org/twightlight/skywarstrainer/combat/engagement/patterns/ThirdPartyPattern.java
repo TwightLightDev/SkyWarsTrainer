@@ -56,34 +56,32 @@ public class ThirdPartyPattern implements EngagementPattern {
         double targetHealth = target.getHealth() / target.getMaxHealth();
 
         if (!rushing) {
-            // Observing phase: wait for target to drop below 40% HP
             if (targetHealth < 0.4) {
                 rushing = true;
                 DebugLogger.log(bot, "ThirdParty: target at %.0f%% HP, rushing!", targetHealth * 100);
             } else {
-                // Hold position at ~15 blocks
                 if (dist < 12) {
-                    // Too close — back off slightly
-                    mc.setMoveTarget(botEntity.getLocation());
+                    // [FIX] Use COMBAT authority
+                    mc.setMoveTarget(botEntity.getLocation(), MovementController.MovementAuthority.COMBAT);
                 } else if (dist > 20) {
-                    // Too far — close in
-                    mc.setMoveTarget(target.getLocation());
+                    // [FIX] Use COMBAT authority
+                    mc.setMoveTarget(target.getLocation(), MovementController.MovementAuthority.COMBAT);
                 }
                 mc.setLookTarget(target.getLocation().add(0, 1.0, 0));
             }
         } else {
-            // Rush phase: sprint toward target
             mc.getSprintController().startSprinting();
-            mc.setMoveTarget(target.getLocation());
+            // [FIX] Use COMBAT authority
+            mc.setMoveTarget(target.getLocation(), MovementController.MovementAuthority.COMBAT);
             mc.setLookTarget(target.getLocation().add(0, 1.0, 0));
 
-            // Once in melee range, pattern is complete
             if (dist <= 4.0) {
                 DebugLogger.log(bot, "ThirdParty: arrived in melee range");
                 complete = true;
             }
         }
     }
+
 
     @Override
     public double getPriority(@Nonnull TrainerBot bot) {

@@ -1,6 +1,7 @@
 package org.twightlight.skywarstrainer.combat.defense;
 
 import org.twightlight.skywarstrainer.bot.TrainerBot;
+import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.util.DebugLogger;
 
 import javax.annotation.Nonnull;
@@ -65,25 +66,27 @@ public class DefensiveEngine {
      * @param bot the bot (passed explicitly for clarity in behavior tree callbacks)
      */
     public void tick(@Nonnull TrainerBot bot) {
-        // Tick cooldown
         if (evaluationCooldown > 0) {
             evaluationCooldown--;
         }
 
-        // If a behavior is active, tick it
         if (activeBehavior != null) {
             if (activeBehavior.isComplete()) {
                 DebugLogger.log(bot, "Defense: %s completed", activeBehavior.getName());
                 activeBehavior.reset();
                 activeBehavior = null;
                 evaluationCooldown = EVAL_COOLDOWN_TICKS;
+
+                MovementController mc = bot.getMovementController();
+                if (mc != null) {
+                    mc.releaseAuthority(MovementController.MovementAuthority.DEFENSE);
+                }
             } else {
                 activeBehavior.tick(bot);
-                return; // Active behavior consumes the tick
+                return;
             }
         }
 
-        // Evaluate for a new defensive action if cooldown has elapsed
         if (evaluationCooldown <= 0) {
             DefensiveBehavior best = checkDefensiveActions(bot);
             if (best != null) {
@@ -145,6 +148,13 @@ public class DefensiveEngine {
         if (activeBehavior != null) {
             activeBehavior.reset();
             activeBehavior = null;
+        }
+        // [FIX] Also release DEFENSE authority on cancel.
+        // This is called from onStateTransition, which also calls resetAuthority(),
+        // but being explicit here is safer for direct cancel() calls.
+        MovementController mc = bot.getMovementController();
+        if (mc != null) {
+            mc.releaseAuthority(MovementController.MovementAuthority.DEFENSE);
         }
     }
 

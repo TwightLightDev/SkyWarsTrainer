@@ -168,27 +168,26 @@ public class BlockPlacePVPStrategy implements CombatStrategy {
     private void executeComboBreak(@Nonnull TrainerBot bot, @Nonnull Player player,
                                    @Nonnull DifficultyProfile diff) {
         Location botLoc = player.getLocation();
-        // Find the nearest enemy direction
         LivingEntity nearest = findNearestEnemy(bot);
         if (nearest == null) return;
 
         Vector toEnemy = MathUtil.directionTo(botLoc, nearest.getLocation());
-        // Place block 1 block toward the enemy
         Location placePos = botLoc.clone().add(toEnemy.multiply(1.0));
-        placePos.setY(botLoc.getY()); // Same Y level
+        placePos.setY(botLoc.getY());
 
         placeBlockAt(player, placePos);
         placeCooldown = MIN_PLACE_COOLDOWN;
 
-        // Strafe sideways after placing to re-engage
         MovementController mc = bot.getMovementController();
         if (mc != null) {
             Vector right = mc.getRightDirection();
             double strafeDir = RandomUtil.nextBoolean() ? 1.0 : -1.0;
             Location strafeTarget = botLoc.clone().add(right.multiply(strafeDir * 2.0));
-            mc.setMoveTarget(strafeTarget);
+            // [FIX] Use COMBAT authority
+            mc.setMoveTarget(strafeTarget, MovementController.MovementAuthority.COMBAT);
         }
     }
+
 
     /**
      * Jump and place a block under feet for height advantage.

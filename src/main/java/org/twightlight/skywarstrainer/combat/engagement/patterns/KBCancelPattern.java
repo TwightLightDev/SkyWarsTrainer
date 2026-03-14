@@ -49,25 +49,24 @@ public class KBCancelPattern implements EngagementPattern {
 
         double skill = bot.getDifficultyProfile().getKbCancelSkill();
 
-        // Core KB cancel mechanic: sprint TOWARD the attacker to reduce knockback
         if (RandomUtil.chance(skill)) {
             mc.getSprintController().startSprinting();
-            mc.setMoveTarget(targetLoc);
+            // [FIX] Use COMBAT authority
+            mc.setMoveTarget(targetLoc, MovementController.MovementAuthority.COMBAT);
             mc.setLookTarget(targetLoc.clone().add(0, 1.0, 0));
 
-            // Jump + hit to break their combo (if skill is high enough)
             if (skill > 0.5 && ticksActive % 4 == 0) {
                 mc.getJumpController().jump();
             }
         }
 
-        // Check if combo is broken (we landed a hit)
         if (bot.getCombatEngine() != null
                 && bot.getCombatEngine().getComboTracker().getHitsLanded() > 0) {
             DebugLogger.log(bot, "KBCancel: combo broken after %d ticks", ticksActive);
             complete = true;
         }
     }
+
 
     @Override
     public double getPriority(@Nonnull TrainerBot bot) {

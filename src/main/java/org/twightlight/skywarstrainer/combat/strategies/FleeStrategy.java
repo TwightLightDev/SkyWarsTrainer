@@ -89,16 +89,14 @@ public class FleeStrategy implements CombatStrategy {
         fleeing = true;
         fleeTicks++;
 
-        // Determine flee direction (away from nearest threat)
+        // Determine flee direction
         LivingEntity threat = findNearestEnemy(bot);
         Location fleeDirection;
 
         if (threat != null) {
-            // Move directly away from the threat
             Vector awayFromThreat = MathUtil.directionTo(
                     threat.getLocation(), botEntity.getLocation());
 
-            // Avoid fleeing toward void
             VoidDetector voidDetector = bot.getVoidDetector();
             if (voidDetector != null && voidDetector.isNearVoidEdge()) {
                 Float safeDir = voidDetector.getSafeDirection();
@@ -111,13 +109,16 @@ public class FleeStrategy implements CombatStrategy {
             fleeDirection = botEntity.getLocation().clone()
                     .add(awayFromThreat.multiply(10.0));
         } else {
-            // No visible threat — just run in the direction we're facing
             fleeDirection = botEntity.getLocation().clone()
                     .add(mc.getForwardDirection().multiply(10.0));
         }
 
-        // [FIX-C1] Use FLEE authority — highest priority, overrides COMBAT and DEFENSE
-        mc.setMoveTarget(fleeDirection, MovementController.MovementAuthority.FLEE);
+        // [FIX] FleeStrategy runs as a CombatStrategy inside CombatEngine.tick(),
+        // which only runs during FIGHTING state. Using FLEE authority here would
+        // block ALL subsequent COMBAT-authority movement after the bot stops fleeing
+        // (since FLEE > COMBAT and there's no release). Use COMBAT authority instead.
+        // The actual FLEEING *state* uses FLEE authority correctly in its own BT.
+        mc.setMoveTarget(fleeDirection, MovementController.MovementAuthority.COMBAT);
         mc.getSprintController().startSprinting();
 
         // Eat golden apple while fleeing

@@ -73,12 +73,14 @@ public class ComboLockPattern implements EngagementPattern {
 
         if (dist > preferredDist + 0.5 + distError) {
             mc.getSprintController().startSprinting();
-            mc.setMoveTarget(targetLoc);
+            // [FIX] Use COMBAT authority
+            mc.setMoveTarget(targetLoc, MovementController.MovementAuthority.COMBAT);
         } else if (dist < preferredDist - 0.5 - distError) {
             Location backTarget = botLoc.clone().add(
                     (botLoc.getX() - targetLoc.getX()) * 0.5, 0,
                     (botLoc.getZ() - targetLoc.getZ()) * 0.5);
-            mc.setMoveTarget(backTarget);
+            // [FIX] Use COMBAT authority
+            mc.setMoveTarget(backTarget, MovementController.MovementAuthority.COMBAT);
         }
 
         strafeSwitchTimer++;
@@ -90,6 +92,7 @@ public class ComboLockPattern implements EngagementPattern {
         mc.setLookTarget(targetLoc.clone().add(0, 1.0, 0));
         if (ticksActive > 200) complete = true;
     }
+
 
     @Override
     public double getPriority(@Nonnull TrainerBot bot) {

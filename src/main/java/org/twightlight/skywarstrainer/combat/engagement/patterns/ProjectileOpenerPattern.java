@@ -54,30 +54,28 @@ public class ProjectileOpenerPattern implements EngagementPattern {
         MovementController mc = bot.getMovementController();
 
         if (!switchedToMelee && dist > 5.0) {
-            // Ranged phase: use projectiles
             ProjectileHandler handler = bot.getCombatEngine().getProjectileHandler();
             if (handler != null && handler.hasProjectiles()) {
-                handler.tick(); // ProjectileHandler manages aim + fire
+                handler.tick();
             }
-            // Look at target
             if (mc != null) {
                 mc.setLookTarget(target.getLocation().add(0, 1.0, 0));
             }
         } else {
-            // Close enough or out of projectiles — switch to melee
             switchedToMelee = true;
             if (mc != null) {
                 mc.getSprintController().startSprinting();
-                mc.setMoveTarget(target.getLocation());
+                // [FIX] Use COMBAT authority
+                mc.setMoveTarget(target.getLocation(), MovementController.MovementAuthority.COMBAT);
                 mc.setLookTarget(target.getLocation().add(0, 1.0, 0));
             }
-            // Once in melee range, pattern is complete — hand back to normal strategies
             if (dist <= 3.5) {
                 DebugLogger.log(bot, "ProjectileOpener: closed to melee range");
                 complete = true;
             }
         }
     }
+
 
     @Override
     public double getPriority(@Nonnull TrainerBot bot) {

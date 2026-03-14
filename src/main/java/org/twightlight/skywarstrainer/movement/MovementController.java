@@ -513,30 +513,65 @@ public class MovementController {
 
     /**
      * Sets the bot to move forward in its current facing direction.
+     * [FIX] Now checks authority — uses AI_GENERAL by default.
      *
      * @param forward true to move forward, false to stop
      */
     public void setMovingForward(boolean forward) {
+        setMovingForward(forward, MovementAuthority.AI_GENERAL);
+    }
+
+    /**
+     * Sets the bot to move forward with authority check.
+     *
+     * @param forward   true to move forward, false to stop
+     * @param authority the caller's authority level
+     * @return true if the change was applied
+     */
+    public boolean setMovingForward(boolean forward, @Nonnull MovementAuthority authority) {
+        if (authority.ordinal() < currentAuthority.ordinal()) {
+            return false; // Blocked by higher authority
+        }
         this.movingForward = forward;
         if (forward) {
+            this.currentAuthority = authority;
             this.moveTarget = null;
             this.movingBackward = false;
         }
+        return true;
     }
 
     /**
      * Sets the bot to move backward (away from its facing direction).
+     * [FIX] Now checks authority — uses AI_GENERAL by default.
      *
      * @param backward true to move backward, false to stop
      */
     public void setMovingBackward(boolean backward) {
+        setMovingBackward(backward, MovementAuthority.AI_GENERAL);
+    }
+
+    /**
+     * Sets the bot to move backward with authority check.
+     *
+     * @param backward  true to move backward, false to stop
+     * @param authority the caller's authority level
+     * @return true if the change was applied
+     */
+    public boolean setMovingBackward(boolean backward, @Nonnull MovementAuthority authority) {
+        if (authority.ordinal() < currentAuthority.ordinal()) {
+            return false; // Blocked by higher authority
+        }
         this.movingBackward = backward;
         if (backward) {
+            this.currentAuthority = authority;
             this.moveTarget = null;
             this.movingForward = false;
-            this.inSprintJumpCycle = false; // No sprint-jumping while moving backward
+            this.inSprintJumpCycle = false;
         }
+        return true;
     }
+
 
     /**
      * Sets a location for the bot to continuously look at.

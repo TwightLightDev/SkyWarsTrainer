@@ -123,12 +123,15 @@ public class RetreatHealer implements DefensiveBehavior {
         ticksInPhase++;
 
         if (ticksActive > MAX_TICKS) {
+            // [FIX] Release DEFENSE authority before completing
+            releaseMovementAuthority(bot);
             complete = true;
             return;
         }
 
         LivingEntity botEntity = bot.getLivingEntity();
         if (botEntity == null) {
+            releaseMovementAuthority(bot);
             complete = true;
             return;
         }
@@ -252,7 +255,9 @@ public class RetreatHealer implements DefensiveBehavior {
      * Turn back and move toward the enemy for re-engagement.
      */
     private void tickReEngage(@Nonnull TrainerBot bot, @Nonnull LivingEntity botEntity) {
-        // Trigger decision engine re-eval — it should pick FIGHT
+        // [FIX] Release DEFENSE authority so COMBAT can resume control
+        releaseMovementAuthority(bot);
+
         if (bot.getDecisionEngine() != null) {
             bot.getDecisionEngine().triggerInterrupt();
         }
@@ -274,11 +279,23 @@ public class RetreatHealer implements DefensiveBehavior {
     @Override
     public boolean isComplete() { return complete; }
 
+    // [FIX] Helper to release movement authority
+    private void releaseMovementAuthority(@Nonnull TrainerBot bot) {
+        MovementController mc = bot.getMovementController();
+        if (mc != null) {
+            mc.releaseAuthority(MovementController.MovementAuthority.DEFENSE);
+        }
+    }
+
     @Override
     public void reset() {
         phase = Phase.RETREATING;
         complete = false;
         ticksActive = 0;
         ticksInPhase = 0;
+        // NOTE: We don't release authority here because reset() is called
+        // without bot context. The releaseMovementAuthority() calls above
+        // handle it before completion, and onStateTransition -> resetAuthority()
+        // handles the transition case.
     }
 }

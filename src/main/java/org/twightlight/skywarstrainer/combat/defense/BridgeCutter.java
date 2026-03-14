@@ -133,12 +133,15 @@ public class BridgeCutter implements DefensiveBehavior {
     public void tick(@Nonnull TrainerBot bot) {
         ticksActive++;
         if (ticksActive > MAX_TICKS) {
+            // [FIX] Release DEFENSE authority
+            releaseMovementAuthority(bot);
             complete = true;
             return;
         }
 
         LivingEntity botEntity = bot.getLivingEntity();
         if (botEntity == null) {
+            releaseMovementAuthority(bot);
             complete = true;
             return;
         }
@@ -151,10 +154,21 @@ public class BridgeCutter implements DefensiveBehavior {
                 tickBreakBlocks(bot, botEntity);
                 break;
             case DONE:
+                // [FIX] Release DEFENSE authority
+                releaseMovementAuthority(bot);
                 complete = true;
                 break;
         }
     }
+
+    // [FIX] Helper to release movement authority
+    private void releaseMovementAuthority(@Nonnull TrainerBot bot) {
+        MovementController mc = bot.getMovementController();
+        if (mc != null) {
+            mc.releaseAuthority(MovementController.MovementAuthority.DEFENSE);
+        }
+    }
+
 
     /**
      * Moves the bot toward the bridge blocks that need to be broken.

@@ -75,7 +75,6 @@ public class EdgeKnockPattern implements EngagementPattern {
             return;
         }
 
-        // Position: get on the opposite side of the target from the void
         double vdx = voidDirection.getX() - targetLoc.getX();
         double vdz = voidDirection.getZ() - targetLoc.getZ();
         double len = Math.sqrt(vdx * vdx + vdz * vdz);
@@ -87,13 +86,15 @@ public class EdgeKnockPattern implements EngagementPattern {
         vdz /= len;
 
         Location positionTarget = targetLoc.clone().add(-vdx * 2.5, 0, -vdz * 2.5);
-        mc.setMoveTarget(positionTarget);
+        // [FIX] Use COMBAT authority — patterns own combat movement
+        mc.setMoveTarget(positionTarget, MovementController.MovementAuthority.COMBAT);
         mc.setLookTarget(targetLoc.clone().add(0, 1.0, 0));
         mc.getSprintController().startSprinting();
 
         double distToTarget = botLoc.distance(targetLoc);
         DebugLogger.log(bot, "EdgeKnock: tick=%d dist=%.1f positioning", ticksActive, distToTarget);
     }
+
 
     private Location findVoidDirection(@Nonnull TrainerBot bot, @Nonnull Location targetLoc) {
         VoidDetector voidDetector = bot.getVoidDetector();

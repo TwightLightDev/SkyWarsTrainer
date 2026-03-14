@@ -363,9 +363,6 @@ public class BridgeEngine {
         }
     }
 
-    /**
-     * Stops the current bridge, resetting strategy state and sneaking.
-     */
     public void stopBridge() {
         if (activeStrategy != null) {
             activeStrategy.reset();
@@ -377,24 +374,27 @@ public class BridgeEngine {
         bridgeTicks = 0;
         heightDifference = 0;
 
-        // Reset the movement controller
         BridgeMovementController movementCtrl = bot.getBridgeMovementController();
         if (movementCtrl != null) {
             movementCtrl.reset();
         }
 
-        // Stop sneaking when bridge ends
         MovementController mc = bot.getMovementController();
         if (mc != null) {
             mc.setSneaking(false);
             mc.setMovingBackward(false);
             mc.setMovingForward(false);
+            // [FIX] Release BRIDGE authority. Without this, if stopBridge() is called
+            // without a state transition (e.g., enemy interrupts during BRIDGING BT),
+            // the BRIDGE authority stays locked and blocks COMBAT/HUNTING movement.
+            mc.releaseAuthority(MovementController.MovementAuthority.BRIDGE);
         }
 
         if (bot.getProfile().isDebugMode()) {
             bot.getPlugin().getLogger().info("[DEBUG] " + bot.getName() + " stopped bridging");
         }
     }
+
 
     /**
      * Selects the best flat bridge strategy for the current bot based on difficulty
