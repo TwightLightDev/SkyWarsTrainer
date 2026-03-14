@@ -6,6 +6,7 @@ import org.bukkit.util.Vector;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.bridging.BridgeEngine;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
+import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.movement.strategies.*;
 import org.twightlight.skywarstrainer.util.DebugLogger;
 import org.twightlight.skywarstrainer.util.MathUtil;
@@ -115,7 +116,8 @@ public class SplitPathApproach implements ApproachStrategy {
             case RETURN:
                 // Walk back to origin island
                 if (bot.getMovementController() != null && originIsland != null) {
-                    bot.getMovementController().setMoveTarget(originIsland);
+                    bot.getMovementController().setMoveTarget(originIsland,
+                            MovementController.MovementAuthority.HUNTING);
                     bot.getMovementController().getSprintController().startSprinting();
                 }
                 Location botLoc = bot.getLocation();
@@ -157,7 +159,8 @@ public class SplitPathApproach implements ApproachStrategy {
                     // Commit via whichever path (random choice; ideally based on enemy facing)
                     Location commitPoint = RandomUtil.nextBoolean() ? bridgeAEnd : bridgeBEnd;
                     if (commitPoint != null) {
-                        bot.getMovementController().setMoveTarget(commitPoint);
+                        bot.getMovementController().setMoveTarget(commitPoint,
+                                MovementController.MovementAuthority.HUNTING);
                     }
                     boolean started = engine.startBridge(path.getBridgeEndPoint(),
                             engine.getAvailableBlockCount());

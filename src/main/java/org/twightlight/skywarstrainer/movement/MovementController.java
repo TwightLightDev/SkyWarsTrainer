@@ -26,18 +26,6 @@ import javax.annotation.Nullable;
  * <p>Movement commands are issued by higher-level systems (behavior tree, combat
  * engine, bridge engine) as target positions or directional intents. The controller
  * translates these into per-tick position updates with noise injection.</p>
- *
- * <h3>Sprint-Jump Travel:</h3>
- * <p>When the bot has a move target more than {@value #SPRINT_JUMP_MIN_DISTANCE} blocks
- * away, the controller automatically engages sprint-jump travel — the standard fastest
- * travel method in Minecraft 1.8. This is done by combining sprinting with periodic
- * jumps timed to maximize forward momentum. Sprint-jumping provides approximately a
- * 40% speed boost over regular sprinting and is what real players do constantly when
- * traveling any meaningful distance.</p>
- *
- * <p>The sprint-jump behavior is skill-aware: higher difficulty bots time their jumps
- * more optimally (jumping right as they land for maximum momentum chain), while lower
- * difficulty bots have less precise jump timing and may occasionally forget to jump.</p>
  */
 public class MovementController {
 

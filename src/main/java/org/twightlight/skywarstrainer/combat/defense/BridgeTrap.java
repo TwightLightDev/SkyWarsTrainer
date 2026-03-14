@@ -116,12 +116,14 @@ public class BridgeTrap implements DefensiveBehavior {
     public void tick(@Nonnull TrainerBot bot) {
         ticksActive++;
         if (ticksActive > MAX_TICKS) {
+            releaseMovementAuthority(bot);
             complete = true;
             return;
         }
 
         LivingEntity botEntity = bot.getLivingEntity();
         if (botEntity == null) {
+            releaseMovementAuthority(bot);
             complete = true;
             return;
         }
@@ -148,19 +150,20 @@ public class BridgeTrap implements DefensiveBehavior {
 
     private void tickMoveToMiddle(@Nonnull TrainerBot bot, @Nonnull LivingEntity botEntity) {
         if (bridgeMidpoint == null) {
+            releaseMovementAuthority(bot);
             complete = true;
             return;
         }
-
         MovementController mc = bot.getMovementController();
         if (mc == null) {
+            releaseMovementAuthority(bot);
             complete = true;
             return;
         }
 
         double dist = botEntity.getLocation().distance(bridgeMidpoint);
         if (dist > 3.0) {
-            mc.setMoveTarget(bridgeMidpoint);
+            mc.setMoveTarget(bridgeMidpoint, MovementController.MovementAuthority.DEFENSE);
             mc.setSneaking(true); // Sneak on bridge for safety
         } else {
             // Close enough to break
@@ -200,22 +203,24 @@ public class BridgeTrap implements DefensiveBehavior {
 
     private void tickRetreat(@Nonnull TrainerBot bot, @Nonnull LivingEntity botEntity) {
         if (safeRetreatLocation == null) {
+            releaseMovementAuthority(bot);
             complete = true;
             return;
         }
-
         MovementController mc = bot.getMovementController();
         if (mc == null) {
+            releaseMovementAuthority(bot);
             complete = true;
             return;
         }
 
         double dist = botEntity.getLocation().distance(safeRetreatLocation);
         if (dist > 2.0) {
-            mc.setMoveTarget(safeRetreatLocation);
+            mc.setMoveTarget(safeRetreatLocation, MovementController.MovementAuthority.DEFENSE);
             mc.getSprintController().startSprinting();
         } else {
             phase = Phase.DONE;
+            releaseMovementAuthority(bot);
             complete = true;
             DebugLogger.log(bot, "BridgeTrap: retreated safely, trap is set");
         }
@@ -244,6 +249,13 @@ public class BridgeTrap implements DefensiveBehavior {
         }
 
         return middleBlocks.isEmpty() ? null : middleBlocks;
+    }
+
+    private void releaseMovementAuthority(@Nonnull TrainerBot bot) {
+        MovementController mc = bot.getMovementController();
+        if (mc != null) {
+            mc.releaseAuthority(MovementController.MovementAuthority.DEFENSE);
+        }
     }
 
     @Override

@@ -86,6 +86,17 @@ public class CombatEngine {
     /** How often (in ticks) to re-evaluate the target. */
     private static final int TARGET_EVAL_INTERVAL = 10;
 
+    // ─── Fast-Reflect Fields ────────────────────────────────────
+    /** Ticks remaining for the fast-reflect priority window after being hit. */
+    private int reflectWindowTicks;
+
+    /** Whether a reflect counter-attack has been queued this window. */
+    private boolean reflectQueued;
+
+    /** Maximum ticks after being hit where a reflect counter-attack is attempted. */
+    private static final int REFLECT_WINDOW = 3;
+
+
     /**
      * Creates a new CombatEngine for the given bot. Initializes all combat
      * subsystems and registers all strategy implementations.
@@ -107,6 +118,8 @@ public class CombatEngine {
         this.currentTarget = null;
         this.active = false;
         this.targetEvalCounter = 0;
+        this.reflectWindowTicks = 0;
+        this.reflectQueued = false;
 
         registerStrategies();
     }
@@ -150,7 +163,8 @@ public class CombatEngine {
         }
 
         comboTracker.reset();
-
+        reflectWindowTicks = 0;
+        reflectQueued = false;
         // Reset all strategies for the new engagement
         for (CombatStrategy strategy : strategies) {
             strategy.reset();
@@ -174,7 +188,8 @@ public class CombatEngine {
 
         aimController.setTarget(null);
         comboTracker.reset();
-
+        reflectWindowTicks = 0;
+        reflectQueued = false;
         // Stop combat-specific movement
         MovementController mc = bot.getMovementController();
         if (mc != null) {
@@ -275,7 +290,35 @@ public class CombatEngine {
             }
         }
 
-        // Step 7: Melee attack
+        // ─── Fast-Reflect Counter-Attack ───────────────────────
+        // If within the reflect window, attempt an immediate counter-hit
+        // with a sprint-reset for maximum reflect KB.
+        if (reflectWindowTicks > 0) {
+            reflectWindowTicks--;
+            if (reflectQueued && range <= 3.5) {
+                // Force a sprint-reset for the counter-hit (fresh sprint-hit = max KB)
+                MovementController mc = bot.getMovementController();
+                if (mc != null && mc.getSprintController().isSprinting()) {
+                    mc.getSprintController().performSprintReset();
+                }
+                // Attempt immediate counter-click (bypasses normal CPS timing)
+                boolean reflectHit = clickController.tryClick();
+                if (reflectHit) {
+                    comboTracker.onHitLanded();
+                    applyAttackKnockback(currentTarget);
+                    EnemyBehaviorAnalyzer analyzer = bot.getEnemyAnalyzer();
+                    if (analyzer != null) {
+                        analyzer.onHitLandedOnEnemy(currentTarget.getUniqueId());
+                    }
+                    reflectQueued = false; // Only one reflect per window
+                }
+            }
+            if (reflectWindowTicks <= 0) {
+                reflectQueued = false;
+            }
+        }
+
+        // Step 7: Normal melee attack (existing code, unchanged)
         if (range <= 3.0) {
             boolean hit = clickController.tryClick();
             if (hit) {
@@ -490,6 +533,37 @@ public class CombatEngine {
                 org.bukkit.util.Vector currentVel = botEntity.getVelocity();
                 org.bukkit.util.Vector reducedVel = knockbackCalculator.reduceIncomingKnockback(currentVel);
                 botEntity.setVelocity(reducedVel);
+
+                // ─── Fast-Reflect: Open counter-attack window ───
+                // Skilled players immediately counter-attack after being hit,
+                // sprinting into the attacker to negate KB and apply reflect KB.
+                DifficultyProfile diff = bot.getDifficultyProfile();
+                double reflectSkill = diff.getSprintResetChance(); // Reuse sprint-reset skill as proxy
+                // Only bots with decent sprint-reset skill (>= 0.4, i.e., NORMAL+) attempt reflects
+                if (reflectSkill >= 0.4 && active && currentTarget != null) {
+                    // Chance to attempt reflect scales with skill
+                    double reflectChance = Math.min(1.0, reflectSkill * 1.2);
+                    if (org.twightlight.skywarstrainer.util.RandomUtil.chance(reflectChance)) {
+                        reflectWindowTicks = REFLECT_WINDOW;
+                        reflectQueued = true;
+
+                        // Immediately sprint toward attacker to counter KB
+                        MovementController mc = bot.getMovementController();
+                        if (mc != null) {
+                            mc.getSprintController().startSprinting();
+                            // Inject forward velocity toward attacker to partially negate KB
+                            double counterForce = reflectSkill * 0.25; // Max ~0.25 blocks/tick forward
+                            org.bukkit.util.Vector toAttacker = attacker.getLocation().toVector()
+                                    .subtract(botEntity.getLocation().toVector());
+                            toAttacker.setY(0);
+                            if (toAttacker.lengthSquared() > 0.001) {
+                                toAttacker.normalize().multiply(counterForce);
+                                org.bukkit.util.Vector newVel = botEntity.getVelocity().add(toAttacker);
+                                botEntity.setVelocity(newVel);
+                            }
+                        }
+                    }
+                }
             }
             // Phase 7: Notify enemy analyzer
             EnemyBehaviorAnalyzer analyzer = bot.getEnemyAnalyzer();
@@ -503,6 +577,7 @@ public class CombatEngine {
             targetEvalCounter = TARGET_EVAL_INTERVAL;
         }
     }
+
 
     /**
      * Returns whether the bot should flee based on current combat state.
