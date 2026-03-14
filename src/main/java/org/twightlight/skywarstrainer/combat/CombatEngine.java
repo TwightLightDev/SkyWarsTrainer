@@ -179,6 +179,8 @@ public class CombatEngine {
         MovementController mc = bot.getMovementController();
         if (mc != null) {
             mc.getStrafeController().stopStrafing();
+            // [FIX-C1] Release combat movement authority
+            mc.releaseAuthority(MovementController.MovementAuthority.COMBAT);
         }
 
         // Reset all strategies
@@ -186,6 +188,7 @@ public class CombatEngine {
             strategy.reset();
         }
     }
+
 
     /**
      * Main tick method called every server tick during FIGHTING state.
@@ -236,21 +239,12 @@ public class CombatEngine {
         double range = botEntity.getLocation().distance(currentTarget.getLocation());
 
         // ═══ Phase 7: Engagement Pattern Check (BEFORE normal strategies) ═══
-        // If an active pattern is running, let it handle this tick
+        // If an active pattern is running, let it handle this tick EXCLUSIVELY.
+        // [FIX-D2] Do NOT call tryClick() here — the pattern owns all combat actions
+        // during its tick. This prevents double-hit registration.
         if (patternManager.tickActivePattern(bot, currentTarget)) {
-            // Pattern handled the tick — still do combo tracker and melee
-            if (range <= 3.0) {
-                boolean hit = clickController.tryClick();
-                if (hit) {
-                    comboTracker.onHitLanded();
-                    applyAttackKnockback(currentTarget);
-                    // Notify enemy analyzer
-                    EnemyBehaviorAnalyzer analyzer = bot.getEnemyAnalyzer();
-                    if (analyzer != null) {
-                        analyzer.onHitLandedOnEnemy(currentTarget.getUniqueId());
-                    }
-                }
-            }
+            // [FIX-D2] Pattern handled the tick — only do combo tracker, NOT melee.
+            // The pattern itself is responsible for its own click timing.
             comboTracker.tick();
             return;
         }
@@ -259,11 +253,17 @@ public class CombatEngine {
         EngagementPattern pattern = patternManager.evaluatePatterns(bot, currentTarget);
         if (pattern != null) {
             patternManager.activate(pattern);
-            // Pattern will run on next tick — continue with normal strategy this tick
+            // [FIX-D1] Pattern activated — skip normal strategy execution this tick.
+            // The pattern expects to control the bot's state from its first tick.
+            // If we also run a strategy here, it may change weapons/position,
+            // corrupting the pattern's expected starting state.
+            comboTracker.tick();
+            handlePositioning(botEntity, range);
+            return;
         }
         // ═══ End Phase 7 pattern check ═══
 
-        // Step 5 & 6: Select and execute-best strategy (existing code unchanged)
+        // Step 5 & 6: Select and execute best strategy (existing code unchanged)
         CombatStrategy bestStrategy = selectBestStrategy();
         if (bestStrategy != null) {
             if (activeStrategy != bestStrategy) activeStrategy = bestStrategy;
@@ -293,6 +293,7 @@ public class CombatEngine {
         comboTracker.tick();
         handlePositioning(botEntity, range);
     }
+
 
     /**
      * Checks whether the current target is still a valid combat target.
@@ -443,6 +444,13 @@ public class CombatEngine {
      * @param botEntity the bot entity
      * @param range     current distance to target
      */
+    /**
+     * Handles combat positioning: approach when too far, maintain optimal
+     * range, and enable strafing during melee.
+     *
+     * @param botEntity the bot entity
+     * @param range     current distance to target
+     */
     private void handlePositioning(@Nonnull LivingEntity botEntity, double range) {
         MovementController mc = bot.getMovementController();
         if (mc == null) return;
@@ -451,18 +459,20 @@ public class CombatEngine {
             // Approach target for melee — sprint toward them
             mc.getSprintController().startSprinting();
             mc.setLookTarget(currentTarget.getLocation().add(0, 1.0, 0));
-            mc.setMoveTarget(currentTarget.getLocation());
+            // [FIX-C1] Use COMBAT authority — can be overridden by DEFENSE (RetreatHealer)
+            mc.setMoveTarget(currentTarget.getLocation(), MovementController.MovementAuthority.COMBAT);
         } else if (range <= 3.5) {
             // In melee range — strafe and look at target
             mc.setLookTarget(currentTarget.getLocation().add(0, 1.0, 0));
-            mc.setMoveTarget(null); // Strafing handles lateral movement
+            mc.setMoveTarget(null, MovementController.MovementAuthority.COMBAT); // Strafing handles lateral movement
         } else {
             // Too far — if ranged equipped, hold position; otherwise approach
             mc.setLookTarget(currentTarget.getLocation().add(0, 1.0, 0));
-            mc.setMoveTarget(currentTarget.getLocation());
+            mc.setMoveTarget(currentTarget.getLocation(), MovementController.MovementAuthority.COMBAT);
             mc.getSprintController().startSprinting();
         }
     }
+
 
     /**
      * Notifies the combat engine that the bot was hit. Used for:

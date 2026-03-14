@@ -116,7 +116,8 @@ public class LearningEngine {
         DecisionContext context = de.getContext();
         if (context == null) return;
 
-        // Encode current state
+        // Encode current state (safe even with slightly stale context —
+        // the encoded values are still approximately valid)
         double[] currentVector = stateEncoder.encode(context);
         int currentStateId = stateEncoder.discretize(currentVector);
 
@@ -124,13 +125,13 @@ public class LearningEngine {
         if (currentStateId != lastStateId) {
             adjustmentsDirty = true;
             lastStateId = currentStateId;
-            // Copy the vector since encoder pools it
             if (lastStateVector == null) {
                 lastStateVector = new double[StateEncoder.STATE_VECTOR_SIZE];
             }
             System.arraycopy(currentVector, 0, lastStateVector, 0, StateEncoder.STATE_VECTOR_SIZE);
         }
     }
+
 
     // ═════════════════════════════════════════════════════════════
     //  GAME LIFECYCLE

@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: src/main/java/org/twightlight/skywarstrainer/ai/state/BotStateMachine.java
+// PHASE 1 CHANGES: Add StateTransitionListener + notify on transition
+// ═══════════════════════════════════════════════════════════════════
+
 package org.twightlight.skywarstrainer.ai.state;
 
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
@@ -8,8 +13,10 @@ import org.twightlight.skywarstrainer.bot.TrainerBot;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 
@@ -53,6 +60,28 @@ public class BotStateMachine {
     /** The tick at which the current state was entered. Used for time-in-state queries. */
     private long stateEnteredTick;
 
+    // [FIX-A1/A4/D3/E1] Internal transition listeners for subsystem cleanup
+    private final List<StateTransitionListener> transitionListeners;
+
+    /**
+     * Functional interface for internal transition listeners.
+     * Subsystems register a listener to be notified synchronously
+     * when the state machine transitions, allowing them to clean up
+     * stale internal state (e.g., cancel active defensive behaviors,
+     * disengage combat, abort approaches).
+     */
+    @FunctionalInterface
+    public interface StateTransitionListener {
+        /**
+         * Called synchronously during transitionTo() AFTER the state has changed
+         * but BEFORE the debug log is printed.
+         *
+         * @param oldState the state being left
+         * @param newState the state being entered
+         */
+        void onTransition(@Nonnull BotState oldState, @Nonnull BotState newState);
+    }
+
     /**
      * Creates a new BotStateMachine for the given bot.
      * The initial state is {@link BotState#IDLE}.
@@ -65,6 +94,20 @@ public class BotStateMachine {
         this.behaviorTrees = new EnumMap<>(BotState.class);
         this.transitionLog = new ArrayDeque<>();
         this.stateEnteredTick = bot.getLocalTickCount();
+        this.transitionListeners = new ArrayList<>(); // [FIX-A1/A4/D3/E1]
+    }
+
+    // ─── Transition Listener Registration ───────────────────────
+
+    /**
+     * Registers an internal transition listener. Called during subsystem init.
+     * Listeners are notified synchronously during transitionTo().
+     *
+     * @param listener the listener to add
+     */
+    // [FIX-A1/A4/D3/E1] New method for subsystem cleanup on state transitions
+    public void addTransitionListener(@Nonnull StateTransitionListener listener) {
+        transitionListeners.add(listener);
     }
 
     // ─── Behavior Tree Registration ─────────────────────────────
@@ -102,6 +145,7 @@ public class BotStateMachine {
      *   <li>Reset the current state's behavior tree (so it starts fresh if re-entered).</li>
      *   <li>Log the transition.</li>
      *   <li>Set the new state as current and record entry tick.</li>
+     *   <li>[FIX-A1/A4/D3/E1] Notify all transition listeners for subsystem cleanup.</li>
      * </ol></p>
      *
      * @param newState the state to transition to
@@ -135,9 +179,17 @@ public class BotStateMachine {
         currentState = newState;
         stateEnteredTick = bot.getLocalTickCount();
 
-        // In transitionTo(), after setting currentState and before debug log:
+        // [FIX-A1/A4/D3/E1] Notify all internal transition listeners for subsystem cleanup
+        for (StateTransitionListener listener : transitionListeners) {
+            try {
+                listener.onTransition(oldState, newState);
+            } catch (Exception e) {
+                SkyWarsTrainer.getInstance().getLogger().log(Level.WARNING,
+                        "Error in transition listener for " + oldState + " -> " + newState, e);
+            }
+        }
 
-        // Fire BotStateChangeEvent
+        // Fire BotStateChangeEvent (external API event)
         try {
             org.twightlight.skywarstrainer.api.events.BotStateChangeEvent event =
                     new org.twightlight.skywarstrainer.api.events.BotStateChangeEvent(bot, oldState, newState);
@@ -175,6 +227,17 @@ public class BotStateMachine {
 
         currentState = state;
         stateEnteredTick = bot.getLocalTickCount();
+
+        // [FIX-A1/A4/D3/E1] Notify listeners even on forced transitions
+        // (old != state is not guaranteed, but cleanup is still needed for force-restart)
+        for (StateTransitionListener listener : transitionListeners) {
+            try {
+                listener.onTransition(old, state);
+            } catch (Exception e) {
+                SkyWarsTrainer.getInstance().getLogger().log(Level.WARNING,
+                        "Error in transition listener for forced " + old + " -> " + state, e);
+            }
+        }
     }
 
     // ─── Tick ───────────────────────────────────────────────────
@@ -296,4 +359,3 @@ public class BotStateMachine {
                 + ", ticksInState=" + getTicksInCurrentState() + "}";
     }
 }
-

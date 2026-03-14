@@ -75,6 +75,10 @@ public class MovementController {
     /** Movement speed multiplier applied on top of base speed. */
     private double speedMultiplier;
 
+    // [FIX-C1/C2/A5] Current movement authority
+    private MovementAuthority currentAuthority = MovementAuthority.NONE;
+
+
     /**
      * Whether sprint-jump travel mode is enabled. When enabled, the controller
      * will automatically sprint and jump periodically when moving toward a target
@@ -430,6 +434,87 @@ public class MovementController {
     }
 
     /**
+     * Sets the move target only if the caller's authority is >= the current authority.
+     * This prevents lower-priority systems from overriding higher-priority ones.
+     *
+     * @param target    the target location, or null to stop (releasing always succeeds)
+     * @param authority the caller's authority level
+     * @return true if the target was set, false if blocked by higher authority
+     */
+    // [FIX-C1] Priority-based movement target setting
+    public boolean setMoveTarget(@Nullable Location target, @Nonnull MovementAuthority authority) {
+        if (target == null) {
+            // Releasing: only release if this authority owns it or higher
+            if (authority.ordinal() >= currentAuthority.ordinal()) {
+                this.moveTarget = null;
+                this.movingForward = false;
+                this.movingBackward = false;
+                this.inSprintJumpCycle = false;
+                // Don't reset authority to NONE here — let releaseAuthority() do that
+                return true;
+            }
+            return false;
+        }
+        if (authority.ordinal() >= currentAuthority.ordinal()) {
+            this.moveTarget = target;
+            this.currentAuthority = authority;
+            this.movingForward = false;
+            this.movingBackward = false;
+            return true;
+        }
+        return false; // Blocked by higher-priority authority
+    }
+
+    /**
+     * Claims movement authority. Higher authority blocks lower authority from
+     * changing movement until released.
+     *
+     * @param authority the authority level to claim
+     * @return true if claimed (authority >= current), false if blocked
+     */
+    // [FIX-C1] Authority claim for non-target movement (sprint, sneak)
+    public boolean claimAuthority(@Nonnull MovementAuthority authority) {
+        if (authority.ordinal() >= currentAuthority.ordinal()) {
+            currentAuthority = authority;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Releases the given authority level. If the current authority matches,
+     * drops back to NONE. If the given authority is lower than current,
+     * does nothing (can't release someone else's lock).
+     *
+     * @param authority the authority level to release
+     */
+    // [FIX-C1] Authority release
+    public void releaseAuthority(@Nonnull MovementAuthority authority) {
+        if (authority.ordinal() >= currentAuthority.ordinal()) {
+            currentAuthority = MovementAuthority.NONE;
+        }
+    }
+
+    /**
+     * Forcefully resets authority to NONE. Used on state transitions.
+     */
+    // [FIX-C1] Force-reset for state transitions
+    public void resetAuthority() {
+        currentAuthority = MovementAuthority.NONE;
+    }
+
+    /**
+     * Returns the current movement authority.
+     *
+     * @return the current authority level
+     */
+    @Nonnull
+    public MovementAuthority getCurrentAuthority() {
+        return currentAuthority;
+    }
+
+
+    /**
      * Sets the bot to move forward in its current facing direction.
      *
      * @param forward true to move forward, false to stop
@@ -657,4 +742,28 @@ public class MovementController {
     public void setCurrentPitch(float pitch) {
         this.currentPitch = (float) MathUtil.clamp(pitch, -90.0, 90.0);
     }
+
+    // [FIX-C1/C2/A5] Movement authority system.
+    // Higher ordinal = higher priority. Only the current authority holder (or higher)
+    // can change movement targets. This prevents flickering from multiple systems
+    // calling setMoveTarget() on the same tick.
+    public enum MovementAuthority {
+        /** No system has claimed movement. Anyone can set targets. */
+        NONE,
+        /** General AI movement (positional engine, idle wandering). */
+        AI_GENERAL,
+        /** Loot engine pathfinding to chest. */
+        LOOT,
+        /** Hunting/approach — navigating to enemy. */
+        HUNTING,
+        /** Combat positioning (strafing, approach, melee range). */
+        COMBAT,
+        /** Bridging — precise movement for block placement. */
+        BRIDGE,
+        /** Defensive behavior (RetreatHealer fleeing). */
+        DEFENSE,
+        /** Fleeing state — highest priority escape movement. */
+        FLEE
+    }
+
 }

@@ -181,7 +181,10 @@ public class RetreatHealer implements DefensiveBehavior {
             dx /= len;
             dz /= len;
             Location fleeTarget = botLoc.clone().add(dx * 10, 0, dz * 10);
-            mc.setMoveTarget(fleeTarget);
+            // [FIX-A5/C1] Use DEFENSE authority — overrides COMBAT positioning
+            // This prevents the movement oscillation bug where CombatEngine.handlePositioning()
+            // sets moveTarget toward enemy and RetreatHealer sets it away, every tick.
+            mc.setMoveTarget(fleeTarget, MovementController.MovementAuthority.DEFENSE);
             mc.getSprintController().startSprinting();
         }
 

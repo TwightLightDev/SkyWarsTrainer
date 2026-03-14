@@ -234,22 +234,86 @@ public class TrainerBot {
         // ── 8. AI Brain (UNCHANGED init, but builds enhanced BTs) ──
         this.stateMachine = new BotStateMachine(this);
         this.decisionEngine = new DecisionEngine(this, stateMachine);
+
+        // [FIX-A1/A4/D3/E1] Register transition listener for subsystem cleanup
+        stateMachine.addTransitionListener(this::onStateTransition);
+
         buildBehaviorTrees(); // Now builds the enhanced trees
 
         // ── 9. Tick Timers (existing + new) ──
-        this.voidDetectTimer = new TickTimer(5, 1);
-        this.lavaDetectTimer = new TickTimer(15, 3);
-        this.chestUpdateTimer = new TickTimer(60, 10);
-        this.islandGraphTimer = new TickTimer(200, 40);
-        this.gamePhaseTimer = new TickTimer(30, 5);
-        this.behaviorTreeTimer = new TickTimer(3, 1);
-        this.inventoryAuditTimer = new TickTimer(100, 20);
-        this.positionalTimer = new TickTimer(50, 10);      // NEW
-        this.enemyAnalyzerTimer = new TickTimer(20, 4);     // NEW
-        this.learningModuleTimer = new TickTimer(10, 2);  // every 10 ticks
+        // ── 9. Tick Timers (existing + new) ──
+        // [FIX-G1] Use staggerOffset to distribute heavy operations across ticks.
+        // Without this, all bots fire heavy subsystems on the same ticks, causing lag spikes.
+        this.voidDetectTimer = new TickTimer(5, 1 + (staggerOffset % 5));
+        this.lavaDetectTimer = new TickTimer(15, 3 + (staggerOffset % 15));
+        this.chestUpdateTimer = new TickTimer(60, 10 + (staggerOffset % 60));
+        this.islandGraphTimer = new TickTimer(200, 40 + (staggerOffset % 200));
+        this.gamePhaseTimer = new TickTimer(30, 5 + (staggerOffset % 30));
+        this.behaviorTreeTimer = new TickTimer(3, 1 + (staggerOffset % 3));
+        this.inventoryAuditTimer = new TickTimer(100, 20 + (staggerOffset % 100));
+        this.positionalTimer = new TickTimer(50, 10 + (staggerOffset % 50));
+        this.enemyAnalyzerTimer = new TickTimer(20, 4 + (staggerOffset % 20));
+        this.learningModuleTimer = new TickTimer(10, 2 + (staggerOffset % 10));
 
         mapScanner.forceRescan();
     }
+
+    // [FIX-A1/A4/D3/E1] Subsystem cleanup callback on state transitions.
+    // This is the central fix for bugs A1, A4, D3, and E1.
+    // When the state machine transitions, subsystems that "own" behavior in the
+    // old state must release control so they don't conflict with the new state.
+    private void onStateTransition(@Nonnull BotState oldState, @Nonnull BotState newState) {
+        // [FIX-D3] Disengage combat when leaving FIGHTING state.
+        // Without this, CombatEngine remains active=true and keeps ticking
+        // in TrainerBot.tick() step 3, causing the bot to fight while looting/bridging.
+        if (oldState == BotState.FIGHTING && newState != BotState.FIGHTING) {
+            if (combatEngine != null && combatEngine.isActive()) {
+                combatEngine.disengage();
+            }
+        }
+
+        if (movementController != null) {
+            movementController.resetAuthority();
+        }
+
+        // [FIX-E1] Cancel active defensive behavior on ANY state change.
+        // Without this, a BridgeCutter active during CAMPING persists into FIGHTING,
+        // and the FIGHTING BT's defensive tick runs the stale BridgeCutter instead
+        // of evaluating RetreatHealer.
+        // Also fixes A1: RetreatHealer is cancelled when leaving FIGHTING, preventing
+        // movement oscillation from a retreating bot that should now be looting.
+        if (defenseEngine != null) {
+            defenseEngine.cancel();
+        }
+
+        // [FIX-A4] Cancel orphaned approach when leaving HUNTING.
+        // Without this, ApproachEngine.isActive() returns true when re-entering HUNTING,
+        // causing the BT to resume a stale approach with outdated target position.
+        if (oldState == BotState.HUNTING && newState != BotState.HUNTING) {
+            if (approachManager != null && approachManager.isActive()) {
+                approachManager.cancelApproach();
+            }
+        }
+
+        // [FIX-A2 partial] Stop bridge when leaving BRIDGING state.
+        // BridgeEngine.stopBridge() already calls mc.setSneaking(false), mc.setMovingBackward(false),
+        // and bridgeMovementController.reset(). This ensures no stale bridge state persists.
+        if (oldState == BotState.BRIDGING && newState != BotState.BRIDGING) {
+            if (bridgeEngine != null && bridgeEngine.isActive()) {
+                bridgeEngine.stopBridge();
+            }
+        }
+
+        // [FIX-C3 partial] Ensure sneaking is off when entering combat states.
+        // If a bridge was interrupted or sneaking was left on by any system,
+        // clear it so the bot doesn't fight at 30% speed.
+        if (newState == BotState.FIGHTING || newState == BotState.FLEEING || newState == BotState.HUNTING) {
+            if (movementController != null && movementController.isSneaking()) {
+                movementController.setSneaking(false);
+            }
+        }
+    }
+
 
     /**
      * Builds behavior trees for each BotState and registers them with the state machine.
@@ -943,9 +1007,14 @@ public class TrainerBot {
             if (threatMap != null) threatMap.tick();
         });
 
-        // ── 3. Combat Engine (every tick when active) ──
+        // ── 3. Combat Engine (every tick when active AND in FIGHTING state) ──
+        // [FIX-D3] Guard: only tick combat engine if actually in FIGHTING state.
+        // The transition listener (onStateTransition) calls disengage() when leaving
+        // FIGHTING, so isActive() should be false. This guard is belt-and-suspenders
+        // in case of edge cases where the transition fires but disengage wasn't called.
         tickSafe("combat", () -> {
-            if (combatEngine != null && combatEngine.isActive()) {
+            if (combatEngine != null && combatEngine.isActive()
+                    && stateMachine != null && stateMachine.getCurrentState() == BotState.FIGHTING) {
                 combatEngine.tick();
             }
         });
@@ -958,7 +1027,16 @@ public class TrainerBot {
         // ── 5. Behavior Tree (every 2-4 ticks) ──
         if (behaviorTreeTimer != null && behaviorTreeTimer.tick()) {
             tickSafe("behaviorTree", () -> {
-                if (stateMachine != null) stateMachine.tick();
+                if (stateMachine != null) {
+                    // [FIX-B2/B3] Check BT return status. If the tree completed
+                    // (SUCCESS or FAILURE), immediately trigger a DecisionEngine
+                    // re-evaluation so the bot doesn't idle for up to 10 ticks
+                    // in a completed/failed state.
+                    NodeStatus status = stateMachine.tick();
+                    if (status != NodeStatus.RUNNING && decisionEngine != null) {
+                        decisionEngine.triggerInterrupt(); // [FIX-B2/B3]
+                    }
+                }
             });
         }
 
@@ -1037,11 +1115,14 @@ public class TrainerBot {
 
         // ── 15. Defense Manager interrupt check (every tick) — NEW ──
         // Check if enemy is bridging toward us — trigger defensive action
+        // [FIX-A5/E1] Also exclude CAMPING state to prevent double-ticking DefensiveEngine.
+        // CAMPING BT already ticks DefensiveEngine via CooldownDecorator.
         tickSafe("defenseInterrupt", () -> {
             if (defenseEngine != null && threatMap != null
                     && stateMachine != null
                     && stateMachine.getCurrentState() != BotState.FIGHTING
-                    && stateMachine.getCurrentState() != BotState.FLEEING) {
+                    && stateMachine.getCurrentState() != BotState.FLEEING
+                    && stateMachine.getCurrentState() != BotState.CAMPING) {
                 // Check if any enemy is bridging toward us (velocity + direction check)
                 if (threatMap.getVisibleEnemyCount() > 0) {
                     ThreatMap.ThreatEntry nearest = threatMap.getNearestThreat();

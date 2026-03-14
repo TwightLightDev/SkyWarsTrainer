@@ -206,15 +206,50 @@ public class DecisionEngine {
         }
 
         // 8. Map action to state and transition
-        if (bestAction != null && bestAction != lastChosenAction) {
-            BotState newState = actionToState(bestAction);
-            if (newState != null) {
-                stateMachine.transitionTo(newState, "Utility: " + bestAction.name()
-                        + String.format(" (%.3f)", lastScores.getOrDefault(bestAction, 0.0)));
-            } else {
-                executeImmediateAction(bestAction);
+        // [FIX-B1] When the same FIGHT action is chosen twice in a row but the
+        // underlying target may have changed (e.g., target died), we need to detect
+        // this. We check if the combat target is still valid and force a re-evaluation
+        // if the action is fight-related and the target is stale.
+        if (bestAction != null) {
+            boolean shouldTransition = (bestAction != lastChosenAction);
+
+            // [FIX-B1] Same fight action — check if target needs refresh
+            if (!shouldTransition && isFightAction(bestAction)) {
+                if (bot.getCombatEngine() != null) {
+                    LivingEntity currentTarget = bot.getCombatEngine().getCurrentTarget();
+                    if (currentTarget == null || currentTarget.isDead()) {
+                        // Target is dead/gone — force state machine restart so combat
+                        // engine picks a new target immediately instead of waiting 10 ticks
+                        shouldTransition = true;
+                        if (stateMachine != null) {
+                            stateMachine.forceTransition(
+                                    actionToState(bestAction),
+                                    "Target dead, re-engaging: " + bestAction.name());
+                        }
+                        lastChosenAction = bestAction;
+                        // Skip the normal transition below since we force-transitioned
+                        LearningEngine lm2 = bot.getLearningModule();
+                        if (lm2 != null) {
+                            lm2.onDecisionMade(bestAction, new HashMap<>(lastScores));
+                        }
+                        if (bot.getProfile().isDebugMode()) {
+                            logEvaluation();
+                        }
+                        return;
+                    }
+                }
             }
-            lastChosenAction = bestAction;
+
+            if (shouldTransition) {
+                BotState newState = actionToState(bestAction);
+                if (newState != null) {
+                    stateMachine.transitionTo(newState, "Utility: " + bestAction.name()
+                            + String.format(" (%.3f)", lastScores.getOrDefault(bestAction, 0.0)));
+                } else {
+                    executeImmediateAction(bestAction);
+                }
+                lastChosenAction = bestAction;
+            }
         }
 
         // ═══ Step 8b: Notify learning module of decision ═══
@@ -225,11 +260,27 @@ public class DecisionEngine {
             }
         }
 
+
         // 9. Debug output
         if (bot.getProfile().isDebugMode()) {
             logEvaluation();
         }
     }
+
+    /**
+     * Returns true if the given action is a fight-related action that
+     * requires an active combat target.
+     *
+     * @param action the action to check
+     * @return true if fight-related
+     */
+    // [FIX-B1] Helper for same-action target staleness detection
+    private boolean isFightAction(@Nonnull BotAction action) {
+        return action == BotAction.FIGHT_NEAREST
+                || action == BotAction.FIGHT_WEAKEST
+                || action == BotAction.FIGHT_TARGETED;
+    }
+
 
     /**
      * Applies utility score bonuses from the active PositionalEngine strategy.

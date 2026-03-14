@@ -34,6 +34,8 @@ public class LootEngine {
     private LootPhase phase;
     private int lootTicks;
     private boolean strategyInitialized;
+    // [FIX-A3] Track chests that failed (timed out) to prevent infinite retry
+    private final java.util.Set<Location> failedChests = new java.util.HashSet<>();
 
     private static final int MAX_LOOT_TICKS = 200;
     private static final double INTERACT_DISTANCE = 3.0;
@@ -97,7 +99,22 @@ public class LootEngine {
         if (locator == null) return;
 
         ChestLocator.ChestInfo nearest = locator.getNearestUnlootedChest();
+
+        // [FIX-A3] Skip chests that previously failed (timed out / unreachable)
+        if (nearest != null && failedChests.contains(nearest.location)) {
+            // This chest previously failed — mark it as "looted" in the locator
+            // so it won't be returned again, and try the next one
+            locator.markLooted(nearest.location);
+            nearest = locator.getNearestUnlootedChest();
+        }
+
         if (nearest == null) return;
+
+        // [FIX-A3] Also check if the new nearest is failed
+        if (failedChests.contains(nearest.location)) {
+            locator.markLooted(nearest.location);
+            return; // No viable chests — BT will return FAILURE
+        }
 
         targetChest = nearest;
         phase = LootPhase.MOVING_TO_CHEST;
@@ -113,6 +130,7 @@ public class LootEngine {
         }
     }
 
+
     private void moveToChest(@Nonnull Player player) {
         if (targetChest == null) { resetLoot(); return; }
 
@@ -126,14 +144,16 @@ public class LootEngine {
             MovementController mc = bot.getMovementController();
             if (mc != null) {
                 mc.setLookTarget(chestLoc.clone().add(0.5, 0.5, 0.5));
-                mc.setMoveTarget(null);
+                // [FIX-C1] Release loot authority when done moving
+                mc.setMoveTarget(null, MovementController.MovementAuthority.LOOT);
             }
             return;
         }
 
         MovementController mc = bot.getMovementController();
         if (mc != null) {
-            mc.setMoveTarget(chestLoc);
+            // [FIX-C1] Use LOOT authority
+            mc.setMoveTarget(chestLoc, MovementController.MovementAuthority.LOOT);
             mc.setLookTarget(chestLoc.clone().add(0.5, 0.5, 0.5));
             if (distance > 8) {
                 mc.getSprintController().startSprinting();
@@ -142,6 +162,7 @@ public class LootEngine {
             }
         }
     }
+
 
     private void executeLoot() {
         if (targetChest == null || activeStrategy == null) { resetLoot(); return; }
@@ -231,6 +252,14 @@ public class LootEngine {
     }
 
     private void resetLoot() {
+        // [FIX-A3] If we're resetting due to timeout (lootTicks > MAX_LOOT_TICKS)
+        // and we had a target chest, mark it as "failed" so we don't retry it
+        // immediately. This prevents the infinite loop where the bot times out
+        // on an unreachable chest, then immediately re-targets the same chest.
+        if (lootTicks >= MAX_LOOT_TICKS && targetChest != null) {
+            failedChests.add(targetChest.location); // [FIX-A3]
+        }
+
         phase = LootPhase.IDLE;
         targetChest = null;
         if (activeStrategy != null) {
@@ -242,6 +271,8 @@ public class LootEngine {
         MovementController mc = bot.getMovementController();
         if (mc != null) mc.setMoveTarget(null);
     }
+
+
 
     /** @return true if loot engine is in any active phase */
     public boolean isActive() { return phase != LootPhase.IDLE; }

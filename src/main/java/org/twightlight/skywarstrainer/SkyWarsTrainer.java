@@ -5,7 +5,7 @@ import org.twightlight.skywarstrainer.api.SkyWarsTrainerAPI;
 import org.twightlight.skywarstrainer.bot.BotManager;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.commands.CommandHandler;
-import org.twightlight.skywarstrainer.commands.TabCompleter;
+import org.twightlight.skywarstrainer.commands.subcommands.TabCompleter;
 import org.twightlight.skywarstrainer.config.ConfigManager;
 import org.twightlight.skywarstrainer.config.DifficultyConfig;
 import org.twightlight.skywarstrainer.config.PersonalityConfig;
