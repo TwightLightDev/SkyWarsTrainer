@@ -149,7 +149,7 @@ public class SpeedBridge implements org.twightlight.skywarstrainer.bridging.stra
 
         // Move backward toward edge
         Location edgeTarget = botLoc.clone().add(bridgeDirection.clone().multiply(0.25));
-        mc.setMoveTarget(edgeTarget);
+        mc.setMoveTarget(edgeTarget, MovementController.MovementAuthority.BRIDGE);
 
         double distToEdge = MathUtil.horizontalDistance(botLoc, nextBlockPos.clone().add(0, 1, 0));
 

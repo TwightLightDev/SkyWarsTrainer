@@ -183,7 +183,7 @@ public class NormalBridge implements org.twightlight.skywarstrainer.bridging.str
 
         // Move backward (in bridge direction — since we're facing opposite, backward = forward in bridge dir)
         Location edgeTarget = botLoc.clone().add(bridgeDirection.clone().multiply(0.3));
-        mc.setMoveTarget(edgeTarget);
+        mc.setMoveTarget(edgeTarget, MovementController.MovementAuthority.BRIDGE);
 
         // Check if we're at the edge of the current block
         Block belowNext = nextBlockPos.getBlock();

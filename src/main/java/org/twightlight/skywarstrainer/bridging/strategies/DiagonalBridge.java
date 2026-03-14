@@ -153,7 +153,7 @@ public class DiagonalBridge implements org.twightlight.skywarstrainer.bridging.s
         mc.setCurrentPitch(0f);
 
         Location target = botLoc.clone().add(bridgeDirection.clone().multiply(0.2));
-        mc.setMoveTarget(target);
+        mc.setMoveTarget(target, MovementController.MovementAuthority.BRIDGE);
 
         if (phaseTicks > 10) {
             currentPhase = Phase.AIMING;

@@ -132,7 +132,7 @@ public class NinjaBridge implements org.twightlight.skywarstrainer.bridging.stra
         mc.setCurrentPitch(76f);
 
         Location edgeTarget = botLoc.clone().add(bridgeDirection.clone().multiply(0.2));
-        mc.setMoveTarget(edgeTarget);
+        mc.setMoveTarget(edgeTarget, MovementController.MovementAuthority.BRIDGE);
 
         double distToEdge = MathUtil.horizontalDistance(botLoc, nextBlockPos.clone().add(0, 1, 0));
 
