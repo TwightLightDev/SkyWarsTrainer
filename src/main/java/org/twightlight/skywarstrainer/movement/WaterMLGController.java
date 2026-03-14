@@ -139,8 +139,8 @@ public class WaterMLGController {
             // [FIX-2E] Aim straight down for MLG
             MovementController mc = bot.getMovementController();
             if (mc != null) {
-                mc.setCurrentPitch(90.0f); // Look straight down
-                mc.setLookTarget(null);     // Override any existing look target
+                mc.setCurrentPitch(90.0f);
+                mc.setLookTarget(null);
             }
 
             Location targetBlock = entity.getLocation().clone();

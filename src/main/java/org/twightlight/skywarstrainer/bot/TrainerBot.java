@@ -22,6 +22,7 @@ import org.twightlight.skywarstrainer.bridging.movement.BridgeMovementController
 import org.twightlight.skywarstrainer.combat.CombatEngine;
 import org.twightlight.skywarstrainer.combat.counter.EnemyBehaviorAnalyzer;
 import org.twightlight.skywarstrainer.combat.defense.DefensiveEngine;
+import org.twightlight.skywarstrainer.config.ConfigManager;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.game.BotChatManager;
 import org.twightlight.skywarstrainer.inventory.EnchantmentHandler;
@@ -192,7 +193,9 @@ public class TrainerBot {
      * Initializes ALL subsystems in the correct dependency order.
      */
     private void initializeAllSubsystems() {
-        // ── 1. Awareness (UNCHANGED) ──
+        // ── 1-8: UNCHANGED — same as current code ──
+        // (all subsystem creation from mapScanner through decisionEngine stays identical)
+
         int mapScanInterval = plugin.getConfigManager().getMapScanInterval();
         this.mapScanner = new MapScanner(this, mapScanInterval);
         this.threatMap = new ThreatMap(this);
@@ -202,61 +205,57 @@ public class TrainerBot {
         this.voidDetector = new VoidDetector(this);
         this.fallDamageEstimator = new FallDamageEstimator(this);
         this.gamePhaseTracker = new GamePhaseTracker(this);
-
-        // ── 2. Movement (UNCHANGED) ──
         this.movementController = new MovementController(this);
-
-        // ── 3. Combat + Extensions ──
         this.combatEngine = new CombatEngine(this);
-
-        // ── 4. Bridge + Movement Controller ──
         this.bridgeEngine = new BridgeEngine(this);
         this.bridgeMovementController = new BridgeMovementController(this);
-
-        // ── 5. Loot (UNCHANGED) ──
         this.lootEngine = new LootEngine(this);
-
-        // ── 6. Inventory (UNCHANGED) ──
         this.inventoryManager = new InventoryManager(this);
-
-        // ── 7. Advanced Subsystems (Phase 7) ──
         this.approachManager = new ApproachEngine(this);
         this.positionalManager = new PositionalEngine(this);
         this.defenseEngine = new DefensiveEngine(this);
         this.enemyAnalyzer = new EnemyBehaviorAnalyzer(this);
 
-        // ── 7b. Learning Module ──
         if (plugin.getLearningManager().getLearningConfig() != null && plugin.getLearningManager().getLearningConfig().isEnabled()
                 && plugin.getLearningManager().getSharedMemoryBank() != null && plugin.getLearningManager().getSharedReplayBuffer() != null) {
             this.learningEngine = new LearningEngine(this, plugin.getLearningManager().getSharedMemoryBank(), plugin.getLearningManager().getSharedReplayBuffer());
         }
 
-        // ── 8. AI Brain (UNCHANGED init, but builds enhanced BTs) ──
         this.stateMachine = new BotStateMachine(this);
         this.decisionEngine = new DecisionEngine(this, stateMachine);
 
-        // [FIX-A1/A4/D3/E1] Register transition listener for subsystem cleanup
         stateMachine.addTransitionListener(this::onStateTransition);
 
-        buildBehaviorTrees(); // Now builds the enhanced trees
+        buildBehaviorTrees();
 
-        // ── 9. Tick Timers (existing + new) ──
-        // ── 9. Tick Timers (existing + new) ──
-        // [FIX-G1] Use staggerOffset to distribute heavy operations across ticks.
-        // Without this, all bots fire heavy subsystems on the same ticks, causing lag spikes.
-        this.voidDetectTimer = new TickTimer(5, 1 + (staggerOffset % 5));
-        this.lavaDetectTimer = new TickTimer(15, 3 + (staggerOffset % 15));
-        this.chestUpdateTimer = new TickTimer(60, 10 + (staggerOffset % 60));
-        this.islandGraphTimer = new TickTimer(200, 40 + (staggerOffset % 200));
-        this.gamePhaseTimer = new TickTimer(30, 5 + (staggerOffset % 30));
-        this.behaviorTreeTimer = new TickTimer(3, 1 + (staggerOffset % 3));
-        this.inventoryAuditTimer = new TickTimer(100, 20 + (staggerOffset % 100));
-        this.positionalTimer = new TickTimer(50, 10 + (staggerOffset % 50));
-        this.enemyAnalyzerTimer = new TickTimer(20, 4 + (staggerOffset % 20));
+        // ── 9. Tick Timers — [FIX] Now reads ALL intervals from config.yml timers section ──
+        // Previously these were all hardcoded (5, 15, 60, 200, 30, 3, 100, 50, 20).
+        // Now they read from timers.* config paths via ConfigManager getters.
+        ConfigManager cfg = plugin.getConfigManager();
+        int voidInterval = cfg.getTimerVoidDetectInterval();
+        int lavaInterval = cfg.getTimerLavaDetectInterval();
+        int chestInterval = cfg.getTimerChestUpdateInterval();
+        int islandInterval = cfg.getTimerIslandGraphInterval();
+        int phaseInterval = cfg.getTimerGamePhaseInterval();
+        int btInterval = cfg.getTimerBehaviorTreeInterval();
+        int invInterval = cfg.getTimerInventoryAuditInterval();
+        int posInterval = cfg.getTimerPositionalInterval();
+        int enemyInterval = cfg.getTimerEnemyAnalyzerInterval();
+
+        this.voidDetectTimer = new TickTimer(voidInterval, 1 + (staggerOffset % Math.max(1, voidInterval)));
+        this.lavaDetectTimer = new TickTimer(lavaInterval, 3 + (staggerOffset % Math.max(1, lavaInterval)));
+        this.chestUpdateTimer = new TickTimer(chestInterval, 10 + (staggerOffset % Math.max(1, chestInterval)));
+        this.islandGraphTimer = new TickTimer(islandInterval, 40 + (staggerOffset % Math.max(1, islandInterval)));
+        this.gamePhaseTimer = new TickTimer(phaseInterval, 5 + (staggerOffset % Math.max(1, phaseInterval)));
+        this.behaviorTreeTimer = new TickTimer(btInterval, 1 + (staggerOffset % Math.max(1, btInterval)));
+        this.inventoryAuditTimer = new TickTimer(invInterval, 20 + (staggerOffset % Math.max(1, invInterval)));
+        this.positionalTimer = new TickTimer(posInterval, 10 + (staggerOffset % Math.max(1, posInterval)));
+        this.enemyAnalyzerTimer = new TickTimer(enemyInterval, 4 + (staggerOffset % Math.max(1, enemyInterval)));
         this.learningModuleTimer = new TickTimer(10, 2 + (staggerOffset % 10));
 
         mapScanner.forceRescan();
     }
+
 
     // [FIX-A1/A4/D3/E1] Subsystem cleanup callback on state transitions.
     // This is the central fix for bugs A1, A4, D3, and E1.

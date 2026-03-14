@@ -422,21 +422,26 @@ public class DecisionEngine {
     }
 
     /**
-     * Selects the best action from the scored map. At high decision quality,
-     * always picks the top scorer. At low quality, sometimes picks the 2nd or 3rd best.
+     * Selects the best action from the scored map.
+     *
+     * [FIX] Fixed off-by-one: when sorted.size()==2, nextInt(1, min(3,2)-1)
+     * became nextInt(1,0) which is invalid. Now uses proper bounds.
      */
     @Nullable
     private BotAction selectBestAction(double decisionQuality) {
         if (lastScores.isEmpty()) return null;
 
-        // Sort actions by score descending
         List<Map.Entry<BotAction, Double>> sorted = new ArrayList<>(lastScores.entrySet());
         sorted.sort((a, b) -> Double.compare(b.getValue(), a.getValue()));
 
         // At quality < 0.3, occasionally pick a suboptimal action
         if (decisionQuality < 0.3 && sorted.size() > 1 && RandomUtil.chance(0.3)) {
-            int pick = RandomUtil.nextInt(1, Math.min(3, sorted.size()) - 1);
-            return sorted.get(pick).getKey();
+            // [FIX] Clamp upper bound to at least (min+1) to prevent nextInt(1,0) crash
+            int maxIdx = Math.min(3, sorted.size());  // exclusive upper bound
+            if (maxIdx > 1) {
+                int pick = RandomUtil.nextInt(1, maxIdx); // picks from index 1 to maxIdx-1
+                return sorted.get(pick).getKey();
+            }
         }
 
         // At quality < 0.5, small chance to pick 2nd best
@@ -446,6 +451,7 @@ public class DecisionEngine {
 
         return sorted.get(0).getKey();
     }
+
 
     /**
      * Returns the personality multiplier for a given action based on the bot's

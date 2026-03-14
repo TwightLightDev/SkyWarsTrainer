@@ -15,17 +15,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
- * Central movement controller for a trainer bot. All movement actions flow through
- * this controller, which delegates to specialized sub-controllers (sprint, jump,
- * strafe) and applies human motion simulation for realism.
- *
- * <p>This controller is ticked every server tick (20 TPS) because movement must
- * be smooth. It manages the bot's velocity, look direction, sneaking state, and
- * coordinates between sub-controllers.</p>
- *
- * <p>Movement commands are issued by higher-level systems (behavior tree, combat
- * engine, bridge engine) as target positions or directional intents. The controller
- * translates these into per-tick position updates with noise injection.</p>
+ * Central movement controller for a trainer bot.
  */
 public class MovementController {
 
@@ -36,69 +26,21 @@ public class MovementController {
     private final HumanMotionSimulator humanMotion;
     private final WaterMLGController waterMLGController;
 
-    /** The location the bot is trying to move toward. Null if no movement target. */
     private Location moveTarget;
-
-    /** Whether the bot is currently trying to move forward. */
     private boolean movingForward;
-
-    /** Whether the bot is currently trying to move backward. */
     private boolean movingBackward;
-
-    /** Whether the bot should be sneaking. */
     private boolean sneaking;
-
-    /** Whether the bot should be looking at a specific target. */
     private Location lookTarget;
-
-    /** Current desired yaw (degrees) after smoothing. */
     private float currentYaw;
-
-    /** Current desired pitch (degrees) after smoothing. */
     private float currentPitch;
-
-    /** Whether movement is frozen (e.g., while looting a chest). */
     private boolean frozen;
-
-    /** Movement speed multiplier applied on top of base speed. */
     private double speedMultiplier;
-
-    // [FIX-C1/C2/A5] Current movement authority
     private MovementAuthority currentAuthority = MovementAuthority.NONE;
-
-
-    /**
-     * Whether sprint-jump travel mode is enabled. When enabled, the controller
-     * will automatically sprint and jump periodically when moving toward a target
-     * that is far enough away. This can be disabled (e.g., during bridging or sneaking).
-     */
     private boolean sprintJumpEnabled;
-
-    /**
-     * Minimum distance (in blocks) to the move target before sprint-jump travel
-     * activates. Below this distance, the bot walks or sprints normally to avoid
-     * overshooting.
-     */
     private static final double SPRINT_JUMP_MIN_DISTANCE = 5.0;
-
-    /**
-     * Ticks since the last sprint-jump. Used to time jumps optimally — in vanilla 1.8,
-     * a sprint-jump cycle is approximately 12 ticks (land → immediately jump again).
-     */
     private int ticksSinceLastSprintJump;
-
-    /**
-     * Whether the bot is currently in a sprint-jump travel cycle.
-     * Tracked separately from just "sprinting + jumping" because we need to
-     * manage the full chain: sprint → jump → land → jump again.
-     */
     private boolean inSprintJumpCycle;
 
-    /**
-     * Creates a new MovementController for the given bot.
-     *
-     * @param bot the owning trainer bot
-     */
     public MovementController(@Nonnull TrainerBot bot) {
         this.bot = bot;
         this.sprintController = new SprintController(bot);
@@ -117,7 +59,6 @@ public class MovementController {
         this.ticksSinceLastSprintJump = 0;
         this.inSprintJumpCycle = false;
 
-        // Initialize yaw/pitch from current entity orientation
         LivingEntity entity = bot.getLivingEntity();
         if (entity != null) {
             this.currentYaw = entity.getLocation().getYaw();
@@ -130,17 +71,8 @@ public class MovementController {
     /**
      * Main tick method. Called every server tick for smooth movement.
      *
-     * <p>Processing order:
-     * <ol>
-     *   <li>Update look direction (smooth aim toward target or idle noise).</li>
-     *   <li>Process sprint state.</li>
-     *   <li>Process jump logic.</li>
-     *   <li>Calculate movement velocity toward target.</li>
-     *   <li>Manage sprint-jump travel if applicable.</li>
-     *   <li>Apply human motion noise.</li>
-     *   <li>Apply sneaking state.</li>
-     *   <li>Check for fall damage / water MLG.</li>
-     * </ol></p>
+     * [FIX] Removed duplicate movement application block that was causing
+     * the bot to receive double velocity every tick.
      */
     public void tick() {
         LivingEntity entity = bot.getLivingEntity();
@@ -160,18 +92,12 @@ public class MovementController {
             return;
         }
 
-        if (moveTarget != null || movingForward || movingBackward) {
-            updateSprintJumpTravel(entity);
-            applyMovement(entity);
-        } else {
-            inSprintJumpCycle = false;
-            humanMotion.applyDeceleration(entity);
-        }
-
+        // [FIX] Single movement application block — was duplicated before
         if (moveTarget != null || movingForward || movingBackward) {
             updateSprintJumpTravel(entity);
             applyMovement(entity);
         } else if (strafeController.isStrafing()) {
+            // Only strafe when not moving toward a target
             Vector rightDir = getRightDirection();
             Vector strafeVelocity = strafeController.getStrafeVelocity(rightDir);
             strafeVelocity.setY(entity.getVelocity().getY());
@@ -183,35 +109,13 @@ public class MovementController {
 
         updateSneakState(entity);
         applyLookToEntity(entity);
-
     }
 
     // ─── Sprint-Jump Travel ─────────────────────────────────────
 
-    /**
-     * Manages the sprint-jump travel cycle. When moving toward a distant target,
-     * the bot sprints and jumps continuously for maximum speed — the standard
-     * fastest travel method in Minecraft 1.8.
-     *
-     * <p>Sprint-jumping works by chaining sprint → jump → land → immediately jump
-     * again. Each cycle covers about 5-6 blocks and takes roughly 12 ticks. The
-     * speed boost from sprint-jumping is significant (~5.6 blocks/sec vs ~4.3
-     * blocks/sec walking).</p>
-     *
-     * <p>The system considers:
-     * <ul>
-     *   <li>Distance to target (must be > {@value #SPRINT_JUMP_MIN_DISTANCE} blocks)</li>
-     *   <li>Sneaking state (no sprint-jumping while sneaking)</li>
-     *   <li>Sprint-jump enabled flag (can be disabled by bridge/combat systems)</li>
-     *   <li>Difficulty: higher difficulty = more consistent sprint-jump timing</li>
-     * </ul></p>
-     *
-     * @param entity the bot's living entity
-     */
     private void updateSprintJumpTravel(@Nonnull LivingEntity entity) {
         ticksSinceLastSprintJump++;
 
-        // Check if sprint-jump conditions are met
         if (!sprintJumpEnabled || sneaking || movingBackward) {
             inSprintJumpCycle = false;
             return;
@@ -222,92 +126,68 @@ public class MovementController {
             Location botLoc = entity.getLocation();
             distanceToTarget = MathUtil.horizontalDistance(botLoc, moveTarget);
         } else if (movingForward) {
-            // When moving forward without a specific target, enable sprint-jump
-            // if requested (e.g., running away)
-            distanceToTarget = SPRINT_JUMP_MIN_DISTANCE + 1; // Always qualify
+            distanceToTarget = SPRINT_JUMP_MIN_DISTANCE + 1;
         }
 
         if (distanceToTarget < SPRINT_JUMP_MIN_DISTANCE) {
-            // Too close to target — walk/sprint normally to avoid overshooting
             inSprintJumpCycle = false;
-            // Still sprint for the last stretch if not too close
             if (distanceToTarget > 2.0 && !sneaking) {
                 sprintController.startSprinting();
             }
             return;
         }
 
-        // Activate sprint-jump cycle
         inSprintJumpCycle = true;
         sprintController.startSprinting();
 
-        // Determine optimal jump timing based on difficulty
         DifficultyProfile diff = bot.getDifficultyProfile();
         double diffFraction = diff.getDifficulty().asFraction();
 
-        // Optimal jump interval: ~12 ticks (when the bot lands from previous jump).
-        // Lower difficulty bots have slightly longer intervals and may miss some jumps.
         int optimalJumpInterval = 12;
-        int jumpTimingVariance = (int) Math.round(3.0 * (1.0 - diffFraction)); // ±0-3 ticks
+        int jumpTimingVariance = (int) Math.round(3.0 * (1.0 - diffFraction));
         int currentJumpInterval = optimalJumpInterval + RandomUtil.nextInt(-jumpTimingVariance,
                 jumpTimingVariance);
-        currentJumpInterval = Math.max(8, currentJumpInterval); // Minimum 8 ticks between jumps
+        currentJumpInterval = Math.max(8, currentJumpInterval);
 
-        // Check if it's time to jump
         boolean onGround = NMSHelper.isOnGround(entity);
 
         if (onGround && ticksSinceLastSprintJump >= currentJumpInterval) {
-            // Low difficulty bots sometimes forget to jump (miss the sprint-jump chain)
             double jumpChance = MathUtil.lerp(0.6, 1.0, diffFraction);
             if (RandomUtil.chance(jumpChance)) {
                 jumpController.jump();
                 ticksSinceLastSprintJump = 0;
             } else {
-                // Missed jump — will try again next eligible tick
-                // This creates the natural "sometimes runs, sometimes sprint-jumps"
-                // pattern seen in lower-skill players
-                ticksSinceLastSprintJump = currentJumpInterval - 2; // Try again soon
+                ticksSinceLastSprintJump = currentJumpInterval - 2;
             }
         }
     }
 
     // ─── Look Direction ─────────────────────────────────────────
 
-    /**
-     * Updates the bot's current yaw and pitch, smoothly interpolating toward
-     * the look target if one is set, or injecting idle head noise otherwise.
-     *
-     * @param entity the bot's living entity
-     */
     private void updateLookDirection(@Nonnull LivingEntity entity) {
         DifficultyProfile diff = bot.getDifficultyProfile();
         double aimSpeed = diff.getAimSpeedDegPerTick();
         double headNoise = diff.getHeadMovementNoise();
 
         if (lookTarget != null) {
-            // Calculate desired angles to look at target
             Location eyePos = entity.getEyeLocation();
             float targetYaw = MathUtil.calculateYaw(eyePos, lookTarget);
             float targetPitch = MathUtil.calculatePitch(eyePos, lookTarget);
 
-            // Smooth interpolation with capped rotation speed
             double yawDiff = MathUtil.angleDifference(currentYaw, targetYaw);
             double pitchDiff = targetPitch - currentPitch;
 
-            // Clamp rotation by aimSpeedDegPerTick
             double maxRotation = aimSpeed;
             if (Math.abs(yawDiff) > maxRotation) {
                 yawDiff = Math.signum(yawDiff) * maxRotation;
             }
             if (Math.abs(pitchDiff) > maxRotation * 0.5) {
-                // Pitch moves slower than yaw (realistic)
                 pitchDiff = Math.signum(pitchDiff) * maxRotation * 0.5;
             }
 
             currentYaw = (float) MathUtil.normalizeAngle(currentYaw + yawDiff);
             currentPitch = (float) MathUtil.clamp(currentPitch + pitchDiff, -90.0, 90.0);
         } else {
-            // No look target — add idle head noise for natural appearance
             currentYaw += (float) RandomUtil.gaussian(0.0, headNoise * 2.0);
             currentPitch += (float) RandomUtil.gaussian(0.0, headNoise);
             currentPitch = (float) MathUtil.clamp(currentPitch, -90.0, 90.0);
@@ -315,22 +195,10 @@ public class MovementController {
         }
     }
 
-    /**
-     * Applies the current yaw and pitch to the bot's entity, sending packets
-     * to nearby players for smooth visual rotation.
-     *
-     * @param entity the bot entity
-     */
     private void applyLookToEntity(@Nonnull LivingEntity entity) {
         Location loc = entity.getLocation();
         loc.setYaw(currentYaw);
         loc.setPitch(currentPitch);
-
-        /*
-         * We teleport the entity to the same position with updated yaw/pitch.
-         * This is how Citizens NPCs have their orientation updated.
-         * Additionally, we send head rotation packets for smoother visual updates.
-         */
         entity.teleport(loc);
         PacketUtil.sendHeadRotation(entity, currentYaw);
         PacketUtil.sendEntityLook(entity, currentYaw, currentPitch);
@@ -341,44 +209,34 @@ public class MovementController {
     /**
      * Calculates and applies per-tick movement toward the current target.
      *
-     * <p>When sprint-jump travel is active, the movement speed includes the sprint
-     * multiplier (1.3x) and the jump provides additional forward momentum. The
-     * combination results in roughly 5.6 blocks/sec — the fastest possible
-     * horizontal speed in vanilla 1.8 without potions.</p>
-     *
-     * @param entity the bot entity
+     * [FIX] Strafe velocity is only added when the bot is in melee range
+     * (has a moveTarget within 4 blocks) and strafing is active. Previously
+     * strafe was added unconditionally on top of directional movement,
+     * causing overshoot.
      */
     private void applyMovement(@Nonnull LivingEntity entity) {
         Location currentLoc = entity.getLocation();
         DifficultyProfile diff = bot.getDifficultyProfile();
 
-        // Determine movement direction
         Vector moveDirection;
         if (moveTarget != null) {
-            moveDirection = MathUtil.directionTo(currentLoc, moveTarget);
-            if (MathUtil.horizontalDistance(currentLoc, moveTarget) < 0.5) {
+            double horizDist = MathUtil.horizontalDistance(currentLoc, moveTarget);
+            if (horizDist < 0.5) {
                 moveTarget = null;
                 inSprintJumpCycle = false;
                 humanMotion.applyDeceleration(entity);
                 return;
             }
+            moveDirection = MathUtil.directionTo(currentLoc, moveTarget);
         } else if (movingForward) {
             moveDirection = getForwardDirection();
         } else if (movingBackward) {
             moveDirection = getForwardDirection().multiply(-1);
         } else {
-            if (strafeController.isStrafing()) {
-                Vector rightDir = getRightDirection();
-                Vector strafeVelocity = strafeController.getStrafeVelocity(rightDir);
-                strafeVelocity.setY(entity.getVelocity().getY());
-                entity.setVelocity(strafeVelocity);
-            } else {
-                humanMotion.applyDeceleration(entity);
-            }
+            humanMotion.applyDeceleration(entity);
             return;
         }
 
-        // Calculate base speed
         double baseSpeed = getBaseMovementSpeed();
         if (sneaking) {
             baseSpeed *= 0.3;
@@ -388,69 +246,44 @@ public class MovementController {
         }
         baseSpeed *= speedMultiplier;
 
-        // Apply human motion simulation (noise, acceleration)
         Vector velocity = humanMotion.processMovement(entity, moveDirection, baseSpeed);
 
-        // [FIX-2A] Apply strafe velocity during combat
         if (strafeController.isStrafing()) {
-            Vector rightDir = getRightDirection();
-            Vector strafeVelocity = strafeController.getStrafeVelocity(rightDir);
-            velocity.add(strafeVelocity);
+            boolean inMeleeRange = false;
+            if (moveTarget != null) {
+                double dist = MathUtil.horizontalDistance(currentLoc, moveTarget);
+                inMeleeRange = dist <= 4.0;
+            } else {
+                inMeleeRange = true;
+            }
+            if (inMeleeRange) {
+                Vector rightDir = getRightDirection();
+                Vector strafeVelocity = strafeController.getStrafeVelocity(rightDir);
+                velocity.add(strafeVelocity);
+            }
         }
 
-        // Apply the velocity
-        velocity.setY(entity.getVelocity().getY()); // Preserve vertical velocity
+        velocity.setY(entity.getVelocity().getY());
         entity.setVelocity(velocity);
     }
 
-
-    /**
-     * Updates the sneaking state on the entity via NMS.
-     *
-     * @param entity the bot entity
-     */
     private void updateSneakState(@Nonnull LivingEntity entity) {
         NMSHelper.setSneaking(entity, sneaking);
     }
 
-    // ─── Movement Commands (called by higher-level systems) ─────
+    // ─── Movement Commands ──────────────────────────────────────
 
-    /**
-     * Sets a target location for the bot to walk/run toward.
-     * The bot will move toward this point each tick until it arrives or
-     * a new target is set. Set to null to stop moving.
-     *
-     * <p>If the target is more than {@value #SPRINT_JUMP_MIN_DISTANCE} blocks away
-     * and sprint-jump is enabled, the bot will automatically sprint-jump for
-     * maximum speed.</p>
-     *
-     * @param target the target location, or null to stop
-     */
     public void setMoveTarget(@Nullable Location target) {
-        // [FIX-C1 hardening] Delegate to authority-aware overload with AI_GENERAL.
-        // Previously this bypassed the authority system entirely, causing movement
-        // flickering when multiple systems called it on the same tick.
         setMoveTarget(target, MovementAuthority.AI_GENERAL);
     }
 
-    /**
-     * Sets the move target only if the caller's authority is >= the current authority.
-     * This prevents lower-priority systems from overriding higher-priority ones.
-     *
-     * @param target    the target location, or null to stop (releasing always succeeds)
-     * @param authority the caller's authority level
-     * @return true if the target was set, false if blocked by higher authority
-     */
-    // [FIX-C1] Priority-based movement target setting
     public boolean setMoveTarget(@Nullable Location target, @Nonnull MovementAuthority authority) {
         if (target == null) {
-            // Releasing: only release if this authority owns it or higher
             if (authority.ordinal() >= currentAuthority.ordinal()) {
                 this.moveTarget = null;
                 this.movingForward = false;
                 this.movingBackward = false;
                 this.inSprintJumpCycle = false;
-                // Don't reset authority to NONE here — let releaseAuthority() do that
                 return true;
             }
             return false;
@@ -462,17 +295,9 @@ public class MovementController {
             this.movingBackward = false;
             return true;
         }
-        return false; // Blocked by higher-priority authority
+        return false;
     }
 
-    /**
-     * Claims movement authority. Higher authority blocks lower authority from
-     * changing movement until released.
-     *
-     * @param authority the authority level to claim
-     * @return true if claimed (authority >= current), false if blocked
-     */
-    // [FIX-C1] Authority claim for non-target movement (sprint, sneak)
     public boolean claimAuthority(@Nonnull MovementAuthority authority) {
         if (authority.ordinal() >= currentAuthority.ordinal()) {
             currentAuthority = authority;
@@ -481,59 +306,28 @@ public class MovementController {
         return false;
     }
 
-    /**
-     * Releases the given authority level. If the current authority matches,
-     * drops back to NONE. If the given authority is lower than current,
-     * does nothing (can't release someone else's lock).
-     *
-     * @param authority the authority level to release
-     */
-    // [FIX-C1] Authority release
     public void releaseAuthority(@Nonnull MovementAuthority authority) {
         if (authority.ordinal() >= currentAuthority.ordinal()) {
             currentAuthority = MovementAuthority.NONE;
         }
     }
 
-    /**
-     * Forcefully resets authority to NONE. Used on state transitions.
-     */
-    // [FIX-C1] Force-reset for state transitions
     public void resetAuthority() {
         currentAuthority = MovementAuthority.NONE;
     }
 
-    /**
-     * Returns the current movement authority.
-     *
-     * @return the current authority level
-     */
     @Nonnull
     public MovementAuthority getCurrentAuthority() {
         return currentAuthority;
     }
 
-
-    /**
-     * Sets the bot to move forward in its current facing direction.
-     * [FIX] Now checks authority — uses AI_GENERAL by default.
-     *
-     * @param forward true to move forward, false to stop
-     */
     public void setMovingForward(boolean forward) {
         setMovingForward(forward, MovementAuthority.AI_GENERAL);
     }
 
-    /**
-     * Sets the bot to move forward with authority check.
-     *
-     * @param forward   true to move forward, false to stop
-     * @param authority the caller's authority level
-     * @return true if the change was applied
-     */
     public boolean setMovingForward(boolean forward, @Nonnull MovementAuthority authority) {
         if (authority.ordinal() < currentAuthority.ordinal()) {
-            return false; // Blocked by higher authority
+            return false;
         }
         this.movingForward = forward;
         if (forward) {
@@ -544,26 +338,13 @@ public class MovementController {
         return true;
     }
 
-    /**
-     * Sets the bot to move backward (away from its facing direction).
-     * [FIX] Now checks authority — uses AI_GENERAL by default.
-     *
-     * @param backward true to move backward, false to stop
-     */
     public void setMovingBackward(boolean backward) {
         setMovingBackward(backward, MovementAuthority.AI_GENERAL);
     }
 
-    /**
-     * Sets the bot to move backward with authority check.
-     *
-     * @param backward  true to move backward, false to stop
-     * @param authority the caller's authority level
-     * @return true if the change was applied
-     */
     public boolean setMovingBackward(boolean backward, @Nonnull MovementAuthority authority) {
         if (authority.ordinal() < currentAuthority.ordinal()) {
-            return false; // Blocked by higher authority
+            return false;
         }
         this.movingBackward = backward;
         if (backward) {
@@ -575,57 +356,25 @@ public class MovementController {
         return true;
     }
 
-
-    /**
-     * Sets a location for the bot to continuously look at.
-     * Set to null for idle head noise.
-     *
-     * @param target the look target, or null for idle
-     */
     public void setLookTarget(@Nullable Location target) {
         this.lookTarget = target;
     }
 
-    /**
-     * Sets the sneaking state.
-     *
-     * @param sneaking whether the bot should sneak
-     */
     public void setSneaking(boolean sneaking) {
         this.sneaking = sneaking;
         if (sneaking) {
-            this.inSprintJumpCycle = false; // No sprint-jumping while sneaking
+            this.inSprintJumpCycle = false;
         }
     }
 
-    /**
-     * Freezes or unfreezes movement. While frozen, the bot still updates
-     * its look direction but does not move.
-     *
-     * @param frozen true to freeze movement
-     */
     public void setFrozen(boolean frozen) {
         this.frozen = frozen;
     }
 
-    /**
-     * Sets a movement speed multiplier on top of the base movement speed.
-     *
-     * @param multiplier the speed multiplier (1.0 = normal)
-     */
     public void setSpeedMultiplier(double multiplier) {
         this.speedMultiplier = MathUtil.clamp(multiplier, 0.0, 3.0);
     }
 
-    /**
-     * Enables or disables automatic sprint-jump travel mode.
-     *
-     * <p>When enabled (default), the bot automatically sprint-jumps when moving
-     * toward distant targets. Disable this during bridging, careful sneaking,
-     * or other situations where jumping would be detrimental.</p>
-     *
-     * @param enabled true to enable sprint-jump travel
-     */
     public void setSprintJumpEnabled(boolean enabled) {
         this.sprintJumpEnabled = enabled;
         if (!enabled) {
@@ -633,10 +382,6 @@ public class MovementController {
         }
     }
 
-    /**
-     * Stops all movement immediately. Clears target, forward/backward flags,
-     * disables sprint-jump cycle, and applies deceleration.
-     */
     public void stopAll() {
         moveTarget = null;
         movingForward = false;
@@ -648,26 +393,11 @@ public class MovementController {
         }
     }
 
-    /**
-     * Commands the bot to perform a single sprint-jump. This is the standard fastest
-     * travel method in 1.8. Enables sprinting and queues a jump.
-     *
-     * <p>For continuous sprint-jump travel (which is what real players do), use
-     * {@link #setSprintJumpEnabled(boolean)} + {@link #setMoveTarget(Location)} instead.
-     * This method is for one-off sprint-jumps, e.g., closing distance in combat.</p>
-     */
     public void sprintJump() {
         sprintController.startSprinting();
         jumpController.jump();
     }
 
-    /**
-     * Commands the bot to move toward a target using sprint-jump travel.
-     * This is a convenience method that sets the target and ensures sprint-jump
-     * is enabled.
-     *
-     * @param target the target location to sprint-jump toward
-     */
     public void sprintJumpTo(@Nonnull Location target) {
         setSprintJumpEnabled(true);
         setMoveTarget(target);
@@ -675,130 +405,53 @@ public class MovementController {
 
     // ─── Queries ────────────────────────────────────────────────
 
-    /**
-     * Returns the forward direction vector based on the bot's current yaw.
-     * This is the horizontal direction the bot is facing.
-     *
-     * @return the forward direction unit vector (Y=0)
-     */
     @Nonnull
     public Vector getForwardDirection() {
         double yawRad = Math.toRadians(currentYaw);
         return new Vector(-Math.sin(yawRad), 0, Math.cos(yawRad)).normalize();
     }
 
-    /**
-     * Returns the right-strafe direction vector (perpendicular to forward).
-     *
-     * @return the right direction unit vector (Y=0)
-     */
     @Nonnull
     public Vector getRightDirection() {
         double yawRad = Math.toRadians(currentYaw - 90.0);
         return new Vector(-Math.sin(yawRad), 0, Math.cos(yawRad)).normalize();
     }
 
-    /**
-     * Returns the base walking speed in blocks per tick.
-     * Vanilla walking speed is ~0.1 blocks/tick (4.317 blocks/sec at 20TPS).
-     *
-     * @return the base walking speed in blocks per tick
-     */
     private double getBaseMovementSpeed() {
-        return 0.1; // Vanilla walking speed
+        return 0.1;
     }
 
-    /** @return the current yaw in degrees */
     public float getCurrentYaw() { return currentYaw; }
-
-    /** @return the current pitch in degrees */
     public float getCurrentPitch() { return currentPitch; }
-
-    /** @return true if the bot is currently sneaking */
     public boolean isSneaking() { return sneaking; }
-
-    /** @return true if movement is frozen */
     public boolean isFrozen() { return frozen; }
-
-    /** @return true if the bot is currently in a sprint-jump travel cycle */
     public boolean isSprintJumping() { return inSprintJumpCycle; }
-
-    /** @return true if sprint-jump travel mode is enabled */
     public boolean isSprintJumpEnabled() { return sprintJumpEnabled; }
+    @Nonnull public SprintController getSprintController() { return sprintController; }
+    @Nonnull public JumpController getJumpController() { return jumpController; }
+    @Nonnull public StrafeController getStrafeController() { return strafeController; }
+    @Nonnull public HumanMotionSimulator getHumanMotion() { return humanMotion; }
+    @Nonnull public WaterMLGController getWaterMLGController() { return waterMLGController; }
+    public boolean isMoving() { return moveTarget != null || movingForward || movingBackward; }
+    @Nullable public Location getMoveTarget() { return moveTarget; }
+    @Nullable public Location getLookTarget() { return lookTarget; }
 
-    /** @return the sprint controller */
-    @Nonnull
-    public SprintController getSprintController() { return sprintController; }
-
-    /** @return the jump controller */
-    @Nonnull
-    public JumpController getJumpController() { return jumpController; }
-
-    /** @return the strafe controller */
-    @Nonnull
-    public StrafeController getStrafeController() { return strafeController; }
-
-    /** @return the human motion simulator */
-    @Nonnull
-    public HumanMotionSimulator getHumanMotion() { return humanMotion; }
-
-    /** @return the water MLG controller */
-    @Nonnull
-    public WaterMLGController getWaterMLGController() { return waterMLGController; }
-
-    /** @return true if the bot is actively moving toward a target */
-    public boolean isMoving() {
-        return moveTarget != null || movingForward || movingBackward;
-    }
-
-    /** @return the current move target, or null if none */
-    @Nullable
-    public Location getMoveTarget() { return moveTarget; }
-
-    /** @return the current look target, or null if none */
-    @Nullable
-    public Location getLookTarget() { return lookTarget; }
-
-    /**
-     * Sets the current yaw directly (used by combat aim controller to
-     * override look direction with higher precision).
-     *
-     * @param yaw the new yaw in degrees
-     */
     public void setCurrentYaw(float yaw) {
         this.currentYaw = (float) MathUtil.normalizeAngle(yaw);
     }
 
-    /**
-     * Sets the current pitch directly.
-     *
-     * @param pitch the new pitch in degrees [-90, 90]
-     */
     public void setCurrentPitch(float pitch) {
         this.currentPitch = (float) MathUtil.clamp(pitch, -90.0, 90.0);
     }
 
-    // [FIX-C1/C2/A5] Movement authority system.
-    // Higher ordinal = higher priority. Only the current authority holder (or higher)
-    // can change movement targets. This prevents flickering from multiple systems
-    // calling setMoveTarget() on the same tick.
     public enum MovementAuthority {
-        /** No system has claimed movement. Anyone can set targets. */
         NONE,
-        /** General AI movement (positional engine, idle wandering). */
         AI_GENERAL,
-        /** Loot engine pathfinding to chest. */
         LOOT,
-        /** Hunting/approach — navigating to enemy. */
         HUNTING,
-        /** Combat positioning (strafing, approach, melee range). */
         COMBAT,
-        /** Bridging — precise movement for block placement. */
         BRIDGE,
-        /** Defensive behavior (RetreatHealer fleeing). */
         DEFENSE,
-        /** Fleeing state — highest priority escape movement. */
         FLEE
     }
-
 }

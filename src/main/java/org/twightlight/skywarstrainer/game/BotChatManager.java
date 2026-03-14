@@ -7,6 +7,7 @@ import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.personality.Personality;
 import org.twightlight.skywarstrainer.ai.personality.PersonalityProfile;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
+import org.twightlight.skywarstrainer.config.ConfigManager;
 import org.twightlight.skywarstrainer.util.RandomUtil;
 
 import javax.annotation.Nonnull;
@@ -19,33 +20,19 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Manages fake chat messages sent by bots to simulate real player communication.
  *
- * <p>Chat messages are triggered by game events (kills, deaths, game start/end)
- * and are influenced by the bot's personality. Messages are loaded from
- * messages.yml and can be customized by server admins.</p>
+ * [FIX] Now reads ALL chat config values from config.yml via ConfigManager:
+ * - cooldown-seconds
+ * - typing-speed-min-ms / typing-speed-max-ms
+ * - max-delay-ticks
+ * - message-chance per event type
+ * - show-typing-particles
  *
- * <p>Features:</p>
- * <ul>
- *   <li>Personality-specific message pools (AGGRESSIVE = toxic, PASSIVE = polite, etc.)</li>
- *   <li>Simulated typing delay (20-80ms per character)</li>
- *   <li>Cooldown between messages to avoid spam</li>
- *   <li>Toggleable via config (general.enable-chat)</li>
- * </ul>
- *
- * <p>This is a static utility class. All methods are thread-safe.</p>
+ * Previously all of these were hardcoded constants.
  */
 public final class BotChatManager {
 
     /** Cooldown tracking: botId -> last message timestamp (millis). */
     private static final Map<UUID, Long> messageCooldowns = new ConcurrentHashMap<>();
-
-    /** Minimum milliseconds between messages from the same bot. */
-    private static final long MESSAGE_COOLDOWN_MS = 5000L;
-
-    /** Minimum typing delay per character in milliseconds. */
-    private static final int MIN_TYPING_DELAY_MS_PER_CHAR = 20;
-
-    /** Maximum typing delay per character in milliseconds. */
-    private static final int MAX_TYPING_DELAY_MS_PER_CHAR = 80;
 
     private BotChatManager() {
         // Static utility class
@@ -53,27 +40,29 @@ public final class BotChatManager {
 
     /**
      * Sends a chat message from the given bot based on the event type.
-     * The message is selected from messages.yml based on the bot's personality
-     * and the event type. The message is sent with a simulated typing delay.
      *
-     * <p>If chat is disabled in config, this method does nothing.
-     * If the bot is on cooldown, the message is skipped.</p>
-     *
-     * @param bot       the bot sending the message
-     * @param eventType the event triggering the message (e.g., "game_start",
-     *                  "first_kill", "death", "win", "close_fight_won",
-     *                  "close_fight_lost")
+     * [FIX] Now uses config values for:
+     * - message chance per event (chat.message-chance.*)
+     * - cooldown (chat.cooldown-seconds)
+     * - typing speed (chat.typing-speed-min-ms / max-ms)
+     * - max delay (chat.max-delay-ticks)
      */
     public static void sendChatMessage(@Nonnull TrainerBot bot, @Nonnull String eventType) {
         SkyWarsTrainer plugin = bot.getPlugin();
+        ConfigManager config = plugin.getConfigManager();
 
         // Check if chat is enabled
-        if (!plugin.getConfigManager().isChatEnabled()) return;
+        if (!config.isChatEnabled()) return;
 
-        // Check cooldown
+        // [FIX] Check message chance for this event type from config
+        double chance = config.getChatChanceForEvent(eventType);
+        if (!RandomUtil.chance(chance)) return;
+
+        // [FIX] Check cooldown from config (was hardcoded 5000ms)
+        long cooldownMs = config.getChatCooldownSeconds() * 1000L;
         long now = System.currentTimeMillis();
         Long lastMessage = messageCooldowns.get(bot.getBotId());
-        if (lastMessage != null && (now - lastMessage) < MESSAGE_COOLDOWN_MS) {
+        if (lastMessage != null && (now - lastMessage) < cooldownMs) {
             return;
         }
 
@@ -81,8 +70,8 @@ public final class BotChatManager {
         String message = selectMessage(plugin, bot, eventType);
         if (message == null || message.isEmpty()) return;
 
-        // Calculate typing delay
-        int typingDelayTicks = calculateTypingDelay(message);
+        // [FIX] Calculate typing delay from config (was hardcoded 20-80 ms/char)
+        int typingDelayTicks = calculateTypingDelay(message, config);
 
         // Record cooldown
         messageCooldowns.put(bot.getBotId(), now);
@@ -95,16 +84,6 @@ public final class BotChatManager {
         }, typingDelayTicks);
     }
 
-    /**
-     * Selects a message from messages.yml based on the bot's personality
-     * and the event type. Falls back to the "default" personality pool
-     * if no personality-specific message is found.
-     *
-     * @param plugin    the plugin instance
-     * @param bot       the bot
-     * @param eventType the event type key
-     * @return the selected message, or null if none available
-     */
     @Nullable
     private static String selectMessage(@Nonnull SkyWarsTrainer plugin,
                                         @Nonnull TrainerBot bot,
@@ -130,17 +109,9 @@ public final class BotChatManager {
             return RandomUtil.randomElement(defaultMessages.toArray(new String[0]));
         }
 
-        // Hard-coded fallbacks for essential events
         return getHardcodedFallback(eventType);
     }
 
-    /**
-     * Returns a hard-coded fallback message for essential events when
-     * messages.yml is missing or incomplete.
-     *
-     * @param eventType the event type
-     * @return a fallback message, or null
-     */
     @Nullable
     private static String getHardcodedFallback(@Nonnull String eventType) {
         switch (eventType) {
@@ -156,38 +127,31 @@ public final class BotChatManager {
 
     /**
      * Calculates the typing delay in ticks based on the message length.
-     * Simulates realistic typing speed (20-80ms per character).
      *
-     * @param message the message text
-     * @return delay in ticks (1 tick = 50ms)
+     * [FIX] Now reads min/max typing speed and max-delay-ticks from ConfigManager
+     * instead of hardcoded values.
      */
-    private static int calculateTypingDelay(@Nonnull String message) {
-        int msPerChar = RandomUtil.nextInt(MIN_TYPING_DELAY_MS_PER_CHAR,
-                MAX_TYPING_DELAY_MS_PER_CHAR);
+    private static int calculateTypingDelay(@Nonnull String message, @Nonnull ConfigManager config) {
+        int minMsPerChar = config.getChatTypingSpeedMinMs();
+        int maxMsPerChar = config.getChatTypingSpeedMaxMs();
+        int msPerChar = RandomUtil.nextInt(minMsPerChar, Math.max(minMsPerChar + 1, maxMsPerChar));
         int totalDelayMs = message.length() * msPerChar;
-        // Clamp to 0.5-4 seconds
-        totalDelayMs = Math.max(500, Math.min(4000, totalDelayMs));
+        // Clamp to 0.5 seconds minimum
+        totalDelayMs = Math.max(500, totalDelayMs);
         // Convert to ticks (1 tick = 50ms)
-        return totalDelayMs / 50;
+        int delayTicks = totalDelayMs / 50;
+        // [FIX] Cap by max-delay-ticks from config (was uncapped/hardcoded)
+        int maxTicks = config.getChatMaxDelayTicks();
+        return Math.min(delayTicks, maxTicks);
     }
 
-    /**
-     * Broadcasts a chat message from the bot to all players in the same world.
-     * The message appears as if the bot typed it in chat.
-     *
-     * @param bot     the bot sending the message
-     * @param message the message text
-     */
     private static void broadcastBotMessage(@Nonnull TrainerBot bot, @Nonnull String message) {
         Player botPlayer = bot.getPlayerEntity();
         if (botPlayer == null) return;
 
-        // Use Bukkit's broadcast or per-player message depending on scope
         String formattedMessage = botPlayer.getDisplayName() + ": " + message;
 
-        // Send to all players in the same world
         for (Player player : botPlayer.getWorld().getPlayers()) {
-            // Don't send to other bots
             if (!bot.getPlugin().getBotManager().isBot(player.getUniqueId())) {
                 player.sendMessage(formattedMessage);
             }
@@ -198,18 +162,10 @@ public final class BotChatManager {
         }
     }
 
-    /**
-     * Clears cooldown tracking for a specific bot. Called when a bot is despawned.
-     *
-     * @param botId the bot's unique ID
-     */
     public static void clearCooldown(@Nonnull UUID botId) {
         messageCooldowns.remove(botId);
     }
 
-    /**
-     * Clears all cooldown tracking. Called on plugin disable.
-     */
     public static void clearAllCooldowns() {
         messageCooldowns.clear();
     }

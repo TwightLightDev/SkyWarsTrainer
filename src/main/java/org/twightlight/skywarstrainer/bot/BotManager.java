@@ -97,8 +97,9 @@ public class BotManager {
         }
 
         TrainerBot bot = new TrainerBot(plugin, arena, profile, skin);
-        bot.setStaggerOffset(staggerCounter % Math.max(1, activeBots.size() + 1));
+        bot.setStaggerOffset(staggerCounter);
         staggerCounter++;
+
 
         if (!bot.spawn(location)) {
             plugin.getLogger().warning("Failed to spawn bot: " + displayName);

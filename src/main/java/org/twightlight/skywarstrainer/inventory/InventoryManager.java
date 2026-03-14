@@ -9,12 +9,14 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
- * Central inventory management for a trainer bot. Coordinates all inventory
- * subsystems: armor equipping, sword selection, hotbar organization,
- * enchantment handling, potion usage, food consumption, and block counting.
+ * Central inventory management for a trainer bot.
  *
- * <p>Runs periodically (every 100 ticks for full audit) and on-demand when
- * items are acquired or the bot needs to switch gear.</p>
+ * [FIX] AUDIT_INTERVAL changed from 1 to 100. With AUDIT_INTERVAL=1,
+ * performFullAudit() ran every single tick() call, which is expensive
+ * and redundant since TrainerBot already gates inventory ticks with
+ * inventoryAuditTimer (100 ticks). The internal interval should match
+ * or be larger so that when tick() IS called, it doesn't always do a
+ * full audit.
  */
 public class InventoryManager {
 
@@ -29,7 +31,15 @@ public class InventoryManager {
 
     /** Ticks since last full inventory audit. */
     private int ticksSinceAudit;
-    private static final int AUDIT_INTERVAL = 1;
+
+    /**
+     * [FIX] Changed from 1 to 100. The TrainerBot already calls tick() only
+     * every 100 ticks via inventoryAuditTimer, so having this at 1 meant
+     * every gated call still did a full audit. Setting this to 100 means
+     * that if tick() is called more frequently (e.g., from CONSUMING BT),
+     * only the food/potion handlers run, not the expensive full audit.
+     */
+    private static final int AUDIT_INTERVAL = 100;
 
     public InventoryManager(@Nonnull TrainerBot bot) {
         this.bot = bot;
@@ -84,8 +94,6 @@ public class InventoryManager {
         armorEquipper.equipBestArmor(player);
         swordSelector.selectBestSword(player);
     }
-
-
 
     @Nonnull public ArmorEquipper getArmorEquipper() { return armorEquipper; }
     @Nonnull public SwordSelector getSwordSelector() { return swordSelector; }

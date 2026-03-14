@@ -160,7 +160,6 @@ public class HumanMotionSimulator {
         currentVel.setZ(currentVel.getZ() * decelFactor);
         entity.setVelocity(currentVel);
 
-        // [FIX-2D] Lowered threshold to match the early-return check
         if (horizontalSpeed * decelFactor < 0.01) {
             wasMoving = false;
             accelerationFactor = 0.0;

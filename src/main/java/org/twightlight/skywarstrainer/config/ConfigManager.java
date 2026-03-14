@@ -19,12 +19,9 @@ import java.util.List;
  * <ul>
  *   <li>{@code config.yml} — general plugin settings, performance tuning, skins</li>
  *   <li>{@code difficulty.yml} — difficulty level parameters (loaded by {@link DifficultyConfig})</li>
- *   <li>{@code messages.yml} — chat messages for bot communication (loaded later in Phase 6)</li>
- *   <li>{@code personalities.yml} — personality weight modifiers (loaded later in Phase 6)</li>
+ *   <li>{@code messages.yml} — chat messages for bot communication</li>
+ *   <li>{@code personalities.yml} — personality weight modifiers</li>
  * </ul></p>
- *
- * <p>Files are saved from the JAR's resources on first run, then loaded from disk.
- * Missing keys fall back to defaults embedded in the JAR resource.</p>
  */
 public class ConfigManager {
 
@@ -39,7 +36,9 @@ public class ConfigManager {
     /** The messages.yml file configuration. */
     private FileConfiguration messagesConfig;
 
-    /** Cached values from config.yml for fast access without repeated YAML lookups. */
+    // ═══════════════════════════════════════════════════════════
+    //  CACHED VALUES — general
+    // ═══════════════════════════════════════════════════════════
     private int maxBotsPerGame;
     private int botTickRate;
     private int decisionInterval;
@@ -49,71 +48,89 @@ public class ConfigManager {
     private boolean enableChat;
     private boolean enableSkins;
     private boolean debugMode;
+    private int botWarmupSeconds;
+
+    // ═══════════════════════════════════════════════════════════
+    //  CACHED VALUES — performance
+    // ═══════════════════════════════════════════════════════════
     private long maxPathfindingMsPerTick;
     private boolean staggerBotTicks;
     private boolean cacheMapScan;
     private long maxTotalMsPerTick;
-    private boolean useRandomSkins;
-    private List<String> skinList;
-    private List<String> namePrefixes;
-    private List<String> nameRoots;
-    private List<String> nameSuffixes;
-    private int chatCooldownSeconds;
-    private int chatTypingSpeedMin;
-    private int chatTypingSpeedMax;
-    private int chatMaxDelayTicks;
-    private boolean autoFillEnabled;
-    private int autoFillMinPlayers;
-    private int botWarmupSeconds;
     private long subsystemTimeoutMs;
-    /**
-     * Creates a new ConfigManager for the given plugin.
-     *
-     * @param plugin the owning plugin instance
-     */
+    private int perfLogInterval;
+
+    // ═══════════════════════════════════════════════════════════
+    //  CACHED VALUES — skins (v2)
+    // ═══════════════════════════════════════════════════════════
+    private boolean skinsEnabled;
+    private String skinsMode;
+    private boolean skinsRandomSelection;
+    private boolean skinsCacheEnabled;
+    private int skinsCacheMaxEntries;
+    private int skinsCacheExpiryHours;
+
+    // ═══════════════════════════════════════════════════════════
+    //  CACHED VALUES — random names (v2)
+    // ═══════════════════════════════════════════════════════════
+    private String nameStrategy;
+    private List<String> compositeNamePrefixes;
+    private List<String> compositeNameRoots;
+    private List<String> compositeNameSuffixes;
+    private int nameMaxLength;
+    private double nameLeetChance;
+    private double nameRandomCapsChance;
+    private double nameUnderscoreSeparatorChance;
+
+    // ═══════════════════════════════════════════════════════════
+    //  CACHED VALUES — chat (v2)
+    // ═══════════════════════════════════════════════════════════
+    private int chatCooldownSeconds;
+    private int chatTypingSpeedMinMs;
+    private int chatTypingSpeedMaxMs;
+    private int chatMaxDelayTicks;
+    private boolean chatShowTypingParticles;
+    private double chatChanceGameStart;
+    private double chatChanceFirstKill;
+    private double chatChanceDeath;
+    private double chatChanceWin;
+    private double chatChanceCloseFightWon;
+    private double chatChanceCloseFightLost;
+
+    // ═══════════════════════════════════════════════════════════
+    //  CACHED VALUES — tick timers
+    // ═══════════════════════════════════════════════════════════
+    private int timerVoidDetectInterval;
+    private int timerLavaDetectInterval;
+    private int timerChestUpdateInterval;
+    private int timerIslandGraphInterval;
+    private int timerGamePhaseInterval;
+    private int timerBehaviorTreeInterval;
+    private int timerInventoryAuditInterval;
+    private int timerPositionalInterval;
+    private int timerEnemyAnalyzerInterval;
+
     public ConfigManager(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
     }
 
-    /**
-     * Loads (or reloads) all configuration files. Call this once on plugin enable
-     * and whenever a config reload is requested.
-     *
-     * <p>Process:
-     * <ol>
-     *   <li>Save default resources from JAR if files don't exist on disk.</li>
-     *   <li>Load each YAML file.</li>
-     *   <li>Cache frequently accessed values for performance.</li>
-     * </ol></p>
-     */
     public void loadAll() {
-        // Save defaults from JAR resources if they don't exist
         plugin.saveDefaultConfig();
         saveResourceIfMissing("difficulty.yml");
         saveResourceIfMissing("messages.yml");
+        saveResourceIfMissing("personalities.yml");
 
-        // Load main config
         plugin.reloadConfig();
         this.mainConfig = plugin.getConfig();
 
-        // Load difficulty config file
         this.difficultyFileConfig = loadYamlFile("difficulty.yml");
-
-        // Load messages config file
         this.messagesConfig = loadYamlFile("messages.yml");
 
-        // Cache values for fast access
         cacheMainConfigValues();
 
         plugin.getLogger().info("All configuration files loaded.");
     }
 
-    /**
-     * Saves a resource file from the JAR to the plugin data folder if it
-     * doesn't already exist on disk.
-     *
-     * @param resourceName the resource file name (e.g., "difficulty.yml")
-     */
     private void saveResourceIfMissing(@Nonnull String resourceName) {
         File file = new File(plugin.getDataFolder(), resourceName);
         if (!file.exists()) {
@@ -122,22 +139,11 @@ public class ConfigManager {
         }
     }
 
-    /**
-     * Loads a YAML file from the plugin's data folder. If the file doesn't exist
-     * or fails to parse, falls back to the default resource embedded in the JAR.
-     *
-     * @param fileName the file name relative to the plugin data folder
-     * @return the loaded FileConfiguration (never null; may be empty on total failure)
-     */
     @Nonnull
     private FileConfiguration loadYamlFile(@Nonnull String fileName) {
         File file = new File(plugin.getDataFolder(), fileName);
         FileConfiguration config = YamlConfiguration.loadConfiguration(file);
 
-        /*
-         * Merge in defaults from the JAR resource so that new keys added in
-         * plugin updates are available even if the user hasn't updated their file.
-         */
         InputStream defaultStream = plugin.getResource(fileName);
         if (defaultStream != null) {
             YamlConfiguration defaultConfig = YamlConfiguration.loadConfiguration(
@@ -151,9 +157,10 @@ public class ConfigManager {
 
     /**
      * Caches frequently accessed values from config.yml into fields.
-     * This avoids repeated string-key lookups in hot paths.
+     * [FIX] All paths now match the actual config.yml v2 structure exactly.
      */
     private void cacheMainConfigValues() {
+        // ── General ──
         this.maxBotsPerGame = mainConfig.getInt("general.max-bots-per-game", 8);
         this.botTickRate = mainConfig.getInt("general.bot-tick-rate", 1);
         this.decisionInterval = mainConfig.getInt("general.decision-interval", 10);
@@ -163,176 +170,223 @@ public class ConfigManager {
         this.enableChat = mainConfig.getBoolean("general.enable-chat", true);
         this.enableSkins = mainConfig.getBoolean("general.enable-skins", true);
         this.debugMode = mainConfig.getBoolean("general.debug-mode", false);
+        this.botWarmupSeconds = mainConfig.getInt("general.bot-warmup-seconds", 0);
 
+        // ── Performance ──
         this.maxPathfindingMsPerTick = mainConfig.getLong("performance.max-pathfinding-ms-per-tick", 2);
         this.staggerBotTicks = mainConfig.getBoolean("performance.stagger-bot-ticks", true);
         this.cacheMapScan = mainConfig.getBoolean("performance.cache-map-scan", true);
         this.maxTotalMsPerTick = mainConfig.getLong("performance.max-total-ms-per-tick", 8);
-
-        this.useRandomSkins = mainConfig.getBoolean("skins.use-random-skins", true);
-        this.skinList = mainConfig.getStringList("skins.skin-list");
-
-        this.namePrefixes = mainConfig.getStringList("random-names.prefixes");
-        this.nameRoots = mainConfig.getStringList("random-names.roots");
-        this.nameSuffixes = mainConfig.getStringList("random-names.suffixes");
-
-        this.chatCooldownSeconds = mainConfig.getInt("chat.cooldown-seconds", 5);
-        this.chatTypingSpeedMin = mainConfig.getInt("chat.typing-speed-min-ms", 20);
-        this.chatTypingSpeedMax = mainConfig.getInt("chat.typing-speed-max-ms", 80);
-        this.chatMaxDelayTicks = mainConfig.getInt("chat.max-delay-ticks", 80);
-        this.autoFillEnabled = mainConfig.getBoolean("general.auto-fill-enabled", false);
-        this.autoFillMinPlayers = mainConfig.getInt("general.auto-fill-min-players", 4);
-        this.botWarmupSeconds = mainConfig.getInt("general.bot-warmup-seconds", 0);
         this.subsystemTimeoutMs = mainConfig.getLong("performance.subsystem-timeout-ms", 3);
+        this.perfLogInterval = mainConfig.getInt("performance.perf-log-interval", 0);
+
+        // ── Skins v2 ── [FIX: was reading nonexistent skins.use-random-skins / skins.skin-list]
+        this.skinsEnabled = mainConfig.getBoolean("skins.enabled", true);
+        this.skinsMode = mainConfig.getString("skins.mode", "MIXED");
+        this.skinsRandomSelection = mainConfig.getBoolean("skins.random-selection", true);
+        this.skinsCacheEnabled = mainConfig.getBoolean("skins.cache.enabled", true);
+        this.skinsCacheMaxEntries = mainConfig.getInt("skins.cache.max-entries", 200);
+        this.skinsCacheExpiryHours = mainConfig.getInt("skins.cache.expiry-hours", 72);
+
+        // ── Random Names v2 ── [FIX: was reading random-names.prefixes instead of random-names.composite.prefixes]
+        this.nameStrategy = mainConfig.getString("random-names.strategy", "MIXED");
+        this.compositeNamePrefixes = mainConfig.getStringList("random-names.composite.prefixes");
+        this.compositeNameRoots = mainConfig.getStringList("random-names.composite.roots");
+        this.compositeNameSuffixes = mainConfig.getStringList("random-names.composite.suffixes");
+        this.nameMaxLength = mainConfig.getInt("random-names.formatting.max-length", 16);
+        this.nameLeetChance = mainConfig.getDouble("random-names.formatting.leet-chance", 0.05);
+        this.nameRandomCapsChance = mainConfig.getDouble("random-names.formatting.random-caps-chance", 0.03);
+        this.nameUnderscoreSeparatorChance = mainConfig.getDouble("random-names.formatting.underscore-separator-chance", 0.15);
+
+        // ── Chat v2 ── [FIX: was ignoring message-chance and show-typing-particles]
+        this.chatCooldownSeconds = mainConfig.getInt("chat.cooldown-seconds", 5);
+        this.chatTypingSpeedMinMs = mainConfig.getInt("chat.typing-speed-min-ms", 20);
+        this.chatTypingSpeedMaxMs = mainConfig.getInt("chat.typing-speed-max-ms", 80);
+        this.chatMaxDelayTicks = mainConfig.getInt("chat.max-delay-ticks", 80);
+        this.chatShowTypingParticles = mainConfig.getBoolean("chat.show-typing-particles", false);
+        this.chatChanceGameStart = mainConfig.getDouble("chat.message-chance.game_start", 0.7);
+        this.chatChanceFirstKill = mainConfig.getDouble("chat.message-chance.first_kill", 0.5);
+        this.chatChanceDeath = mainConfig.getDouble("chat.message-chance.death", 0.6);
+        this.chatChanceWin = mainConfig.getDouble("chat.message-chance.win", 0.9);
+        this.chatChanceCloseFightWon = mainConfig.getDouble("chat.message-chance.close_fight_won", 0.3);
+        this.chatChanceCloseFightLost = mainConfig.getDouble("chat.message-chance.close_fight_lost", 0.3);
+
+        // ── Tick Timers ── [FIX: these were entirely missing — hardcoded in TrainerBot]
+        this.timerVoidDetectInterval = mainConfig.getInt("timers.void-detect-interval", 5);
+        this.timerLavaDetectInterval = mainConfig.getInt("timers.lava-detect-interval", 15);
+        this.timerChestUpdateInterval = mainConfig.getInt("timers.chest-update-interval", 60);
+        this.timerIslandGraphInterval = mainConfig.getInt("timers.island-graph-interval", 200);
+        this.timerGamePhaseInterval = mainConfig.getInt("timers.game-phase-interval", 30);
+        this.timerBehaviorTreeInterval = mainConfig.getInt("timers.behavior-tree-interval", 3);
+        this.timerInventoryAuditInterval = mainConfig.getInt("timers.inventory-audit-interval", 100);
+        this.timerPositionalInterval = mainConfig.getInt("timers.positional-interval", 50);
+        this.timerEnemyAnalyzerInterval = mainConfig.getInt("timers.enemy-analyzer-interval", 20);
     }
 
     // ─── Reloading ──────────────────────────────────────────────
 
-    /**
-     * Reloads all configuration files from disk.
-     * Called when an admin uses a reload command.
-     */
     public void reload() {
         loadAll();
-        // DifficultyConfig must also be reloaded (caller's responsibility)
         plugin.getLogger().info("Configuration reloaded.");
     }
 
-    // ─── Accessors: General ─────────────────────────────────────
+    // ═══════════════════════════════════════════════════════════
+    //  GETTERS — General
+    // ═══════════════════════════════════════════════════════════
 
-    /** @return maximum number of bots allowed per game */
-    public int getMaxBotsPerGame() {
-        return maxBotsPerGame;
+    public int getMaxBotsPerGame() { return maxBotsPerGame; }
+    public int getBotTickRate() { return botTickRate; }
+    public int getDecisionInterval() { return decisionInterval; }
+    public int getMapScanInterval() { return mapScanInterval; }
+    @Nonnull public String getDefaultDifficulty() { return defaultDifficulty; }
+    public int getDefaultPersonalityCount() { return defaultPersonalityCount; }
+    public boolean isChatEnabled() { return enableChat; }
+    public boolean isSkinsEnabled() { return enableSkins && skinsEnabled; }
+    public boolean isDebugMode() { return debugMode; }
+    public int getBotWarmupSeconds() { return botWarmupSeconds; }
+
+    // ═══════════════════════════════════════════════════════════
+    //  GETTERS — Performance
+    // ═══════════════════════════════════════════════════════════
+
+    public long getMaxPathfindingMsPerTick() { return maxPathfindingMsPerTick; }
+    public boolean isStaggerBotTicks() { return staggerBotTicks; }
+    public boolean isCacheMapScan() { return cacheMapScan; }
+    public long getMaxTotalMsPerTick() { return maxTotalMsPerTick; }
+    public long getSubsystemTimeoutMs() { return subsystemTimeoutMs; }
+    public int getPerfLogInterval() { return perfLogInterval; }
+
+    // ═══════════════════════════════════════════════════════════
+    //  GETTERS — Skins v2
+    // ═══════════════════════════════════════════════════════════
+
+    /** @return the skin resolution mode (USERNAME, TEXTURE, MIXED) */
+    @Nonnull public String getSkinsMode() { return skinsMode; }
+
+    /** @return whether to randomly select skins (true) or round-robin (false) */
+    public boolean isSkinsRandomSelection() { return skinsRandomSelection; }
+
+    /** @return whether skin texture caching is enabled */
+    public boolean isSkinsCacheEnabled() { return skinsCacheEnabled; }
+
+    /** @return max cached skin entries */
+    public int getSkinsCacheMaxEntries() { return skinsCacheMaxEntries; }
+
+    /** @return hours before cached skin textures expire */
+    public int getSkinsCacheExpiryHours() { return skinsCacheExpiryHours; }
+
+    // Legacy compat — delegates to v2 skins
+    /** @deprecated use isSkinsRandomSelection() */
+    public boolean isUseRandomSkins() { return skinsRandomSelection; }
+
+    /** @deprecated use skin pool resolution in BotSkin */
+    @Nonnull public List<String> getSkinList() {
+        return mainConfig.getStringList("skins.global-pool.usernames");
     }
 
-    /** @return how often (in ticks) the main bot loop runs */
-    public int getBotTickRate() {
-        return botTickRate;
-    }
+    // ═══════════════════════════════════════════════════════════
+    //  GETTERS — Name Generation v2
+    // ═══════════════════════════════════════════════════════════
 
-    /** @return ticks between utility AI re-evaluations */
-    public int getDecisionInterval() {
-        return decisionInterval;
-    }
+    /** @return name generation strategy (COMPOSITE, REALISTIC, FIXED_POOL, MIXED) */
+    @Nonnull public String getNameStrategy() { return nameStrategy; }
 
-    /** @return ticks between full map scans */
-    public int getMapScanInterval() {
-        return mapScanInterval;
-    }
+    /** @return composite prefixes from random-names.composite.prefixes */
+    @Nonnull public List<String> getNamePrefixes() { return compositeNamePrefixes; }
 
-    /** @return default difficulty name (e.g., "MEDIUM") */
-    @Nonnull
-    public String getDefaultDifficulty() {
-        return defaultDifficulty;
-    }
+    /** @return composite roots from random-names.composite.roots */
+    @Nonnull public List<String> getNameRoots() { return compositeNameRoots; }
 
-    /** @return default number of personalities for randomly generated bots */
-    public int getDefaultPersonalityCount() {
-        return defaultPersonalityCount;
-    }
+    /** @return composite suffixes from random-names.composite.suffixes */
+    @Nonnull public List<String> getNameSuffixes() { return compositeNameSuffixes; }
 
-    /** @return whether bots send fake chat messages */
-    public boolean isChatEnabled() {
-        return enableChat;
-    }
+    /** @return max name length from random-names.formatting.max-length */
+    public int getNameMaxLength() { return nameMaxLength; }
 
-    /** @return whether bots use player skins */
-    public boolean isSkinsEnabled() {
-        return enableSkins;
-    }
+    /** @return leet-speak chance from random-names.formatting.leet-chance */
+    public double getNameLeetChance() { return nameLeetChance; }
 
-    /** @return whether debug mode is active */
-    public boolean isDebugMode() {
-        return debugMode;
-    }
+    /** @return random caps chance */
+    public double getNameRandomCapsChance() { return nameRandomCapsChance; }
 
-    // ─── Accessors: Performance ─────────────────────────────────
+    /** @return underscore separator chance */
+    public double getNameUnderscoreSeparatorChance() { return nameUnderscoreSeparatorChance; }
 
-    /** @return max milliseconds per tick for pathfinding calculations */
-    public long getMaxPathfindingMsPerTick() {
-        return maxPathfindingMsPerTick;
-    }
+    // ═══════════════════════════════════════════════════════════
+    //  GETTERS — Chat v2
+    // ═══════════════════════════════════════════════════════════
 
-    /** @return whether bot ticks are staggered across server ticks */
-    public boolean isStaggerBotTicks() {
-        return staggerBotTicks;
-    }
+    /** @return chat cooldown in seconds between messages from the same bot */
+    public int getChatCooldownSeconds() { return chatCooldownSeconds; }
 
-    /** @return whether map scan results should be cached */
-    public boolean isCacheMapScan() {
-        return cacheMapScan;
-    }
+    /** @return min typing speed in ms per character */
+    public int getChatTypingSpeedMinMs() { return chatTypingSpeedMinMs; }
 
-    /** @return max total milliseconds per tick for all bot processing */
-    public long getMaxTotalMsPerTick() {
-        return maxTotalMsPerTick;
-    }
+    /** @return max typing speed in ms per character */
+    public int getChatTypingSpeedMaxMs() { return chatTypingSpeedMaxMs; }
 
-    // ─── Accessors: Skins ───────────────────────────────────────
+    /** @return max message delay in ticks */
+    public int getChatMaxDelayTicks() { return chatMaxDelayTicks; }
 
-    /** @return whether to use random skins from the pool */
-    public boolean isUseRandomSkins() {
-        return useRandomSkins;
-    }
+    /** @return whether to show typing indicator particles */
+    public boolean isChatShowTypingParticles() { return chatShowTypingParticles; }
 
-    /** @return the list of skin usernames for bot appearances */
-    @Nonnull
-    public List<String> getSkinList() {
-        return skinList;
-    }
+    /** @return message chance for game_start event */
+    public double getChatChanceGameStart() { return chatChanceGameStart; }
 
-    // ─── Accessors: Name Generation ─────────────────────────────
+    /** @return message chance for first_kill event */
+    public double getChatChanceFirstKill() { return chatChanceFirstKill; }
 
-    /** @return prefix options for random bot names */
-    @Nonnull
-    public List<String> getNamePrefixes() {
-        return namePrefixes;
-    }
+    /** @return message chance for death event */
+    public double getChatChanceDeath() { return chatChanceDeath; }
 
-    /** @return root word options for random bot names */
-    @Nonnull
-    public List<String> getNameRoots() {
-        return nameRoots;
-    }
+    /** @return message chance for win event */
+    public double getChatChanceWin() { return chatChanceWin; }
 
-    /** @return suffix options for random bot names */
-    @Nonnull
-    public List<String> getNameSuffixes() {
-        return nameSuffixes;
-    }
+    /** @return message chance for close_fight_won event */
+    public double getChatChanceCloseFightWon() { return chatChanceCloseFightWon; }
 
-    // ─── Raw Config Access ──────────────────────────────────────
+    /** @return message chance for close_fight_lost event */
+    public double getChatChanceCloseFightLost() { return chatChanceCloseFightLost; }
 
     /**
-     * Returns the raw main config.yml FileConfiguration for direct access
-     * to keys not cached in this class.
+     * Returns the message chance for a given event type key.
+     * Falls back to 0.5 if the event type is not configured.
      *
-     * @return the main config
+     * @param eventType the event type key (e.g., "game_start", "death")
+     * @return the chance [0.0, 1.0]
      */
-    @Nonnull
-    public FileConfiguration getMainConfig() {
-        return mainConfig;
+    public double getChatChanceForEvent(@Nonnull String eventType) {
+        switch (eventType) {
+            case "game_start": return chatChanceGameStart;
+            case "first_kill": return chatChanceFirstKill;
+            case "death": return chatChanceDeath;
+            case "win": return chatChanceWin;
+            case "close_fight_won": return chatChanceCloseFightWon;
+            case "close_fight_lost": return chatChanceCloseFightLost;
+            default: return 0.5;
+        }
     }
 
-    /**
-     * Returns the difficulty.yml FileConfiguration.
-     * Used by {@link DifficultyConfig} to parse difficulty profiles.
-     *
-     * @return the difficulty config
-     */
-    @Nonnull
-    public FileConfiguration getDifficultyFileConfig() {
-        return difficultyFileConfig;
-    }
+    // ═══════════════════════════════════════════════════════════
+    //  GETTERS — Tick Timers
+    // ═══════════════════════════════════════════════════════════
 
-    /**
-     * Returns the messages.yml FileConfiguration.
-     * Used by the chat system (Phase 6) to load personality-specific messages.
-     *
-     * @return the messages config
-     */
-    @Nonnull
-    public FileConfiguration getMessagesConfig() {
-        return messagesConfig;
-    }
+    public int getTimerVoidDetectInterval() { return timerVoidDetectInterval; }
+    public int getTimerLavaDetectInterval() { return timerLavaDetectInterval; }
+    public int getTimerChestUpdateInterval() { return timerChestUpdateInterval; }
+    public int getTimerIslandGraphInterval() { return timerIslandGraphInterval; }
+    public int getTimerGamePhaseInterval() { return timerGamePhaseInterval; }
+    public int getTimerBehaviorTreeInterval() { return timerBehaviorTreeInterval; }
+    public int getTimerInventoryAuditInterval() { return timerInventoryAuditInterval; }
+    public int getTimerPositionalInterval() { return timerPositionalInterval; }
+    public int getTimerEnemyAnalyzerInterval() { return timerEnemyAnalyzerInterval; }
+
+    // ═══════════════════════════════════════════════════════════
+    //  RAW CONFIG ACCESS
+    // ═══════════════════════════════════════════════════════════
+
+    @Nonnull public FileConfiguration getMainConfig() { return mainConfig; }
+    @Nonnull public FileConfiguration getDifficultyFileConfig() { return difficultyFileConfig; }
+    @Nonnull public FileConfiguration getMessagesConfig() { return messagesConfig; }
 }
