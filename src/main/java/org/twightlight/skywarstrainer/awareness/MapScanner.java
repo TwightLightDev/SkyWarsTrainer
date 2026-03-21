@@ -11,10 +11,8 @@ import org.twightlight.skywarstrainer.util.TickTimer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Periodically scans the terrain around the bot to build a cached 3D grid
@@ -118,6 +116,8 @@ public class MapScanner {
                 return;
             }
         }
+
+
 
         // Significant movement or first scan — full rescan
         lastScanCenter = botLoc.clone();
@@ -314,6 +314,12 @@ public class MapScanner {
             }
         }
         return false;
+    }
+
+    @Nullable
+    public Location getNearestEnchantingTable(@Nonnull Location from) {
+
+        return new ArrayList<>(enchantingTableLocations).stream().min(Comparator.comparing(from::distance)).get();
     }
 
     /**

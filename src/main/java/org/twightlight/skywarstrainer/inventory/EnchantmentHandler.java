@@ -73,20 +73,6 @@ public class EnchantmentHandler {
         }
     }
 
-    /**
-     * Finds a golden apple in the player's inventory.
-     *
-     * @param player the player
-     * @return the slot index, or -1 if not found
-     */
-    public int findGoldenAppleSlot(@Nonnull Player player) {
-        for (int i = 0; i < 36; i++) {
-            org.bukkit.inventory.ItemStack item = player.getInventory().getItem(i);
-            if (item != null && item.getType() == org.bukkit.Material.GOLDEN_APPLE) {
-                return i;
-            }
-        }
-        return -1;
-    }
+
 
 }

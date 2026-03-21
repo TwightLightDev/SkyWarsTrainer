@@ -539,24 +539,31 @@ public class TrainerBot {
                             Location botLoc = entity.getLocation();
                             if (botLoc == null || botLoc.getWorld() == null) return NodeStatus.FAILURE;
 
-                            // Find nearest enchanting table
+
                             Location tableLocation = null;
-                            int radius = 10;
-                            double closestDist = Double.MAX_VALUE;
-                            for (int x = -radius; x <= radius; x++) {
-                                for (int y = -3; y <= 3; y++) {
-                                    for (int z = -radius; z <= radius; z++) {
-                                        Location check = botLoc.clone().add(x, y, z);
-                                        if (check.getBlock().getType() == org.bukkit.Material.ENCHANTMENT_TABLE) {
-                                            double dist = botLoc.distanceSquared(check);
-                                            if (dist < closestDist) {
-                                                closestDist = dist;
-                                                tableLocation = check;
+                            MapScanner scanner = getMapScanner();
+                            if (scanner != null) {
+                                tableLocation = scanner.getNearestEnchantingTable(botLoc);
+                            }
+                            if (tableLocation == null) {
+                                int radius = 6; // Reduced from 10
+                                double closestDist = Double.MAX_VALUE;
+                                for (int x = -radius; x <= radius; x++) {
+                                    for (int y = -3; y <= 3; y++) {
+                                        for (int z = -radius; z <= radius; z++) {
+                                            Location check = botLoc.clone().add(x, y, z);
+                                            if (check.getBlock().getType() == org.bukkit.Material.ENCHANTMENT_TABLE) {
+                                                double dist = botLoc.distanceSquared(check);
+                                                if (dist < closestDist) {
+                                                    closestDist = dist;
+                                                    tableLocation = check;
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
+
 
                             if (tableLocation == null) return NodeStatus.FAILURE;
 
@@ -648,7 +655,7 @@ public class TrainerBot {
                         // Prefer golden apple if available, otherwise regular food
                         if (foodHandler.hasGoldenApple()) {
                             // Find and eat golden apple
-                            int gaSlot = inventoryEngine.getEnchantmentHandler().findGoldenAppleSlot(player);
+                            int gaSlot = inventoryEngine.getFoodHandler().findGoldenAppleSlot(player);
                             if (gaSlot >= 0) {
                                 player.getInventory().setHeldItemSlot(gaSlot < 9 ? gaSlot : 0);
                                 if (gaSlot >= 9) {
@@ -994,6 +1001,22 @@ public class TrainerBot {
         if (!isAlive()) return;
 
         localTickCount++;
+
+        tickSafe("fallCheck", () -> {
+            LivingEntity entity = getLivingEntity();
+            if (entity != null && entity.getVelocity().getY() < -0.5) {
+                DifficultyProfile diff = getDifficultyProfile();
+                if (diff.getWaterBucketMLG() > 0.1 && inventoryEngine != null) {
+                    inventoryEngine.getUtilityItemHandler().tryWaterBucketMLG();
+                }
+            }
+        });
+
+        tickSafe("utilityItemTick", () -> {
+            if (inventoryEngine != null) {
+                inventoryEngine.getUtilityItemHandler().tick();
+            }
+        });
 
         // ── 1. Movement (every tick) ──
         tickSafe("movement", () -> {

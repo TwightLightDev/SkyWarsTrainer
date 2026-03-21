@@ -12,6 +12,8 @@ import org.twightlight.skywarstrainer.movement.MovementController;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import org.twightlight.skywarstrainer.combat.CombatUtils;
+
 /**
  * Projectile PvP strategy: Uses snowballs, eggs, bows, and other projectiles
  * during combat for ranged damage, knockback, and tactical advantage.
@@ -102,7 +104,7 @@ public class ProjectilePvPStrategy implements CombatStrategy {
         if (!hasBow && !hasThrowables) return false;
 
         // Find the nearest enemy
-        LivingEntity target = findNearestEnemy(bot);
+        LivingEntity target = CombatUtils.findNearestEnemy(bot);
         if (target == null) return false;
 
         LivingEntity botEntity = bot.getLivingEntity();
@@ -114,10 +116,10 @@ public class ProjectilePvPStrategy implements CombatStrategy {
         if (range > 4.0) return true;
 
         // Also activate if target is near a void edge (KB projectiles are very valuable)
-        if (isTargetNearVoid(bot, target)) return true;
+        if (CombatUtils.isTargetNearVoid(target)) return true;
 
         // Also activate if target is on a bridge (prime void-kill opportunity)
-        if (isTargetOnBridge(bot, target)) return true;
+        if (CombatUtils.isTargetOnBridge(target)) return true;
 
         return false;
     }
@@ -138,44 +140,33 @@ public class ProjectilePvPStrategy implements CombatStrategy {
         DifficultyProfile diff = bot.getDifficultyProfile();
         ProjectileHandler projectileHandler = bot.getCombatEngine().getProjectileHandler();
 
-        // Tick the projectile handler's cooldowns
-        projectileHandler.tick();
-
         modeTicks++;
         modeEvalCooldown--;
 
-        // Re-evaluate mode periodically or when current mode has run too long
         if (modeEvalCooldown <= 0 || modeTicks >= MAX_MODE_TICKS) {
             currentMode = evaluateBestMode(bot, player, diff);
             modeTicks = 0;
             modeEvalCooldown = MODE_EVAL_INTERVAL;
         }
 
-        // Execute the current mode
         switch (currentMode) {
             case APPROACH_SPAM:
                 executeApproachSpam(bot, player, projectileHandler);
                 break;
-
             case BOW_POWER_SHOT:
                 executeBowPowerShot(bot, player, projectileHandler);
                 break;
-
             case BOW_SPAM:
                 executeBowSpam(bot, player, projectileHandler);
                 break;
-
             case BRIDGE_SNIPE:
                 executeBridgeSnipe(bot, player, projectileHandler, diff);
                 break;
-
             case VOID_EDGE_PUSH:
                 executeVoidEdgePush(bot, player, projectileHandler, diff);
                 break;
-
             case IDLE:
             default:
-                // Nothing to do — defer to other strategies
                 break;
         }
     }
@@ -191,7 +182,7 @@ public class ProjectilePvPStrategy implements CombatStrategy {
     @Nonnull
     private Mode evaluateBestMode(@Nonnull TrainerBot bot, @Nonnull Player player,
                                   @Nonnull DifficultyProfile diff) {
-        LivingEntity target = findNearestEnemy(bot);
+        LivingEntity target = CombatUtils.findNearestEnemy(bot);
         if (target == null) return Mode.IDLE;
 
         LivingEntity botEntity = bot.getLivingEntity();
@@ -200,12 +191,12 @@ public class ProjectilePvPStrategy implements CombatStrategy {
         double range = botEntity.getLocation().distance(target.getLocation());
 
         // Priority 1: Void edge push — if target is near void, this is a kill opportunity
-        if (isTargetNearVoid(bot, target) && hasAnyThrowable(player)) {
+        if (CombatUtils.isTargetNearVoid(target) && CombatUtils.hasAnyThrowable(player)) {
             return Mode.VOID_EDGE_PUSH;
         }
 
         // Priority 2: Bridge snipe — if target is on a bridge, knock them off
-        if (isTargetOnBridge(bot, target) && hasAnyThrowable(player)) {
+        if (CombatUtils.isTargetOnBridge(target) && CombatUtils.hasAnyThrowable(player)) {
             return Mode.BRIDGE_SNIPE;
         }
 
@@ -222,7 +213,7 @@ public class ProjectilePvPStrategy implements CombatStrategy {
         }
 
         // Priority 5: Approach spam with throwables at close-medium range
-        if (hasAnyThrowable(player) && range > 4.0 && range <= 12.0) {
+        if (CombatUtils.hasAnyThrowable(player) && range > 4.0 && range <= 12.0) {
             return Mode.APPROACH_SPAM;
         }
 
@@ -241,7 +232,7 @@ public class ProjectilePvPStrategy implements CombatStrategy {
     private void executeApproachSpam(@Nonnull TrainerBot bot, @Nonnull Player player,
                                      @Nonnull ProjectileHandler handler) {
         MovementController mc = bot.getMovementController();
-        LivingEntity target = findNearestEnemy(bot);
+        LivingEntity target = CombatUtils.findNearestEnemy(bot);
 
         if (mc != null && target != null) {
             // [FIX] Use COMBAT authority
@@ -272,7 +263,7 @@ public class ProjectilePvPStrategy implements CombatStrategy {
                                      @Nonnull ProjectileHandler handler) {
         // Maintain distance — don't sprint toward the enemy
         MovementController mc = bot.getMovementController();
-        LivingEntity target = findNearestEnemy(bot);
+        LivingEntity target = CombatUtils.findNearestEnemy(bot);
 
         if (mc != null && target != null) {
             // Strafe while shooting for harder-to-hit positioning
@@ -295,7 +286,7 @@ public class ProjectilePvPStrategy implements CombatStrategy {
     private void executeBowSpam(@Nonnull TrainerBot bot, @Nonnull Player player,
                                 @Nonnull ProjectileHandler handler) {
         MovementController mc = bot.getMovementController();
-        LivingEntity target = findNearestEnemy(bot);
+        LivingEntity target = CombatUtils.findNearestEnemy(bot);
 
         if (mc != null && target != null) {
             mc.setLookTarget(target.getLocation().add(0, 1.0, 0));
@@ -320,7 +311,7 @@ public class ProjectilePvPStrategy implements CombatStrategy {
     private void executeBridgeSnipe(@Nonnull TrainerBot bot, @Nonnull Player player,
                                     @Nonnull ProjectileHandler handler,
                                     @Nonnull DifficultyProfile diff) {
-        LivingEntity target = findNearestEnemy(bot);
+        LivingEntity target = CombatUtils.findNearestEnemy(bot);
         if (target == null) return;
 
         MovementController mc = bot.getMovementController();
@@ -365,7 +356,7 @@ public class ProjectilePvPStrategy implements CombatStrategy {
         DifficultyProfile diff = bot.getDifficultyProfile();
         double basePriority = 5.0 * diff.getProjectileAccuracy();
 
-        LivingEntity target = findNearestEnemy(bot);
+        LivingEntity target = CombatUtils.findNearestEnemy(bot);
         if (target == null) return 0.0;
 
         LivingEntity botEntity = bot.getLivingEntity();
@@ -381,17 +372,17 @@ public class ProjectilePvPStrategy implements CombatStrategy {
         }
 
         // Much higher priority when target is near void or on bridge
-        if (isTargetNearVoid(bot, target)) {
+        if (CombatUtils.isTargetNearVoid(target)) {
             basePriority += 6.0; // Void kill opportunity is extremely valuable
         }
-        if (isTargetOnBridge(bot, target)) {
+        if (CombatUtils.isTargetOnBridge(target)) {
             basePriority += 5.0;
         }
 
         // Reduce priority if running low on projectiles
         Player player = bot.getPlayerEntity();
         if (player != null) {
-            int totalProjectiles = countProjectiles(player);
+            int totalProjectiles = CombatUtils.countProjectiles(player);
             if (totalProjectiles <= 3) {
                 basePriority *= 0.5; // Conserve limited ammo
             }
@@ -406,146 +397,5 @@ public class ProjectilePvPStrategy implements CombatStrategy {
         modeTicks = 0;
         modeEvalCooldown = 0;
         projectilesUsed = 0;
-    }
-
-    // ─── Helper Methods ─────────────────────────────────────────
-
-    /**
-     * Checks whether the target is near a void edge by examining the blocks
-     * around them. A target near void is a prime knockback opportunity.
-     *
-     * @param bot    the bot
-     * @param target the target entity
-     * @return true if the target appears to be near a void edge
-     */
-    private boolean isTargetNearVoid(@Nonnull TrainerBot bot, @Nonnull LivingEntity target) {
-        org.bukkit.Location targetLoc = target.getLocation();
-        org.bukkit.World world = targetLoc.getWorld();
-        if (world == null) return false;
-
-        // Check blocks in 4 cardinal directions for void (air below)
-        int[][] directions = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-        int voidDirections = 0;
-
-        for (int[] dir : directions) {
-            org.bukkit.Location checkLoc = targetLoc.clone().add(dir[0] * 2, 0, dir[1] * 2);
-            // Check if there's void below (no solid block for 10+ blocks down)
-            boolean hasGround = false;
-            for (int y = 0; y >= -10; y--) {
-                org.bukkit.block.Block block = checkLoc.clone().add(0, y, 0).getBlock();
-                if (block.getType().isSolid()) {
-                    hasGround = true;
-                    break;
-                }
-            }
-            if (!hasGround) {
-                voidDirections++;
-            }
-        }
-
-        // Target is "near void" if at least 2 directions have void
-        return voidDirections >= 2;
-    }
-
-    /**
-     * Checks whether the target appears to be on a narrow bridge.
-     * A bridge is detected by checking if the target is on a 1-2 block wide
-     * platform with void on both sides.
-     *
-     * @param bot    the bot
-     * @param target the target entity
-     * @return true if the target appears to be on a bridge
-     */
-    private boolean isTargetOnBridge(@Nonnull TrainerBot bot, @Nonnull LivingEntity target) {
-        org.bukkit.Location targetLoc = target.getLocation();
-        org.bukkit.World world = targetLoc.getWorld();
-        if (world == null) return false;
-
-        // Check if standing on a narrow platform (bridge indicator)
-        org.bukkit.block.Block below = targetLoc.clone().add(0, -1, 0).getBlock();
-        if (!below.getType().isSolid()) return false;
-
-        // Check perpendicular directions for void
-        // First check X-axis
-        boolean voidPosX = !hasSolidBelow(targetLoc.clone().add(2, 0, 0));
-        boolean voidNegX = !hasSolidBelow(targetLoc.clone().add(-2, 0, 0));
-        if (voidPosX && voidNegX) return true;
-
-        // Then check Z-axis
-        boolean voidPosZ = !hasSolidBelow(targetLoc.clone().add(0, 0, 2));
-        boolean voidNegZ = !hasSolidBelow(targetLoc.clone().add(0, 0, -2));
-        return voidPosZ && voidNegZ;
-    }
-
-    /**
-     * Checks if there is solid ground below a location within 10 blocks.
-     *
-     * @param location the location to check
-     * @return true if solid ground exists below
-     */
-    private boolean hasSolidBelow(@Nonnull org.bukkit.Location location) {
-        for (int y = 0; y >= -10; y--) {
-            org.bukkit.block.Block block = location.clone().add(0, y, 0).getBlock();
-            if (block.getType().isSolid()) return true;
-        }
-        return false;
-    }
-
-    /**
-     * Checks if the player has any throwable projectile (snowball or egg).
-     *
-     * @param player the player
-     * @return true if throwables are available
-     */
-    private boolean hasAnyThrowable(@Nonnull Player player) {
-        return player.getInventory().contains(Material.SNOW_BALL)
-                || player.getInventory().contains(Material.EGG);
-    }
-
-    /**
-     * Counts total available projectiles (arrows + snowballs + eggs).
-     *
-     * @param player the player
-     * @return total projectile count
-     */
-    private int countProjectiles(@Nonnull Player player) {
-        int count = 0;
-        for (ItemStack stack : player.getInventory().getContents()) {
-            if (stack == null) continue;
-            Material type = stack.getType();
-            if (type == Material.ARROW || type == Material.SNOW_BALL || type == Material.EGG) {
-                count += stack.getAmount();
-            }
-        }
-        return count;
-    }
-
-    /**
-     * Finds the nearest visible enemy player to the bot.
-     *
-     * @param bot the bot
-     * @return the nearest enemy, or null if none visible
-     */
-    @Nullable
-    private LivingEntity findNearestEnemy(@Nonnull TrainerBot bot) {
-        LivingEntity botEntity = bot.getLivingEntity();
-        if (botEntity == null) return null;
-
-        double nearestDist = Double.MAX_VALUE;
-        LivingEntity nearest = null;
-        double awarenessRadius = bot.getDifficultyProfile().getAwarenessRadius();
-
-        for (org.bukkit.entity.Entity entity : botEntity.getNearbyEntities(
-                awarenessRadius, awarenessRadius, awarenessRadius)) {
-            if (entity instanceof Player && !entity.isDead()
-                    && !entity.getUniqueId().equals(botEntity.getUniqueId())) {
-                double dist = botEntity.getLocation().distanceSquared(entity.getLocation());
-                if (dist < nearestDist) {
-                    nearestDist = dist;
-                    nearest = (LivingEntity) entity;
-                }
-            }
-        }
-        return nearest;
     }
 }

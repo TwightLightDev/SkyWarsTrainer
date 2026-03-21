@@ -5,6 +5,8 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
+import org.twightlight.skywarstrainer.combat.CombatUtils;
+import org.twightlight.skywarstrainer.combat.ProjectileHandler;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.util.RandomUtil;
@@ -88,7 +90,7 @@ public class RodComboStrategy implements CombatStrategy {
         if (!player.getInventory().contains(Material.FISHING_ROD)) return false;
 
         // Must have a sword to switch to
-        if (!hasSword(player)) return false;
+        if (!CombatUtils.hasSword(player)) return false;
 
         // Target must be in rod range (10-20 blocks optimal)
         LivingEntity target = findNearestEnemy(bot);
@@ -118,28 +120,13 @@ public class RodComboStrategy implements CombatStrategy {
 
             case SWITCHING_TO_ROD:
                 // Simulate hotbar switch to fishing rod
-                switchToItem(player, Material.FISHING_ROD);
+                CombatUtils.switchToItem(player, Material.FISHING_ROD);
                 phaseTimer--;
                 if (phaseTimer <= 0) {
                     currentPhase = Phase.CASTING;
                     phaseTimer = 1;
                 }
                 break;
-
-            case CASTING:
-                // The ProjectileHandler handles the actual rod cast
-                // We signal that we want to cast a rod
-                currentPhase = Phase.WAITING_FOR_HIT;
-                // Estimated travel time based on distance
-                LivingEntity target = findNearestEnemy(bot);
-                if (target != null) {
-                    double distance = player.getLocation().distance(target.getLocation());
-                    phaseTimer = (int) Math.ceil(distance / 1.5) + 2;
-                } else {
-                    phaseTimer = 5;
-                }
-                break;
-
             case WAITING_FOR_HIT:
                 phaseTimer--;
                 if (phaseTimer <= 0) {
@@ -150,7 +137,7 @@ public class RodComboStrategy implements CombatStrategy {
                 break;
 
             case SWITCHING_TO_SWORD:
-                switchToSword(player);
+                CombatUtils.switchToSword(player);
                 phaseTimer--;
                 if (phaseTimer <= 0) {
                     currentPhase = Phase.APPROACHING;
@@ -183,14 +170,36 @@ public class RodComboStrategy implements CombatStrategy {
                 }
                 break;
 
+            case CASTING:
+                // [FIX C2] Actually cast the rod! Previously, the strategy went
+                // straight to WAITING_FOR_HIT without ever calling tryFishingRod().
+                ProjectileHandler projHandler = bot.getCombatEngine().getProjectileHandler();
+                boolean castSuccess = projHandler.tryFishingRod();
+
+                if (!castSuccess) {
+                    // Rod couldn't be cast (cooldown, no rod, etc.) — go to cooldown
+                    currentPhase = Phase.COOLDOWN;
+                    phaseTimer = ROD_COMBO_COOLDOWN / 2;
+                    break;
+                }
+
+                currentPhase = Phase.WAITING_FOR_HIT;
+                LivingEntity target1 = CombatUtils.findNearestEnemy(bot);
+                if (target1 != null) {
+                    double distance = player.getLocation().distance(target1.getLocation());
+                    phaseTimer = (int) Math.ceil(distance / 1.5) + 2;
+                } else {
+                    phaseTimer = 5;
+                }
+                break;
+
+
             case COMBOING:
-                // Melee attacks are handled by the ClickController in CombatEngine.
-                // We just track how many we've landed.
-                // The CombatEngine's click loop will handle actual attacks.
-                comboHitsLanded++;
-                if (comboHitsLanded >= targetComboHits) {
+                int currentHits = bot.getCombatEngine().getComboTracker().getHitsLanded();
+                if (currentHits >= targetComboHits) {
                     currentPhase = Phase.COOLDOWN;
                     phaseTimer = ROD_COMBO_COOLDOWN;
+                    break;
                 }
 
                 phaseTimer--;
@@ -239,48 +248,6 @@ public class RodComboStrategy implements CombatStrategy {
     }
 
     // ─── Helpers ────────────────────────────────────────────────
-
-    /**
-     * Switches the player's held item to the specified material.
-     */
-    private void switchToItem(@Nonnull Player player, @Nonnull Material material) {
-        for (int i = 0; i < 9; i++) {
-            ItemStack stack = player.getInventory().getItem(i);
-            if (stack != null && stack.getType() == material) {
-                player.getInventory().setHeldItemSlot(i);
-                return;
-            }
-        }
-    }
-
-    /**
-     * Switches the player's held item to their best sword.
-     */
-    private void switchToSword(@Nonnull Player player) {
-        Material[] swords = {Material.DIAMOND_SWORD, Material.IRON_SWORD,
-                Material.STONE_SWORD, Material.GOLD_SWORD, Material.WOOD_SWORD};
-        for (Material sword : swords) {
-            for (int i = 0; i < 9; i++) {
-                ItemStack stack = player.getInventory().getItem(i);
-                if (stack != null && stack.getType() == sword) {
-                    player.getInventory().setHeldItemSlot(i);
-                    return;
-                }
-            }
-        }
-    }
-
-    /**
-     * Checks if the player has any sword in inventory.
-     */
-    private boolean hasSword(@Nonnull Player player) {
-        for (ItemStack stack : player.getInventory().getContents()) {
-            if (stack != null && stack.getType().name().contains("SWORD")) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     @Nullable
     private LivingEntity findNearestEnemy(@Nonnull TrainerBot bot) {

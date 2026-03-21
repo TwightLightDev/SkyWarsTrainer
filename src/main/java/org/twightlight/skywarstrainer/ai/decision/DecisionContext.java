@@ -430,15 +430,14 @@ public class DecisionContext {
         }
     }
 
-    /**
-     * Captures map and game state data.
-     */
+// In DecisionContext.populateMapInfo(), replace the O(n³) enchanting table scan
+// with a cached lookup from MapScanner:
+
     private void populateMapInfo(@Nonnull TrainerBot bot) {
-        // Alive player count from the arena
         try {
             alivePlayerCount = bot.getArena().getAlive();
         } catch (Exception e) {
-            alivePlayerCount = 8; // Safe default
+            alivePlayerCount = 8;
         }
 
         IslandGraph graph = bot.getIslandGraph();
@@ -450,27 +449,19 @@ public class DecisionContext {
             bridgeToMidExists = false;
         }
 
-        // Enchanting table detection — simplified check in awareness radius
+        // [FIX E1/E2] Use MapScanner's cached enchanting table locations instead
+        // of scanning a 17×5×17 block cube (1445 blocks!) every evaluation.
+        // MapScanner already scans the world incrementally and can track special blocks.
         enchantingTableAccessible = false;
-        if (botLocation != null && botLocation.getWorld() != null) {
-            // This will be properly handled by MapScanner in full integration
-            // For now, a basic proximity check
-            int radius = 8;
-            for (int x = -radius; x <= radius; x++) {
-                for (int y = -2; y <= 2; y++) {
-                    for (int z = -radius; z <= radius; z++) {
-                        if (botLocation.clone().add(x, y, z).getBlock().getType()
-                                == org.bukkit.Material.ENCHANTMENT_TABLE) {
-                            enchantingTableAccessible = true;
-                            break;
-                        }
-                    }
-                    if (enchantingTableAccessible) break;
-                }
-                if (enchantingTableAccessible) break;
+        MapScanner scanner = bot.getMapScanner();
+        if (scanner != null && botLocation != null) {
+            Location nearestTable = scanner.getNearestEnchantingTable(botLocation);
+            if (nearestTable != null) {
+                enchantingTableAccessible = botLocation.distance(nearestTable) <= 10.0;
             }
         }
     }
+
 
     /**
      * Resets all fields to defaults for object reuse / pooling.

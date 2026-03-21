@@ -4,6 +4,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
+import org.twightlight.skywarstrainer.combat.CombatUtils;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.inventory.UtilityItemHandler;
 
@@ -92,7 +93,7 @@ public class UtilityItemStrategy implements CombatStrategy {
         if (!utilHandler.hasAnyUtilityItem()) return false;
 
         // Must have a target
-        LivingEntity target = findNearestEnemy(bot);
+        LivingEntity target = CombatUtils.findNearestEnemy(bot);
         if (target == null) return false;
 
         LivingEntity botEntity = bot.getLivingEntity();
@@ -123,7 +124,7 @@ public class UtilityItemStrategy implements CombatStrategy {
             modeEvalCooldown = MODE_EVAL_INTERVAL;
         }
 
-        LivingEntity target = findNearestEnemy(bot);
+        LivingEntity target = CombatUtils.findNearestEnemy(bot);
         if (target == null) return;
 
         switch (currentMode) {
@@ -164,7 +165,7 @@ public class UtilityItemStrategy implements CombatStrategy {
     private Mode evaluateBestMode(@Nonnull TrainerBot bot,
                                   @Nonnull UtilityItemHandler utilHandler,
                                   @Nonnull DifficultyProfile diff) {
-        LivingEntity target = findNearestEnemy(bot);
+        LivingEntity target = CombatUtils.findNearestEnemy(bot);
         if (target == null) return Mode.IDLE;
 
         LivingEntity botEntity = bot.getLivingEntity();
@@ -175,7 +176,7 @@ public class UtilityItemStrategy implements CombatStrategy {
 
         // Priority 1: Water push if enemy is near void
         if (utilHandler.hasWaterBucket() && utilHandler.isWaterReady()
-                && isTargetNearVoid(target) && range <= 5.0) {
+                && CombatUtils.isTargetNearVoid(target) && range <= 5.0) {
             return Mode.WATER_PUSH;
         }
 
@@ -217,7 +218,7 @@ public class UtilityItemStrategy implements CombatStrategy {
         DifficultyProfile diff = bot.getDifficultyProfile();
         double base = 4.0 * diff.getDecisionQuality();
 
-        LivingEntity target = findNearestEnemy(bot);
+        LivingEntity target = CombatUtils.findNearestEnemy(bot);
         if (target == null) return 0.0;
 
         LivingEntity botEntity = bot.getLivingEntity();
@@ -229,7 +230,7 @@ public class UtilityItemStrategy implements CombatStrategy {
         double range = botEntity.getLocation().distance(target.getLocation());
 
         // Very high priority if target is near void and we have water
-        if (isTargetNearVoid(target) && utilHandler.hasWaterBucket()) {
+        if (CombatUtils.isTargetNearVoid(target) && utilHandler.hasWaterBucket()) {
             base += 7.0;
         }
 
@@ -260,52 +261,4 @@ public class UtilityItemStrategy implements CombatStrategy {
         modeEvalCooldown = 0;
     }
 
-    // ─── Helpers ────────────────────────────────────────────────
-
-    private boolean isTargetNearVoid(@Nonnull LivingEntity target) {
-        org.bukkit.Location targetLoc = target.getLocation();
-        org.bukkit.World world = targetLoc.getWorld();
-        if (world == null) return false;
-
-        int[][] directions = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-        int voidDirections = 0;
-
-        for (int[] dir : directions) {
-            org.bukkit.Location checkLoc = targetLoc.clone().add(dir[0] * 2, 0, dir[1] * 2);
-            boolean hasGround = false;
-            for (int y = 0; y >= -10; y--) {
-                org.bukkit.block.Block block = checkLoc.clone().add(0, y, 0).getBlock();
-                if (block.getType().isSolid()) {
-                    hasGround = true;
-                    break;
-                }
-            }
-            if (!hasGround) voidDirections++;
-        }
-
-        return voidDirections >= 2;
-    }
-
-    @Nullable
-    private LivingEntity findNearestEnemy(@Nonnull TrainerBot bot) {
-        LivingEntity botEntity = bot.getLivingEntity();
-        if (botEntity == null) return null;
-
-        double nearestDist = Double.MAX_VALUE;
-        LivingEntity nearest = null;
-        double awarenessRadius = bot.getDifficultyProfile().getAwarenessRadius();
-
-        for (org.bukkit.entity.Entity entity : botEntity.getNearbyEntities(
-                awarenessRadius, awarenessRadius, awarenessRadius)) {
-            if (entity instanceof Player && !entity.isDead()
-                    && !entity.getUniqueId().equals(botEntity.getUniqueId())) {
-                double dist = botEntity.getLocation().distanceSquared(entity.getLocation());
-                if (dist < nearestDist) {
-                    nearestDist = dist;
-                    nearest = (LivingEntity) entity;
-                }
-            }
-        }
-        return nearest;
-    }
 }

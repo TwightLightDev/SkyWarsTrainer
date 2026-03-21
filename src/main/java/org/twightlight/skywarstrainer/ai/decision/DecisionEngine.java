@@ -89,7 +89,8 @@ public class DecisionEngine {
     private final GamePhaseConsideration gamePhaseConsideration = new GamePhaseConsideration();
     private final PlayerCountConsideration playerCountConsideration = new PlayerCountConsideration();
     private final ResourceConsideration resourceConsideration = new ResourceConsideration();
-
+    private final CounterPlayConsideration counterPlayConsideration = new CounterPlayConsideration();
+    private final PositionalConsideration positionalConsideration = new PositionalConsideration();
     /**
      * Creates a new DecisionEngine for the given bot.
      *
@@ -744,7 +745,8 @@ public class DecisionEngine {
                 lootValueConsideration, 0.8,
                 zoneControlConsideration, -0.5,
                 gamePhaseConsideration, -0.3,
-                resourceConsideration, -0.3);
+                resourceConsideration, -0.3,
+                positionalConsideration, 0.5);
 
         // ── BRIDGE_TO_PLAYER ──
         addWeight(BotAction.BRIDGE_TO_PLAYER,
@@ -759,14 +761,17 @@ public class DecisionEngine {
                 equipmentGapConsideration, 0.8,
                 healthConsideration, -1.0,
                 timePressureConsideration, 0.5,
-                gamePhaseConsideration, 0.4);
+                gamePhaseConsideration, 0.4,
+                counterPlayConsideration, 0.6,   // [FIX B2] CounterPlay now evaluated
+                positionalConsideration, 0.4);   // [FIX B3] Positional now evaluated
 
         // ── FIGHT_WEAKEST ──
         addWeight(BotAction.FIGHT_WEAKEST,
                 threatConsideration, 0.8,
                 equipmentGapConsideration, 0.6,
                 healthConsideration, -0.7,
-                timePressureConsideration, 0.6);
+                timePressureConsideration, 0.6,
+                counterPlayConsideration, 0.5);  // [FIX B2]
 
         // ── FIGHT_TARGETED ──
         addWeight(BotAction.FIGHT_TARGETED,
@@ -780,7 +785,8 @@ public class DecisionEngine {
                 healthConsideration, 2.0,
                 threatConsideration, 1.0,
                 equipmentGapConsideration, -1.2,
-                resourceConsideration, -0.3);
+                resourceConsideration, -0.3,
+                counterPlayConsideration, 0.4);  // [FIX B2]
 
         // ── HEAL ──
         addWeight(BotAction.HEAL,
@@ -815,7 +821,9 @@ public class DecisionEngine {
                 zoneControlConsideration, 1.2,
                 resourceConsideration, 0.4,
                 threatConsideration, -0.3,
-                playerCountConsideration, 0.5);
+                playerCountConsideration, 0.5,
+                counterPlayConsideration, 0.5,   // [FIX B2]
+                positionalConsideration, 0.6);
 
         // ── HUNT_PLAYER ──
         addWeight(BotAction.HUNT_PLAYER,
@@ -823,7 +831,8 @@ public class DecisionEngine {
                 timePressureConsideration, 1.2,
                 healthConsideration, -0.8,
                 gamePhaseConsideration, 0.8,
-                playerCountConsideration, -0.6);
+                playerCountConsideration, -0.6,
+                positionalConsideration, 0.5);
 
         // ── USE_ENDER_PEARL ──
         addWeight(BotAction.USE_ENDER_PEARL,

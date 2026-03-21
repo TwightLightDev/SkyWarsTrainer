@@ -18,7 +18,6 @@ import org.twightlight.skywarstrainer.util.PacketUtil;
 import org.twightlight.skywarstrainer.util.RandomUtil;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -137,8 +136,6 @@ public class UtilityItemHandler {
         if (player == null) return false;
 
         DifficultyProfile diff = bot.getDifficultyProfile();
-
-        // Skill gate: lower difficulty bots don't attempt MLG
         if (!RandomUtil.chance(diff.getWaterBucketMLG())) return false;
 
         if (!hasItem(player, Material.WATER_BUCKET)) return false;
@@ -146,26 +143,32 @@ public class UtilityItemHandler {
         LivingEntity entity = bot.getLivingEntity();
         if (entity == null) return false;
 
-        // Check if actually falling
         Vector velocity = entity.getVelocity();
         if (velocity.getY() >= -0.3) return false; // Not falling fast enough
 
-        // Estimate fall distance — find ground below
         Location loc = entity.getLocation();
         double groundY = findGroundY(loc);
-        double fallDistance = loc.getY() - groundY;
 
-        if (fallDistance < MLG_MIN_FALL_DISTANCE) return false;
+        // [FIX C6] Use separate measurements
+        double distanceToGround = loc.getY() - groundY;
 
-        // Calculate when to place water based on reaction time
-        // At high skill, place water 2-3 blocks above ground
-        // At low skill, timing is worse (might be too early or too late)
-        double ticksToGround = estimateTicksToGround(velocity.getY(), fallDistance);
+        // Use the entity's actual tracked fall distance for "total fall" check
+        // (Bukkit tracks this; or we estimate from velocity)
+        double totalFallDistance = entity.getFallDistance();
+        if (totalFallDistance < 1.0) {
+            // FallDistance hasn't accumulated yet, estimate from height
+            totalFallDistance = distanceToGround;
+        }
 
-        // Place water when close to the ground (2-4 blocks away)
-        if (fallDistance > 4.0) return false; // Too high — wait
+        // Check 1: Is this fall worth saving from? (>= 6 blocks = would deal 3+ damage)
+        if (totalFallDistance < MLG_MIN_FALL_DISTANCE) return false;
 
-        // Place water at the ground block
+        // Check 2: Are we close enough to ground to place water? (<= 4 blocks above ground)
+        if (distanceToGround > 4.0) return false; // Still too high — wait for next tick
+
+        // Check 3: But not already on the ground
+        if (distanceToGround < 0.5) return false; // Already landed or too late
+
         Location groundLoc = new Location(loc.getWorld(),
                 Math.floor(loc.getX()), groundY, Math.floor(loc.getZ()));
         Block groundBlock = groundLoc.getBlock();
@@ -174,18 +177,15 @@ public class UtilityItemHandler {
         if (aboveGround.getType() != Material.AIR
                 && aboveGround.getType() != Material.LONG_GRASS
                 && !aboveGround.isLiquid()) {
-            return false; // Can't place water here
+            return false;
         }
 
-        // Accuracy check — at low skill, might place water in the wrong spot
         double accuracyError = (1.0 - diff.getWaterBucketMLG()) * 2.0;
         if (accuracyError > 0 && RandomUtil.chance(accuracyError * 0.3)) {
-            // Missed the placement — fail the MLG
             waterBucketCooldown = WATER_BUCKET_COOLDOWN;
             return false;
         }
 
-        // Switch to water bucket and place it
         int bucketSlot = findItemSlot(player, Material.WATER_BUCKET);
         if (bucketSlot < 0) return false;
 

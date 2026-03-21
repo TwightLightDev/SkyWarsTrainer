@@ -74,17 +74,19 @@ public class InventoryEngine {
 
         ticksSinceAudit++;
 
-        // Quick checks every tick: food, potion, and utility item urgency
+        // Quick checks every tick: food and potion
         foodHandler.tick();
         potionHandler.tick();
-        utilityItemHandler.tick();
+        // [FIX D1] REMOVED: utilityItemHandler.tick();
+        // Now ticked every tick in TrainerBot.tick() directly, so cooldowns
+        // decrement properly regardless of the inventoryAuditTimer gate.
 
-        // Full audit periodically
         if (ticksSinceAudit >= AUDIT_INTERVAL) {
             ticksSinceAudit = 0;
             performFullAudit(player);
         }
     }
+
 
     /**
      * Performs a full inventory audit: equip best armor, select best sword,

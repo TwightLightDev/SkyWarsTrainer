@@ -63,8 +63,32 @@ public class FoodHandler {
         Player p = bot.getPlayerEntity();
         if (p == null) return false;
 
-        return findFood(p) > 0;
+        // [FIX B6] Was: return findFood(p) > 0;
+        // This returned false when food was in slot 0 (hotbar slot 0).
+        // findFood() returns -1 when not found, so the check must be >= 0.
+        return findFood(p) >= 0;
     }
+
+    /**
+     * [FIX C4] Moved from EnchantmentHandler (where it didn't belong).
+     * Finds a golden apple in the player's inventory.
+     *
+     * @param player the player
+     * @return the slot index, or -1 if not found
+     */
+    public int findGoldenAppleSlot(@Nonnull Player player) {
+        for (int i = 0; i < 36; i++) {
+            ItemStack item = player.getInventory().getItem(i);
+            if (item != null && item.getType() == Material.GOLDEN_APPLE) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+// In TrainerBot.java CONSUMING BT, update the reference:
+// Old: int gaSlot = inventoryEngine.getEnchantmentHandler().findGoldenAppleSlot(player);
+// New: int gaSlot = inventoryEngine.getFoodHandler().findGoldenAppleSlot(player);
 
     /** @return true if the bot is currently eating */
     public boolean isEating() {
