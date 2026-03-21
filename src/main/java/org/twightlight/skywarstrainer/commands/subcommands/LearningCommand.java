@@ -97,7 +97,7 @@ public class LearningCommand implements SubCommand {
         // Enabled / paused state
         boolean anyPaused = false;
         for (TrainerBot bot : plugin.getBotManager().getAllBots()) {
-            LearningEngine module = bot.getLearningModule();
+            LearningEngine module = bot.getLearningEngine();
             if (module != null && module.isLearningPaused()) {
                 anyPaused = true;
                 break;
@@ -174,7 +174,7 @@ public class LearningCommand implements SubCommand {
         boolean anyAdjustments = false;
         List<AdjustmentInfo> allAdj = new ArrayList<AdjustmentInfo>();
         for (TrainerBot bot : plugin.getBotManager().getAllBots()) {
-            LearningEngine module = bot.getLearningModule();
+            LearningEngine module = bot.getLearningEngine();
             if (module == null) continue;
             Map<BotAction, Double> adj = module.getWeightAdjustments();
             for (Map.Entry<BotAction, Double> e : adj.entrySet()) {
@@ -247,7 +247,7 @@ public class LearningCommand implements SubCommand {
 
         // Resume all bots' learning (in case any were paused by emergency brake)
         for (TrainerBot bot : plugin.getBotManager().getAllBots()) {
-            LearningEngine module = bot.getLearningModule();
+            LearningEngine module = bot.getLearningEngine();
             if (module != null) {
                 module.setLearningPaused(false);
             }
@@ -292,7 +292,7 @@ public class LearningCommand implements SubCommand {
             return;
         }
 
-        LearningEngine module = bot.getLearningModule();
+        LearningEngine module = bot.getLearningEngine();
         if (module == null) {
             sender.sendMessage(PREFIX + ChatColor.RED + "Bot '" + botName + "' does not have learning enabled.");
             return;
@@ -445,7 +445,7 @@ public class LearningCommand implements SubCommand {
     private void handlePause(@Nonnull CommandSender sender, @Nonnull LearningManager lm) {
         int count = 0;
         for (TrainerBot bot : plugin.getBotManager().getAllBots()) {
-            LearningEngine module = bot.getLearningModule();
+            LearningEngine module = bot.getLearningEngine();
             if (module != null && !module.isLearningPaused()) {
                 module.setLearningPaused(true);
                 count++;
@@ -463,7 +463,7 @@ public class LearningCommand implements SubCommand {
     private void handleResume(@Nonnull CommandSender sender, @Nonnull LearningManager lm) {
         int count = 0;
         for (TrainerBot bot : plugin.getBotManager().getAllBots()) {
-            LearningEngine module = bot.getLearningModule();
+            LearningEngine module = bot.getLearningEngine();
             if (module != null && module.isLearningPaused()) {
                 module.setLearningPaused(false);
                 count++;

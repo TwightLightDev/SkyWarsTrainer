@@ -5,7 +5,7 @@ import org.bukkit.entity.LivingEntity;
 import org.twightlight.skywarstrainer.awareness.ThreatMap;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
-import org.twightlight.skywarstrainer.inventory.InventoryManager;
+import org.twightlight.skywarstrainer.inventory.InventoryEngine;
 import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.util.DebugLogger;
 import org.twightlight.skywarstrainer.util.RandomUtil;
@@ -84,7 +84,7 @@ public class RetreatHealer implements DefensiveBehavior {
         if (hpFrac >= 0.50) return false;
 
         // Check if we have healing items
-        InventoryManager invManager = bot.getInventoryManager();
+        InventoryEngine invManager = bot.getInventoryEngine();
         if (invManager == null) return false;
         if (!invManager.getFoodHandler().hasGoldenApple()
                 && !invManager.getFoodHandler().hasFood()) {
@@ -203,7 +203,7 @@ public class RetreatHealer implements DefensiveBehavior {
             // Place a block behind the bot (between bot and enemy)
             Location behindBot = botLoc.clone().add(-dx * 1.5, 0, -dz * 1.5);
             if (behindBot.getBlock().getType() == org.bukkit.Material.AIR) {
-                InventoryManager inv = bot.getInventoryManager();
+                InventoryEngine inv = bot.getInventoryEngine();
                 if (inv != null && inv.getBlockCounter().getTotalBlocks() > 5) {
                     behindBot.getBlock().setType(org.bukkit.Material.COBBLESTONE);
                     DebugLogger.log(bot, "RetreatHealer: placed block behind at dist=%.1f", dist);
@@ -223,7 +223,7 @@ public class RetreatHealer implements DefensiveBehavior {
         }
 
         // Try to eat golden apple / food
-        InventoryManager invManager = bot.getInventoryManager();
+        InventoryEngine invManager = bot.getInventoryEngine();
         if (invManager != null) {
             invManager.getFoodHandler().tick();
         }

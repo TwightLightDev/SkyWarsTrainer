@@ -84,7 +84,7 @@ public class GameEventListener implements Listener {
                 if (de != null) {
                     de.triggerInterrupt();
                 }
-                LearningEngine lm = bot.getLearningModule();
+                LearningEngine lm = bot.getLearningEngine();
                 if (lm != null) {
                     lm.onGameStart();
                 }
@@ -121,7 +121,7 @@ public class GameEventListener implements Listener {
                         BotChatManager.sendChatMessage(bot, "win");
                     }
                 }
-                LearningEngine lm = bot.getLearningModule();
+                LearningEngine lm = bot.getLearningEngine();
                 if (lm != null) {
                     boolean won = false;
                     if (event.hasWinner() && event.getWinnerTeam() != null) {
@@ -162,7 +162,7 @@ public class GameEventListener implements Listener {
                 BotChatManager.sendChatMessage(deadBot, "death");
                 Bukkit.getPluginManager().callEvent(
                         new org.twightlight.skywarstrainer.api.events.BotDeathEvent(deadBot, killer));
-                LearningEngine lmDead = deadBot.getLearningModule();
+                LearningEngine lmDead = deadBot.getLearningEngine();
                 if (lmDead != null) {
                     lmDead.onSignificantEvent("death", 1.0);
                 }
@@ -179,7 +179,7 @@ public class GameEventListener implements Listener {
             if (killerBot != null) {
                 killerBot.getProfile().addKill();
                 BotChatManager.sendChatMessage(killerBot, "first_kill");
-                LearningEngine lmKiller = killerBot.getLearningModule();
+                LearningEngine lmKiller = killerBot.getLearningEngine();
                 if (lmKiller != null) {
                     lmKiller.onSignificantEvent("kill", 1.0);
                 }
@@ -303,7 +303,7 @@ public class GameEventListener implements Listener {
                     LivingEntity attackerEntity = (actualDamager instanceof LivingEntity)
                             ? (LivingEntity) actualDamager : null;
                     victimBot.getCombatEngine().onBotHit(attackerEntity);
-                    LearningEngine lmVictim = victimBot.getLearningModule();
+                    LearningEngine lmVictim = victimBot.getLearningEngine();
                     if (lmVictim != null) {
                         lmVictim.onSignificantEvent("health_lost", event.getDamage() / 2.0);
                     }
@@ -320,7 +320,7 @@ public class GameEventListener implements Listener {
             TrainerBot damagerBot = botManager.getBotByEntityUUID(actualDamager.getUniqueId());
             if (damagerBot != null && damagerBot.getCombatEngine() != null) {
                 damagerBot.getCombatEngine().getComboTracker().onHitLanded();
-                LearningEngine lmDamager = damagerBot.getLearningModule();
+                LearningEngine lmDamager = damagerBot.getLearningEngine();
                 if (lmDamager != null) {
                     lmDamager.onSignificantEvent("health_lost", -event.getDamage() / 2.0);
                     // Note: negative health_lost for the damager = health damage dealt to enemy

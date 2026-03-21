@@ -60,6 +60,9 @@ public class CombatEngine {
     /** Projectile handler for ranged weapon usage (bow, rod, snowball, egg, pearl). */
     private final ProjectileHandler projectileHandler;
 
+    /** Centralized ranged combat handler bridging projectiles + utility items. */
+    private final RangedCombatHandler rangedCombatHandler;
+
     /** Evaluates enemies to determine the best target. */
     private final ThreatEvaluator threatEvaluator;
 
@@ -110,6 +113,7 @@ public class CombatEngine {
         this.knockbackCalculator = new KnockbackCalculator(bot);
         this.comboTracker = new ComboTracker(bot);
         this.projectileHandler = new ProjectileHandler(bot, aimController);
+        this.rangedCombatHandler = new RangedCombatHandler(bot, projectileHandler);
         this.threatEvaluator = new ThreatEvaluator(bot);
         this.engagementScorer = new EngagementScorer(bot);
         this.patternManager = new EngagementEngine(bot);
@@ -127,6 +131,9 @@ public class CombatEngine {
     /**
      * Registers all combat strategy implementations. Strategies are evaluated
      * each tick by priority — the highest-priority applicable strategy is executed.
+     *
+     * <p>Includes the new {@link UtilityItemStrategy} for lava, flint & steel,
+     * TNT, cobweb, and water bucket combat usage.</p>
      */
     private void registerStrategies() {
         strategies.add(new StrafeStrategy());
@@ -138,6 +145,7 @@ public class CombatEngine {
         strategies.add(new TradeHitStrategy());
         strategies.add(new FleeStrategy());
         strategies.add(new ProjectilePvPStrategy());
+        strategies.add(new UtilityItemStrategy());
     }
 
     /**
@@ -154,23 +162,18 @@ public class CombatEngine {
         if (target != null) {
             aimController.setTarget(target);
             clickController.rollNewEngagement();
-            // In engage(), after setting up the target, fire the event:
 
             org.bukkit.Bukkit.getPluginManager().callEvent(
                     new org.twightlight.skywarstrainer.api.events.BotCombatEvent(bot, target, null));
-
-
         }
 
         comboTracker.reset();
         reflectWindowTicks = 0;
         reflectQueued = false;
-        // Reset all strategies for the new engagement
         for (CombatStrategy strategy : strategies) {
             strategy.reset();
         }
 
-        // Start strafing via the movement controller
         MovementController mc = bot.getMovementController();
         if (mc != null) {
             mc.getStrafeController().startStrafing();
@@ -190,15 +193,12 @@ public class CombatEngine {
         comboTracker.reset();
         reflectWindowTicks = 0;
         reflectQueued = false;
-        // Stop combat-specific movement
         MovementController mc = bot.getMovementController();
         if (mc != null) {
             mc.getStrafeController().stopStrafing();
-            // [FIX-C1] Release combat movement authority
             mc.releaseAuthority(MovementController.MovementAuthority.COMBAT);
         }
 
-        // Reset all strategies
         for (CombatStrategy strategy : strategies) {
             strategy.reset();
         }
@@ -214,9 +214,11 @@ public class CombatEngine {
      *   <li>Re-evaluate target selection periodically</li>
      *   <li>Update aim toward target</li>
      *   <li>Calculate range to target</li>
+     *   <li>Tick projectile cooldowns</li>
      *   <li>Score applicable strategies</li>
      *   <li>Execute top strategy</li>
      *   <li>Handle melee click attempts</li>
+     *   <li>Attempt ranged actions at distance</li>
      *   <li>Survival checks</li>
      *   <li>Update combo tracker</li>
      * </ol></p>
@@ -253,32 +255,25 @@ public class CombatEngine {
         // Step 4: Calculate range
         double range = botEntity.getLocation().distance(currentTarget.getLocation());
 
+        // Step 4.5: Tick projectile cooldowns every tick
+        projectileHandler.tick();
+
         // ═══ Phase 7: Engagement Pattern Check (BEFORE normal strategies) ═══
-        // If an active pattern is running, let it handle this tick EXCLUSIVELY.
-        // [FIX-D2] Do NOT call tryClick() here — the pattern owns all combat actions
-        // during its tick. This prevents double-hit registration.
         if (patternManager.tickActivePattern(bot, currentTarget)) {
-            // [FIX-D2] Pattern handled the tick — only do combo tracker, NOT melee.
-            // The pattern itself is responsible for its own click timing.
             comboTracker.tick();
             return;
         }
 
-        // No active pattern — evaluate for a new one
         EngagementPattern pattern = patternManager.evaluatePatterns(bot, currentTarget);
         if (pattern != null) {
             patternManager.activate(pattern);
-            // [FIX-D1] Pattern activated — skip normal strategy execution this tick.
-            // The pattern expects to control the bot's state from its first tick.
-            // If we also run a strategy here, it may change weapons/position,
-            // corrupting the pattern's expected starting state.
             comboTracker.tick();
             handlePositioning(botEntity, range);
             return;
         }
         // ═══ End Phase 7 pattern check ═══
 
-        // Step 5 & 6: Select and execute best strategy (existing code unchanged)
+        // Step 5 & 6: Select and execute best strategy
         CombatStrategy bestStrategy = selectBestStrategy();
         if (bestStrategy != null) {
             if (activeStrategy != bestStrategy) activeStrategy = bestStrategy;
@@ -291,17 +286,13 @@ public class CombatEngine {
         }
 
         // ─── Fast-Reflect Counter-Attack ───────────────────────
-        // If within the reflect window, attempt an immediate counter-hit
-        // with a sprint-reset for maximum reflect KB.
         if (reflectWindowTicks > 0) {
             reflectWindowTicks--;
             if (reflectQueued && range <= 3.5) {
-                // Force a sprint-reset for the counter-hit (fresh sprint-hit = max KB)
                 MovementController mc = bot.getMovementController();
                 if (mc != null && mc.getSprintController().isSprinting()) {
                     mc.getSprintController().performSprintReset();
                 }
-                // Attempt immediate counter-click (bypasses normal CPS timing)
                 boolean reflectHit = clickController.tryClick();
                 if (reflectHit) {
                     comboTracker.onHitLanded();
@@ -310,7 +301,7 @@ public class CombatEngine {
                     if (analyzer != null) {
                         analyzer.onHitLandedOnEnemy(currentTarget.getUniqueId());
                     }
-                    reflectQueued = false; // Only one reflect per window
+                    reflectQueued = false;
                 }
             }
             if (reflectWindowTicks <= 0) {
@@ -318,7 +309,7 @@ public class CombatEngine {
             }
         }
 
-        // Step 7: Normal melee attack (existing code, unchanged)
+        // Step 7: Normal melee attack
         if (range <= 3.0) {
             boolean hit = clickController.tryClick();
             if (hit) {
@@ -331,7 +322,16 @@ public class CombatEngine {
             }
         }
 
-        // Step 8-10: Existing survival, combo, positioning (unchanged)
+        // Step 7.5: Ranged action at distance (only if no active melee strategy
+        // is currently handling ranged — avoids double-shooting with ProjectilePvPStrategy)
+        if (range > 3.0 && (activeStrategy == null
+                || (!activeStrategy.getName().equals("ProjectilePvP")
+                && !activeStrategy.getName().equals("RodCombo")
+                && !activeStrategy.getName().equals("UtilityItem")))) {
+            rangedCombatHandler.tryBestRangedAction(currentTarget);
+        }
+
+        // Step 8-10: Survival, combo, positioning
         performSurvivalChecks(botEntity, range);
         comboTracker.tick();
         handlePositioning(botEntity, range);
@@ -340,8 +340,6 @@ public class CombatEngine {
 
     /**
      * Checks whether the current target is still a valid combat target.
-     *
-     * @return true if the target exists, is alive, and within awareness radius
      */
     private boolean isTargetValid() {
         if (currentTarget == null) return false;
@@ -350,17 +348,11 @@ public class CombatEngine {
         LivingEntity botEntity = bot.getLivingEntity();
         if (botEntity == null) return false;
 
-        // Check if still within awareness radius
         double maxRange = bot.getDifficultyProfile().getAwarenessRadius();
         double distance = botEntity.getLocation().distance(currentTarget.getLocation());
         return distance <= maxRange;
     }
 
-    /**
-     * Selects the best target from all visible threats using the ThreatEvaluator.
-     *
-     * @return the best target to attack, or null if none available
-     */
     @Nullable
     private LivingEntity selectBestTarget() {
         ThreatMap threatMap = bot.getThreatMap();
@@ -382,7 +374,6 @@ public class CombatEngine {
 
         if (bestEntry == null) return null;
 
-        // Resolve the ThreatEntry to a LivingEntity
         LivingEntity botEntity = bot.getLivingEntity();
         if (botEntity == null) return null;
 
@@ -398,12 +389,6 @@ public class CombatEngine {
         return null;
     }
 
-    /**
-     * Evaluates all registered strategies and selects the one with the highest
-     * priority that is currently activatable.
-     *
-     * @return the best strategy, or null if none applicable
-     */
     @Nullable
     private CombatStrategy selectBestStrategy() {
         CombatStrategy best = null;
@@ -422,12 +407,6 @@ public class CombatEngine {
         return best;
     }
 
-    /**
-     * Applies attack knockback to the target when the bot lands a hit.
-     * Uses the KnockbackCalculator for vanilla 1.8 KB mechanics.
-     *
-     * @param target the entity that was hit
-     */
     private void applyAttackKnockback(@Nonnull LivingEntity target) {
         LivingEntity botEntity = bot.getLivingEntity();
         if (botEntity == null) return;
@@ -435,7 +414,6 @@ public class CombatEngine {
         MovementController mc = bot.getMovementController();
         boolean sprinting = mc != null && mc.getSprintController().isSprinting();
 
-        // Get knockback enchantment level from held weapon
         int kbLevel = 0;
         Player player = bot.getPlayerEntity();
         if (player != null) {
@@ -451,66 +429,45 @@ public class CombatEngine {
                 target, botEntity, sprinting, kbLevel, 0.0);
     }
 
-    /**
-     * Performs survival checks during combat: health assessment, positioning
-     * near void edges, and eating golden apples when needed.
-     *
-     * @param botEntity the bot's living entity
-     * @param range     distance to current target
-     */
     private void performSurvivalChecks(@Nonnull LivingEntity botEntity, double range) {
         DifficultyProfile diff = bot.getDifficultyProfile();
         double healthFraction = botEntity.getHealth() / botEntity.getMaxHealth();
 
-        // Check if near void edge during combat — reposition away
         VoidDetector voidDetector = bot.getVoidDetector();
         if (voidDetector != null && voidDetector.isOnEdge()) {
             MovementController mc = bot.getMovementController();
             if (mc != null) {
                 Float safeDir = voidDetector.getSafeDirection();
                 if (safeDir != null) {
-                    // Move away from void edge
                     double safeYawRad = Math.toRadians(safeDir);
                     Location botLoc = botEntity.getLocation();
                     Location safeTarget = botLoc.clone().add(
                             -Math.sin(safeYawRad) * 3, 0, Math.cos(safeYawRad) * 3);
-                    // [FIX-C1] Use COMBAT authority for void-edge repositioning
                     mc.setMoveTarget(safeTarget, MovementController.MovementAuthority.COMBAT);
                 }
             }
         }
+
+        // Water bucket MLG check: if falling during combat
+        if (botEntity.getVelocity().getY() < -0.5 && diff.getWaterBucketMLG() > 0.1) {
+            if (bot.getInventoryEngine() != null) {
+                bot.getInventoryEngine().getUtilityItemHandler().tryWaterBucketMLG();
+            }
+        }
     }
 
-    /**
-     * Handles combat positioning: approach when too far, maintain optimal
-     * range, and enable strafing during melee.
-     *
-     * @param botEntity the bot entity
-     * @param range     current distance to target
-     */
-    /**
-     * Handles combat positioning: approach when too far, maintain optimal
-     * range, and enable strafing during melee.
-     *
-     * @param botEntity the bot entity
-     * @param range     current distance to target
-     */
     private void handlePositioning(@Nonnull LivingEntity botEntity, double range) {
         MovementController mc = bot.getMovementController();
         if (mc == null) return;
 
         if (range > 3.5 && range <= 15) {
-            // Approach target for melee — sprint toward them
             mc.getSprintController().startSprinting();
             mc.setLookTarget(currentTarget.getLocation().add(0, 1.0, 0));
-            // [FIX-C1] Use COMBAT authority — can be overridden by DEFENSE (RetreatHealer)
             mc.setMoveTarget(currentTarget.getLocation(), MovementController.MovementAuthority.COMBAT);
         } else if (range <= 3.5) {
-            // In melee range — strafe and look at target
             mc.setLookTarget(currentTarget.getLocation().add(0, 1.0, 0));
-            mc.setMoveTarget(null, MovementController.MovementAuthority.COMBAT); // Strafing handles lateral movement
+            mc.setMoveTarget(null, MovementController.MovementAuthority.COMBAT);
         } else {
-            // Too far — if ranged equipped, hold position; otherwise approach
             mc.setLookTarget(currentTarget.getLocation().add(0, 1.0, 0));
             mc.setMoveTarget(currentTarget.getLocation(), MovementController.MovementAuthority.COMBAT);
             mc.getSprintController().startSprinting();
@@ -519,10 +476,7 @@ public class CombatEngine {
 
 
     /**
-     * Notifies the combat engine that the bot was hit. Used for:
-     * combo tracking, KB reduction, and interrupt-based re-evaluation.
-     *
-     * @param attacker the entity that hit the bot, or null if unknown
+     * Notifies the combat engine that the bot was hit.
      */
     public void onBotHit(@Nullable LivingEntity attacker) {
         comboTracker.onHitReceived();
@@ -534,25 +488,18 @@ public class CombatEngine {
                 org.bukkit.util.Vector reducedVel = knockbackCalculator.reduceIncomingKnockback(currentVel);
                 botEntity.setVelocity(reducedVel);
 
-                // ─── Fast-Reflect: Open counter-attack window ───
-                // Skilled players immediately counter-attack after being hit,
-                // sprinting into the attacker to negate KB and apply reflect KB.
                 DifficultyProfile diff = bot.getDifficultyProfile();
-                double reflectSkill = diff.getSprintResetChance(); // Reuse sprint-reset skill as proxy
-                // Only bots with decent sprint-reset skill (>= 0.4, i.e., NORMAL+) attempt reflects
+                double reflectSkill = diff.getSprintResetChance();
                 if (reflectSkill >= 0.4 && active && currentTarget != null) {
-                    // Chance to attempt reflect scales with skill
                     double reflectChance = Math.min(1.0, reflectSkill * 1.2);
                     if (org.twightlight.skywarstrainer.util.RandomUtil.chance(reflectChance)) {
                         reflectWindowTicks = REFLECT_WINDOW;
                         reflectQueued = true;
 
-                        // Immediately sprint toward attacker to counter KB
                         MovementController mc = bot.getMovementController();
                         if (mc != null) {
                             mc.getSprintController().startSprinting();
-                            // Inject forward velocity toward attacker to partially negate KB
-                            double counterForce = reflectSkill * 0.25; // Max ~0.25 blocks/tick forward
+                            double counterForce = reflectSkill * 0.25;
                             org.bukkit.util.Vector toAttacker = attacker.getLocation().toVector()
                                     .subtract(botEntity.getLocation().toVector());
                             toAttacker.setY(0);
@@ -565,7 +512,6 @@ public class CombatEngine {
                     }
                 }
             }
-            // Phase 7: Notify enemy analyzer
             EnemyBehaviorAnalyzer analyzer = bot.getEnemyAnalyzer();
             if (analyzer != null) {
                 analyzer.onHitReceivedFromEnemy(attacker.getUniqueId());
@@ -578,13 +524,6 @@ public class CombatEngine {
         }
     }
 
-
-    /**
-     * Returns whether the bot should flee based on current combat state.
-     * This is checked by the decision engine for interrupt-based state transitions.
-     *
-     * @return true if the bot should transition to FLEEING state
-     */
     public boolean shouldFlee() {
         LivingEntity botEntity = bot.getLivingEntity();
         if (botEntity == null) return true;
@@ -594,12 +533,6 @@ public class CombatEngine {
         return healthFraction < diff.getFleeHealthThreshold();
     }
 
-    /**
-     * Returns the engagement score — a measure of how favorable the current
-     * combat situation is for the bot. Used by the decision engine.
-     *
-     * @return score from 0.0 (terrible) to 1.0 (dominant)
-     */
     public double getEngagementScore() {
         if (!active || currentTarget == null) return 0.0;
         return engagementScorer.score(currentTarget);
@@ -607,51 +540,17 @@ public class CombatEngine {
 
     // ─── Accessors ──────────────────────────────────────────────
 
-    /** @return the aim controller */
-    @Nonnull
-    public AimController getAimController() { return aimController; }
-
-    /** @return the click controller */
-    @Nonnull
-    public ClickController getClickController() { return clickController; }
-
-    /** @return the knockback calculator */
-    @Nonnull
-    public KnockbackCalculator getKnockbackCalculator() { return knockbackCalculator; }
-
-    /** @return the combo tracker */
-    @Nonnull
-    public ComboTracker getComboTracker() { return comboTracker; }
-
-    /** @return the projectile handler */
-    @Nonnull
-    public ProjectileHandler getProjectileHandler() { return projectileHandler; }
-
-    /** @return the threat evaluator */
-    @Nonnull
-    public ThreatEvaluator getThreatEvaluator() { return threatEvaluator; }
-
-    /** @return the engagement scorer */
-    @Nonnull
-    public EngagementScorer getEngagementScorer() { return engagementScorer; }
-
-    /** @return the current combat target, or null if none */
-    @Nullable
-    public LivingEntity getCurrentTarget() { return currentTarget; }
-
-    /** @return the currently active combat strategy, or null */
-    @Nullable
-    public CombatStrategy getActiveStrategy() { return activeStrategy; }
-
-    /** @return true if the combat engine is active */
+    @Nonnull public AimController getAimController() { return aimController; }
+    @Nonnull public ClickController getClickController() { return clickController; }
+    @Nonnull public KnockbackCalculator getKnockbackCalculator() { return knockbackCalculator; }
+    @Nonnull public ComboTracker getComboTracker() { return comboTracker; }
+    @Nonnull public ProjectileHandler getProjectileHandler() { return projectileHandler; }
+    @Nonnull public RangedCombatHandler getRangedCombatHandler() { return rangedCombatHandler; }
+    @Nonnull public ThreatEvaluator getThreatEvaluator() { return threatEvaluator; }
+    @Nonnull public EngagementScorer getEngagementScorer() { return engagementScorer; }
+    @Nullable public LivingEntity getCurrentTarget() { return currentTarget; }
+    @Nullable public CombatStrategy getActiveStrategy() { return activeStrategy; }
     public boolean isActive() { return active; }
-
-    /** @return all registered combat strategies */
-    @Nonnull
-    public List<CombatStrategy> getStrategies() { return strategies; }
-
-    /** @return the engagement engine */
-    @Nonnull
-    public EngagementEngine getPatternManager() { return patternManager; }
+    @Nonnull public List<CombatStrategy> getStrategies() { return strategies; }
+    @Nonnull public EngagementEngine getPatternManager() { return patternManager; }
 }
-

@@ -8,6 +8,18 @@ import javax.annotation.Nonnull;
 /**
  * Central inventory management for a trainer bot.
  *
+ * <p>Manages all item-related handlers:
+ * <ul>
+ *   <li>{@link ArmorEquipper} — auto-equip best armor</li>
+ *   <li>{@link SwordSelector} — select best melee weapon</li>
+ *   <li>{@link HotbarOrganizer} — arrange hotbar like a real player</li>
+ *   <li>{@link EnchantmentHandler} — enchanting table interactions</li>
+ *   <li>{@link PotionHandler} — drink beneficial potions</li>
+ *   <li>{@link FoodHandler} — eat food when hungry</li>
+ *   <li>{@link BlockCounter} — track building block inventory</li>
+ *   <li>{@link UtilityItemHandler} — water/lava buckets, flint&steel, TNT, cobweb</li>
+ * </ul></p>
+ *
  * [FIX] AUDIT_INTERVAL changed from 1 to 100. With AUDIT_INTERVAL=1,
  * performFullAudit() ran every single tick() call, which is expensive
  * and redundant since TrainerBot already gates inventory ticks with
@@ -15,7 +27,7 @@ import javax.annotation.Nonnull;
  * or be larger so that when tick() IS called, it doesn't always do a
  * full audit.
  */
-public class InventoryManager {
+public class InventoryEngine {
 
     private final TrainerBot bot;
     private final ArmorEquipper armorEquipper;
@@ -25,6 +37,7 @@ public class InventoryManager {
     private final PotionHandler potionHandler;
     private final FoodHandler foodHandler;
     private final BlockCounter blockCounter;
+    private final UtilityItemHandler utilityItemHandler;
 
     /** Ticks since last full inventory audit. */
     private int ticksSinceAudit;
@@ -38,7 +51,7 @@ public class InventoryManager {
      */
     private static final int AUDIT_INTERVAL = 100;
 
-    public InventoryManager(@Nonnull TrainerBot bot) {
+    public InventoryEngine(@Nonnull TrainerBot bot) {
         this.bot = bot;
         this.armorEquipper = new ArmorEquipper(bot);
         this.swordSelector = new SwordSelector(bot);
@@ -47,6 +60,7 @@ public class InventoryManager {
         this.potionHandler = new PotionHandler(bot);
         this.foodHandler = new FoodHandler(bot);
         this.blockCounter = new BlockCounter(bot);
+        this.utilityItemHandler = new UtilityItemHandler(bot);
         this.ticksSinceAudit = 0;
     }
 
@@ -60,9 +74,10 @@ public class InventoryManager {
 
         ticksSinceAudit++;
 
-        // Quick checks every tick: food and potion urgency
+        // Quick checks every tick: food, potion, and utility item urgency
         foodHandler.tick();
         potionHandler.tick();
+        utilityItemHandler.tick();
 
         // Full audit periodically
         if (ticksSinceAudit >= AUDIT_INTERVAL) {
@@ -99,4 +114,5 @@ public class InventoryManager {
     @Nonnull public PotionHandler getPotionHandler() { return potionHandler; }
     @Nonnull public FoodHandler getFoodHandler() { return foodHandler; }
     @Nonnull public BlockCounter getBlockCounter() { return blockCounter; }
+    @Nonnull public UtilityItemHandler getUtilityItemHandler() { return utilityItemHandler; }
 }

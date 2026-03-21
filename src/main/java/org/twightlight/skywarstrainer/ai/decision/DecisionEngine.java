@@ -173,7 +173,7 @@ public class DecisionEngine {
             score = applyCounterModifiers(action, score);
 
             // ═══ Step 3d: Apply learning-based weight adjustments ═══
-            LearningEngine lm = bot.getLearningModule();
+            LearningEngine lm = bot.getLearningEngine();
             if (lm != null) {
                 Map<BotAction, Double> learnedAdj = lm.getWeightAdjustments();
                 Double learnedMult = learnedAdj.get(action);
@@ -221,7 +221,7 @@ public class DecisionEngine {
                                     "Target dead, re-engaging: " + bestAction.name());
                         }
                         lastChosenAction = bestAction;
-                        LearningEngine lm2 = bot.getLearningModule();
+                        LearningEngine lm2 = bot.getLearningEngine();
                         if (lm2 != null) {
                             lm2.onDecisionMade(bestAction, new HashMap<>(lastScores));
                         }
@@ -247,7 +247,7 @@ public class DecisionEngine {
 
         // ═══ Step 8b: Notify learning module of decision ═══
         if (bestAction != null) {
-            LearningEngine lm2 = bot.getLearningModule();
+            LearningEngine lm2 = bot.getLearningEngine();
             if (lm2 != null) {
                 lm2.onDecisionMade(bestAction, new HashMap<>(lastScores));
             }
@@ -288,7 +288,7 @@ public class DecisionEngine {
      */
     private double applyPositionalBonuses(@Nonnull BotAction action, double score) {
         org.twightlight.skywarstrainer.movement.positional.PositionalEngine pm =
-                bot.getPositionalManager();
+                bot.getPositionalEngine();
         if (pm == null || !pm.hasActiveStrategy()) return score;
 
         Map<String, Double> bonuses = pm.getActiveUtilityBonuses();

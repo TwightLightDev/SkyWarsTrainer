@@ -98,8 +98,8 @@ public class LootEngine {
                 executeLoot();
                 break;
             case EQUIPPING:
-                if (bot.getInventoryManager() != null) {
-                    bot.getInventoryManager().quickEquip();
+                if (bot.getInventoryEngine() != null) {
+                    bot.getInventoryEngine().quickEquip();
                 }
                 resetLoot();
                 break;

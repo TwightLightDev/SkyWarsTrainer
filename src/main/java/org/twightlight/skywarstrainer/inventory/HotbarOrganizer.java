@@ -14,9 +14,15 @@ import javax.annotation.Nonnull;
  * Arranges the hotbar like a real player based on hotbarOrganization skill.
  *
  * <p>Target layout:
- * Slot 0: Sword, Slot 1: Bow/Rod/Water, Slot 2: Blocks, Slot 3: Golden Apple/Food,
- * Slot 4: Projectiles, Slot 5: Ender Pearl, Slot 6: Blocks (secondary),
- * Slot 7: Pickaxe/Axe, Slot 8: Misc</p>
+ * Slot 0: Sword,
+ * Slot 1: Bow/Rod/Water Bucket,
+ * Slot 2: Blocks,
+ * Slot 3: Golden Apple/Food,
+ * Slot 4: Projectiles (snowball/egg),
+ * Slot 5: Ender Pearl,
+ * Slot 6: Utility (lava bucket / flint & steel / TNT / cobweb),
+ * Slot 7: Pickaxe/Axe,
+ * Slot 8: Misc (second utility item or extra blocks)</p>
  */
 public class HotbarOrganizer {
 
@@ -51,8 +57,12 @@ public class HotbarOrganizer {
         moveToSlot(inv, 4, this::isProjectile);
         // Slot 5: Ender Pearl
         moveToSlot(inv, 5, m -> m == Material.ENDER_PEARL);
+        // Slot 6: Utility items (lava, flint, TNT, cobweb)
+        moveToSlot(inv, 6, this::isUtilityItem);
         // Slot 7: Tool
         moveToSlot(inv, 7, this::isTool);
+        // Slot 8: Secondary utility or extra blocks
+        moveToSlot(inv, 8, this::isSecondaryUtilityOrBlock);
     }
 
     private void moveToSlot(@Nonnull PlayerInventory inv, int targetSlot,
@@ -89,8 +99,22 @@ public class HotbarOrganizer {
         return mat == Material.SNOW_BALL || mat == Material.EGG;
     }
 
+    private boolean isUtilityItem(@Nonnull Material mat) {
+        return mat == Material.LAVA_BUCKET || mat == Material.FLINT_AND_STEEL
+                || mat == Material.TNT || mat == Material.WEB;
+    }
+
     private boolean isTool(@Nonnull Material mat) {
         String name = mat.name();
         return name.endsWith("_PICKAXE") || name.endsWith("_AXE");
+    }
+
+    /**
+     * Matches secondary utility items or extra building blocks for slot 8.
+     * This catches any utility/block items that didn't fit into their primary slot.
+     */
+    private boolean isSecondaryUtilityOrBlock(@Nonnull Material mat) {
+        return isUtilityItem(mat) || isBuildingBlock(mat)
+                || mat == Material.BUCKET || mat == Material.ENDER_PEARL;
     }
 }

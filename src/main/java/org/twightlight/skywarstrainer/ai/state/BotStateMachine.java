@@ -174,7 +174,6 @@ public class BotStateMachine {
         currentState = newState;
         stateEnteredTick = bot.getLocalTickCount();
 
-        // [FIX-A1/A4/D3/E1] Notify all internal transition listeners for subsystem cleanup
         for (StateTransitionListener listener : transitionListeners) {
             try {
                 listener.onTransition(oldState, newState);

@@ -7,7 +7,7 @@ import org.bukkit.entity.LivingEntity;
 import org.twightlight.skywarstrainer.awareness.ThreatMap;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
-import org.twightlight.skywarstrainer.inventory.InventoryManager;
+import org.twightlight.skywarstrainer.inventory.InventoryEngine;
 import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.util.DebugLogger;
 import org.twightlight.skywarstrainer.util.RandomUtil;
@@ -68,7 +68,7 @@ public class BlockBarricade implements DefensiveBehavior {
         if (!RandomUtil.chance(blockPlaceChance)) return false;
 
         // Need blocks in inventory
-        InventoryManager inv = bot.getInventoryManager();
+        InventoryEngine inv = bot.getInventoryEngine();
         if (inv == null || inv.getBlockCounter().getTotalBlocks() < BLOCKS_NEEDED) return false;
 
         // Need a visible threat to build wall against
@@ -167,7 +167,7 @@ public class BlockBarricade implements DefensiveBehavior {
             return;
         }
 
-        InventoryManager inv = bot.getInventoryManager();
+        InventoryEngine inv = bot.getInventoryEngine();
         if (inv == null || inv.getBlockCounter().getTotalBlocks() <= 0) {
             complete = true;
             return;

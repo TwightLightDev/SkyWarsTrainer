@@ -26,7 +26,7 @@ import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.game.BotChatManager;
 import org.twightlight.skywarstrainer.inventory.EnchantmentHandler;
 import org.twightlight.skywarstrainer.inventory.FoodHandler;
-import org.twightlight.skywarstrainer.inventory.InventoryManager;
+import org.twightlight.skywarstrainer.inventory.InventoryEngine;
 import org.twightlight.skywarstrainer.inventory.PotionHandler;
 import org.twightlight.skywarstrainer.loot.LootEngine;
 import org.twightlight.skywarstrainer.movement.MovementController;
@@ -79,7 +79,7 @@ public class TrainerBot {
     private CombatEngine combatEngine;
     private BridgeEngine bridgeEngine;
     private LootEngine lootEngine;
-    private InventoryManager inventoryManager;
+    private InventoryEngine inventoryEngine;
 
     // ═══════════════════════════════════════════════════════════
     //  AWARENESS SUBSYSTEM
@@ -104,8 +104,8 @@ public class TrainerBot {
     private TickTimer behaviorTreeTimer;
     private TickTimer inventoryAuditTimer;
 
-    private ApproachEngine approachManager;
-    private PositionalEngine positionalManager;
+    private ApproachEngine approachEngine;
+    private PositionalEngine positionalEngine;
     private DefensiveEngine defenseEngine;
     private EnemyBehaviorAnalyzer enemyAnalyzer;
     private LearningEngine learningEngine;
@@ -209,9 +209,9 @@ public class TrainerBot {
         this.bridgeEngine = new BridgeEngine(this);
         this.bridgeMovementController = new BridgeMovementController(this);
         this.lootEngine = new LootEngine(this);
-        this.inventoryManager = new InventoryManager(this);
-        this.approachManager = new ApproachEngine(this);
-        this.positionalManager = new PositionalEngine(this);
+        this.inventoryEngine = new InventoryEngine(this);
+        this.approachEngine = new ApproachEngine(this);
+        this.positionalEngine = new PositionalEngine(this);
         this.defenseEngine = new DefensiveEngine(this);
         this.enemyAnalyzer = new EnemyBehaviorAnalyzer(this);
 
@@ -288,8 +288,8 @@ public class TrainerBot {
         // Without this, ApproachEngine.isActive() returns true when re-entering HUNTING,
         // causing the BT to resume a stale approach with outdated target position.
         if (oldState == BotState.HUNTING && newState != BotState.HUNTING) {
-            if (approachManager != null && approachManager.isActive()) {
-                approachManager.cancelApproach();
+            if (approachEngine != null && approachEngine.isActive()) {
+                approachEngine.cancelApproach();
             }
         }
 
@@ -411,8 +411,8 @@ public class TrainerBot {
         stateMachine.registerTree(BotState.BRIDGING, new BehaviorTree("BRIDGING",
                 new SequenceNode("bridge-sequence",
                         new ConditionNode("has-blocks", bot ->
-                                inventoryManager != null
-                                        && inventoryManager.getBlockCounter().getTotalBlocks() > 0),
+                                inventoryEngine != null
+                                        && inventoryEngine.getBlockCounter().getTotalBlocks() > 0),
                         new ActionNode("bridge-tick", bot -> {
                             if (bridgeEngine == null) return NodeStatus.FAILURE;
 
@@ -426,7 +426,7 @@ public class TrainerBot {
                                 }
 
                                 boolean started = bridgeEngine.startBridge(destination,
-                                        inventoryManager.getBlockCounter().getTotalBlocks());
+                                        inventoryEngine.getBlockCounter().getTotalBlocks());
                                 if (!started) return NodeStatus.FAILURE;
 
                                 String strategyName = bridgeEngine.getActiveStrategy() != null
@@ -497,8 +497,8 @@ public class TrainerBot {
                         }
                     }
 
-                    if (inventoryManager != null) {
-                        inventoryManager.getFoodHandler().tick();
+                    if (inventoryEngine != null) {
+                        inventoryEngine.getFoodHandler().tick();
                     }
 
                     double healthFrac = entity.getHealth() / entity.getMaxHealth();
@@ -529,8 +529,8 @@ public class TrainerBot {
                 new SequenceNode("enchant-sequence",
                         // Step 1: Verify enchanting is worthwhile
                         new ConditionNode("should-enchant", bot -> {
-                            if (inventoryManager == null) return false;
-                            return inventoryManager.getEnchantmentHandler().shouldEnchant();
+                            if (inventoryEngine == null) return false;
+                            return inventoryEngine.getEnchantmentHandler().shouldEnchant();
                         }),
                         // Step 2: Find and pathfind to enchanting table
                         new ActionNode("pathfind-to-enchant-table", bot -> {
@@ -582,9 +582,9 @@ public class TrainerBot {
                         new ActionNode("apply-enchantment", bot -> {
                             Player player = getPlayerEntity();
                             if (player == null) return NodeStatus.FAILURE;
-                            if (inventoryManager == null) return NodeStatus.FAILURE;
+                            if (inventoryEngine == null) return NodeStatus.FAILURE;
 
-                            EnchantmentHandler handler = inventoryManager.getEnchantmentHandler();
+                            EnchantmentHandler handler = inventoryEngine.getEnchantmentHandler();
                             if (!handler.shouldEnchant()) return NodeStatus.SUCCESS; // Nothing to enchant
 
                             int level = player.getLevel();
@@ -598,14 +598,14 @@ public class TrainerBot {
                                 boolean enchantedSomething = false;
                                 for (org.bukkit.inventory.ItemStack armor : player.getInventory().getArmorContents()) {
                                     if (armor != null && armor.getEnchantments().isEmpty()) {
-                                        inventoryManager.getEnchantmentHandler().applySimulatedEnchant(armor, level);
+                                        inventoryEngine.getEnchantmentHandler().applySimulatedEnchant(armor, level);
                                         enchantedSomething = true;
                                         break;
                                     }
                                 }
                                 if (!enchantedSomething) return NodeStatus.SUCCESS;
                             } else {
-                                inventoryManager.getEnchantmentHandler().applySimulatedEnchant(weapon, level);
+                                inventoryEngine.getEnchantmentHandler().applySimulatedEnchant(weapon, level);
                             }
 
                             // Consume levels (simplified: 1-3 levels depending on enchant tier)
@@ -627,12 +627,12 @@ public class TrainerBot {
         // Now they map to CONSUMING which actively triggers eating/drinking.
         stateMachine.registerTree(BotState.CONSUMING, new BehaviorTree("CONSUMING",
                 new ActionNode("consume-tick", bot -> {
-                    if (inventoryManager == null) return NodeStatus.FAILURE;
+                    if (inventoryEngine == null) return NodeStatus.FAILURE;
                     Player player = getPlayerEntity();
                     if (player == null) return NodeStatus.FAILURE;
 
-                    FoodHandler foodHandler = inventoryManager.getFoodHandler();
-                    PotionHandler potionHandler = inventoryManager.getPotionHandler();
+                    FoodHandler foodHandler = inventoryEngine.getFoodHandler();
+                    PotionHandler potionHandler = inventoryEngine.getPotionHandler();
 
                     // Determine what to consume based on the chosen action
                     DecisionEngine.BotAction lastAction = decisionEngine != null
@@ -648,7 +648,7 @@ public class TrainerBot {
                         // Prefer golden apple if available, otherwise regular food
                         if (foodHandler.hasGoldenApple()) {
                             // Find and eat golden apple
-                            int gaSlot = inventoryManager.getEnchantmentHandler().findGoldenAppleSlot(player);
+                            int gaSlot = inventoryEngine.getEnchantmentHandler().findGoldenAppleSlot(player);
                             if (gaSlot >= 0) {
                                 player.getInventory().setHeldItemSlot(gaSlot < 9 ? gaSlot : 0);
                                 if (gaSlot >= 9) {
@@ -697,13 +697,13 @@ public class TrainerBot {
         // Now actually performs a full inventory audit and completes.
         stateMachine.registerTree(BotState.ORGANIZING, new BehaviorTree("ORGANIZING",
                 new ActionNode("organize-tick", bot -> {
-                    if (inventoryManager == null) return NodeStatus.FAILURE;
+                    if (inventoryEngine == null) return NodeStatus.FAILURE;
                     Player player = getPlayerEntity();
                     if (player == null) return NodeStatus.FAILURE;
 
                     // Perform a full inventory audit: equip best armor, select best
                     // sword, organize hotbar, count blocks
-                    inventoryManager.performFullAudit(player);
+                    inventoryEngine.performFullAudit(player);
 
                     if (getProfile().isDebugMode()) {
                         plugin.getLogger().info("[DEBUG] " + getName()
@@ -762,20 +762,20 @@ public class TrainerBot {
                                 // Branch B: Target on different island — use ApproachManager
                                 new SequenceNode("hunt-approach",
                                         new ActionNode("approach-tick", bot -> {
-                                            if (approachManager == null) return NodeStatus.FAILURE;
+                                            if (approachEngine == null) return NodeStatus.FAILURE;
 
-                                            if (!approachManager.isActive()) {
+                                            if (!approachEngine.isActive()) {
                                                 // Start a new approach
                                                 LivingEntity target = findNearestThreat();
                                                 if (target == null) return NodeStatus.FAILURE;
-                                                boolean started = approachManager.startApproach(target);
+                                                boolean started = approachEngine.startApproach(target);
                                                 if (!started) {
                                                     // Fallback: use basic bridge
                                                     return NodeStatus.FAILURE;
                                                 }
                                             }
 
-                                            ApproachTickResult result = approachManager.tick();
+                                            ApproachTickResult result = approachEngine.tick();
                                             switch (result) {
                                                 case ARRIVED:
                                                     // We've reached the target's island — trigger re-eval for FIGHT
@@ -947,11 +947,11 @@ public class TrainerBot {
         combatEngine = null;
         bridgeEngine = null;
         lootEngine = null;
-        inventoryManager = null;
+        inventoryEngine = null;
         stateMachine = null;
         decisionEngine = null;
-        approachManager = null;
-        positionalManager = null;
+        approachEngine = null;
+        positionalEngine = null;
         defenseEngine = null;
         enemyAnalyzer = null;
         bridgeMovementController = null;
@@ -1083,7 +1083,7 @@ public class TrainerBot {
         // ── 11. Inventory audit (every 100 ticks) ──
         if (inventoryAuditTimer != null && inventoryAuditTimer.tick()) {
             tickSafe("inventory", () -> {
-                if (inventoryManager != null) inventoryManager.tick();
+                if (inventoryEngine != null) inventoryEngine.tick();
             });
         }
 
@@ -1099,7 +1099,7 @@ public class TrainerBot {
         // ── 13. Positional Strategy (every 50 ticks) — NEW ──
         if (positionalTimer != null && positionalTimer.tick()) {
             tickSafe("positional", () -> {
-                if (positionalManager != null) positionalManager.tick();
+                if (positionalEngine != null) positionalEngine.tick();
             });
         }
 
@@ -1317,7 +1317,7 @@ public class TrainerBot {
     @Nullable public CombatEngine getCombatEngine() { return combatEngine; }
     @Nullable public BridgeEngine getBridgeEngine() { return bridgeEngine; }
     @Nullable public LootEngine getLootEngine() { return lootEngine; }
-    @Nullable public InventoryManager getInventoryManager() { return inventoryManager; }
+    @Nullable public InventoryEngine getInventoryEngine() { return inventoryEngine; }
     @Nullable public MapScanner getMapScanner() { return mapScanner; }
     @Nullable public ThreatMap getThreatMap() { return threatMap; }
     @Nullable public IslandGraph getIslandGraph() { return islandGraph; }
@@ -1328,12 +1328,12 @@ public class TrainerBot {
     @Nullable public GamePhaseTracker getGamePhaseTracker() { return gamePhaseTracker; }
     @Nullable public BotStateMachine getStateMachine() { return stateMachine; }
     @Nullable public DecisionEngine getDecisionEngine() { return decisionEngine; }
-    @Nullable public ApproachEngine getApproachManager() { return approachManager; }
-    @Nullable public PositionalEngine getPositionalManager() { return positionalManager; }
+    @Nullable public ApproachEngine getApproachEngine() { return approachEngine; }
+    @Nullable public PositionalEngine getPositionalEngine() { return positionalEngine; }
     @Nullable public DefensiveEngine getDefenseEngine() { return defenseEngine; }
     @Nullable public EnemyBehaviorAnalyzer getEnemyAnalyzer() { return enemyAnalyzer; }
     @Nullable public BridgeMovementController getBridgeMovementController() { return bridgeMovementController; }
-    @Nullable public LearningEngine getLearningModule() { return learningEngine; }
+    @Nullable public LearningEngine getLearningEngine() { return learningEngine; }
 
     private static String formatLocation(Location loc) {
         return String.format("(%.1f, %.1f, %.1f in %s)",
