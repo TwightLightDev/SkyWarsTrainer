@@ -418,8 +418,6 @@ public class DecisionEngine {
     /**
      * Selects the best action from the scored map.
      *
-     * [FIX] Fixed off-by-one: when sorted.size()==2, nextInt(1, min(3,2)-1)
-     * became nextInt(1,0) which is invalid. Now uses proper bounds.
      */
     @Nullable
     private BotAction selectBestAction(double decisionQuality) {
@@ -428,23 +426,22 @@ public class DecisionEngine {
         List<Map.Entry<BotAction, Double>> sorted = new ArrayList<>(lastScores.entrySet());
         sorted.sort((a, b) -> Double.compare(b.getValue(), a.getValue()));
 
-        // At quality < 0.3, occasionally pick a suboptimal action
         if (decisionQuality < 0.3 && sorted.size() > 1 && RandomUtil.chance(0.3)) {
-            // [FIX] Clamp upper bound to at least (min+1) to prevent nextInt(1,0) crash
-            int maxIdx = Math.min(3, sorted.size());  // exclusive upper bound
-            if (maxIdx > 1) {
-                int pick = RandomUtil.nextInt(1, maxIdx); // picks from index 1 to maxIdx-1
+            // [FIX 5.4] Upper bound is sorted.size()-1 (inclusive), minimum index 1
+            int maxIdx = Math.min(3, sorted.size() - 1);
+            if (maxIdx >= 1) {
+                int pick = RandomUtil.nextInt(1, maxIdx);
                 return sorted.get(pick).getKey();
             }
         }
 
-        // At quality < 0.5, small chance to pick 2nd best
         if (decisionQuality < 0.5 && sorted.size() > 1 && RandomUtil.chance(0.1)) {
             return sorted.get(1).getKey();
         }
 
         return sorted.get(0).getKey();
     }
+
 
 
     /**
@@ -618,7 +615,6 @@ public class DecisionEngine {
         org.bukkit.entity.Player player = bot.getPlayerEntity();
         if (player == null) return;
 
-        // Find ender pearl in inventory
         int pearlSlot = -1;
         for (int i = 0; i < 36; i++) {
             org.bukkit.inventory.ItemStack item = player.getInventory().getItem(i);
@@ -627,12 +623,10 @@ public class DecisionEngine {
                 break;
             }
         }
-        if (pearlSlot < 0) return; // No pearl found
+        if (pearlSlot < 0) return;
 
-        // Determine throw target
         Location target = null;
 
-        // Priority 1: Throw at nearest threat (escape or engage)
         ThreatMap tm = bot.getThreatMap();
         if (tm != null) {
             ThreatMap.ThreatEntry nearest = tm.getNearestThreat();
@@ -640,10 +634,8 @@ public class DecisionEngine {
                 LivingEntity entity = bot.getLivingEntity();
                 if (entity != null) {
                     double dist = entity.getLocation().distance(nearest.currentPosition);
-                    // If fleeing (health low), throw AWAY from threat
                     double healthFrac = entity.getHealth() / entity.getMaxHealth();
                     if (healthFrac < bot.getDifficultyProfile().getFleeHealthThreshold()) {
-                        // Throw away: opposite direction from threat
                         Location botLoc = entity.getLocation();
                         double dx = botLoc.getX() - nearest.currentPosition.getX();
                         double dz = botLoc.getZ() - nearest.currentPosition.getZ();
@@ -653,14 +645,12 @@ public class DecisionEngine {
                             target = botLoc.clone().add(dx * 20, 2, dz * 20);
                         }
                     } else if (dist > 8) {
-                        // Throw toward threat to close distance
                         target = nearest.currentPosition.clone().add(0, 1, 0);
                     }
                 }
             }
         }
 
-        // Priority 2: Throw toward mid-island
         if (target == null && bot.getIslandGraph() != null) {
             IslandGraph.Island mid = bot.getIslandGraph().getMidIsland();
             if (mid != null && mid.center != null) {
@@ -668,47 +658,50 @@ public class DecisionEngine {
             }
         }
 
-        if (target == null) return; // Nowhere useful to throw
+        if (target == null) return;
 
-        // Switch to pearl slot, look at target, and throw
         int previousSlot = player.getInventory().getHeldItemSlot();
-        player.getInventory().setHeldItemSlot(pearlSlot < 9 ? pearlSlot : previousSlot);
 
-        // If pearl isn't in hotbar, move it there first
-        if (pearlSlot >= 9) {
+        // If pearl is in hotbar, just switch to it
+        if (pearlSlot < 9) {
+            player.getInventory().setHeldItemSlot(pearlSlot);
+        } else {
+            // Pearl is in main inventory — swap it into the current hotbar slot
             org.bukkit.inventory.ItemStack pearl = player.getInventory().getItem(pearlSlot);
             org.bukkit.inventory.ItemStack swap = player.getInventory().getItem(previousSlot);
             player.getInventory().setItem(previousSlot, pearl);
             player.getInventory().setItem(pearlSlot, swap);
         }
 
-        // Look at target and throw
         MovementController mc = bot.getMovementController();
         if (mc != null) {
             mc.setLookTarget(target);
         }
 
-        // Launch the pearl via NMS/entity throw
         org.bukkit.entity.EnderPearl pearl = player.launchProjectile(
                 org.bukkit.entity.EnderPearl.class,
                 target.toVector().subtract(player.getEyeLocation().toVector()).normalize().multiply(1.5));
 
-        // Consume the pearl from inventory
-        org.bukkit.inventory.ItemStack pearlItem = player.getInventory().getItemInHand();
+        // [FIX 5.5] Consume the pearl by slot index instead of relying on getItemInHand()
+        // which may not be the pearl after slot switching shenanigans.
+        int consumeSlot = (pearlSlot < 9) ? pearlSlot : previousSlot;
+        org.bukkit.inventory.ItemStack pearlItem = player.getInventory().getItem(consumeSlot);
         if (pearlItem != null && pearlItem.getType() == org.bukkit.Material.ENDER_PEARL) {
             if (pearlItem.getAmount() > 1) {
                 pearlItem.setAmount(pearlItem.getAmount() - 1);
             } else {
-                player.getInventory().setItemInHand(null);
+                player.getInventory().setItem(consumeSlot, null);
             }
         }
 
+        // [FIX 5.6] Use bot's stored plugin reference instead of SkyWarsTrainer.getInstance()
         if (bot.getProfile().isDebugMode()) {
-            SkyWarsTrainer.getInstance().getLogger().info(
+            bot.getPlugin().getLogger().info(
                     "[DEBUG] " + bot.getName() + " threw ender pearl toward " +
                             String.format("(%.1f, %.1f, %.1f)", target.getX(), target.getY(), target.getZ()));
         }
     }
+
 
     // ─── Action Weight Configuration ────────────────────────────
 

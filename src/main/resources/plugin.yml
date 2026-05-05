@@ -1,15 +1,15 @@
 name: SkyWarsTrainer
 version: '${project.version}'
-main: org.twightlight.skywarstrainer.SkyWarsTrainerPlugin
+main: org.twightlight.skywarstrainer.SkyWarsTrainer
 description: Intelligent SkyWars practice bots with personality-driven AI.
-author: Twightlight
+author: TwightLightDev
 depend: [Citizens]
 softdepend: [LostSkyWars]
 
 commands:
   swt:
-    description: SkyWars Trainer Bot management commands
-    usage: /<command> <subcommand> [args...]
+    description: SkyWars Trainer Bot commands
+    usage: /swt <subcommand> [args...]
     permission: skywarstrainer.spawn
     aliases: [skywarstrainer, trainer]
 

@@ -1,13 +1,18 @@
 package org.twightlight.skywarstrainer.commands.subcommands;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.twightlight.skywars.api.server.SkyWarsServer;
+import org.twightlight.skywars.arena.Arena;
+import org.twightlight.skywars.database.Database;
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.commands.CommandHandler;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -56,12 +61,41 @@ public class FillCommand implements SubCommand {
             personalities = Arrays.asList(args[2].split(","));
         }
 
+        // [FIX 1.2] Resolve the arena from the player's current LostSkyWars game.
+        Arena<?> arena = resolveArena(player);
+        if (arena == null) {
+            sender.sendMessage(CommandHandler.getPrefix() + ChatColor.RED
+                    + "You must be in a SkyWars game to fill with bots. "
+                    + "Join an arena first, or ensure LostSkyWars is installed.");
+            return;
+        }
+
         int spawned = plugin.getBotManager().fillWithBots(
-                null, player.getLocation(), count, difficulty, personalities);
+                arena, player.getLocation(), count, difficulty, personalities);
 
         sender.sendMessage(CommandHandler.getPrefix() + ChatColor.GREEN + "Spawned "
                 + ChatColor.YELLOW + spawned + "/" + count
                 + ChatColor.GREEN + " bots [" + difficulty.name() + "]");
+    }
+
+    /**
+     * Attempts to resolve the SkyWars arena the player is currently in.
+     *
+     * @param player the player
+     * @return the arena, or null if not in one / LostSkyWars unavailable
+     */
+    @Nullable
+    private Arena<?> resolveArena(@Nonnull Player player) {
+        try {
+            SkyWarsServer server = Database.getInstance().getAccount(player.getUniqueId()).getServer();
+            if (server instanceof Arena) {
+                return (Arena<?>) server;
+            }
+            return null;
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to resolve arena for player " + player.getName() + ": " + e.getMessage());
+            return null;
+        }
     }
 
     @Override

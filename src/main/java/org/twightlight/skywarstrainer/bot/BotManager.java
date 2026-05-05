@@ -8,6 +8,7 @@ import org.twightlight.skywarstrainer.ai.personality.Personality;
 import org.twightlight.skywarstrainer.ai.personality.PersonalityConflictTable;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
+import org.twightlight.skywarstrainer.util.DebugLogger;
 import org.twightlight.skywarstrainer.util.RandomUtil;
 
 import javax.annotation.Nonnull;
@@ -74,15 +75,23 @@ public class BotManager {
         DifficultyProfile difficultyProfile = plugin.getDifficultyConfig().getProfile(difficulty);
 
         BotProfile profile = new BotProfile(difficulty, difficultyProfile);
-        for (String personality : personalities) {
+
+        // [FIX 1.5] If no personalities were specified, generate random ones.
+        // This makes every bot unique by default while still allowing explicit specification.
+        List<String> resolvedPersonalities = personalities;
+        if (resolvedPersonalities == null || resolvedPersonalities.isEmpty()) {
+            resolvedPersonalities = generateRandomPersonalities();
+        }
+
+        for (String personality : resolvedPersonalities) {
             profile.addPersonality(personality);
         }
 
         BotSkin skin;
         if (name != null && !name.isEmpty()) {
-            skin = BotSkin.withName(plugin, name, difficulty, personalities);
+            skin = BotSkin.withName(plugin, name, difficulty, resolvedPersonalities);
         } else {
-            skin = BotSkin.generateRandom(plugin, difficulty, personalities);
+            skin = BotSkin.generateRandom(plugin, difficulty, resolvedPersonalities);
         }
 
         String displayName = skin.getDisplayName();
@@ -95,13 +104,15 @@ public class BotManager {
         bot.setStaggerOffset(staggerCounter);
         staggerCounter++;
 
+        // [FIX 6.7] Reset staggerCounter to prevent negative modulo from int overflow
+        if (staggerCounter >= Integer.MAX_VALUE / 2) {
+            staggerCounter = 0;
+        }
 
         if (!bot.spawn(location)) {
             plugin.getLogger().warning("Failed to spawn bot: " + displayName);
             return null;
         }
-
-        // In spawnBot() method, after bot.spawn(location) succeeds and before return:
 
         // Fire BotSpawnEvent
         org.twightlight.skywarstrainer.api.events.BotSpawnEvent spawnEvent =
@@ -112,12 +123,18 @@ public class BotManager {
             return null;
         }
 
+        SkyWarsTrainer pluginRef = SkyWarsTrainer.getInstance();
+        if (pluginRef != null && pluginRef.getApi() != null) {
+            org.twightlight.skywarstrainer.api.SkyWarsTrainerAPI api = pluginRef.getApi();
+            api.applyPendingRegistrations(bot);
+        }
+
         activeBots.put(bot.getBotId(), bot);
         botsByName.put(displayName.toLowerCase(), bot);
 
         plugin.getLogger().info("Spawned bot: " + displayName
                 + " [" + difficulty.name() + "] "
-                + (personalities.isEmpty() ? "(no personalities)" : personalities));
+                + (resolvedPersonalities.isEmpty() ? "(no personalities)" : resolvedPersonalities));
 
         return bot;
     }
@@ -196,11 +213,20 @@ public class BotManager {
 
     /**
      * Ticks all active bots within the given time budget.
-     * Called once per server tick by the main plugin tick loop.
+     *
+     * <p><strong>WARNING:</strong> Do NOT call this method when Citizens Traits are active.
+     * The Citizens Trait ({@code SkyWarsTrainerTrait.run()}) already calls {@code bot.tick()}
+     * every server tick. Calling this method would double-tick all bots, causing erratic
+     * behavior, doubled combat speed, and doubled movement speed.</p>
+     *
+     * <p>This method exists only for potential future use in non-Citizens tick modes.
+     * It is currently dead code and intentionally never scheduled.</p>
      *
      * @param startNanos   System.nanoTime() when this tick started
      * @param maxMsPerTick maximum milliseconds allowed for bot processing
+     * @deprecated Citizens Traits handle bot ticking. Do not call this method.
      */
+    @Deprecated
     public void tickAll(long startNanos, long maxMsPerTick) {
         if (activeBots.isEmpty()) return;
 
@@ -210,9 +236,7 @@ public class BotManager {
 
         for (TrainerBot bot : activeBots.values()) {
             if (System.nanoTime() - startNanos > budgetNanos) {
-                if (plugin.getConfigManager().isDebugMode()) {
-                    plugin.getLogger().info("[DEBUG] Tick budget exceeded, deferring remaining bots.");
-                }
+                DebugLogger.logSystem("Tick budget exceeded, deferring remaining bots.");
                 break;
             }
 
@@ -228,25 +252,41 @@ public class BotManager {
 
     /**
      * Removes bots whose NPC entity has died or is no longer valid.
+     *
+     * <p>[FIX 3.4] Removed the addDeath() call — the authoritative source for death
+     * counting is GameEventListener.onPlayerDeath(). cleanupDeadBots() only handles
+     * removing from maps and destroying the NPC.</p>
+     *
+     * <p>[FIX 6.8] Fire BotDespawnEvent for bots cleaned up this way, since they
+     * don't go through removeBot() which calls destroy() (which fires the event).
+     * We collect dead bots in a separate list, then delegate to removeBot().</p>
      */
     private void cleanupDeadBots() {
-        Iterator<Map.Entry<UUID, TrainerBot>> iterator = activeBots.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<UUID, TrainerBot> entry = iterator.next();
+        // [FIX 6.8] Collect dead bots first, then delegate to removeBot() which fires events
+        List<TrainerBot> deadBots = new ArrayList<>();
+
+        for (Map.Entry<UUID, TrainerBot> entry : activeBots.entrySet()) {
             TrainerBot bot = entry.getValue();
 
             if (bot.isDestroyed()) {
-                botsByName.remove(bot.getName().toLowerCase());
-                iterator.remove();
+                deadBots.add(bot);
                 continue;
             }
 
             if (bot.isInitialized() && !bot.isAlive()) {
-                bot.getProfile().addDeath();
-                botsByName.remove(bot.getName().toLowerCase());
-                iterator.remove();
-                bot.destroy();
+                // [FIX 3.4] Do NOT call bot.getProfile().addDeath() here —
+                // GameEventListener.onPlayerDeath() is the authoritative source.
                 plugin.getLogger().info("Bot died: " + bot.getName());
+                deadBots.add(bot);
+            }
+        }
+
+        for (TrainerBot deadBot : deadBots) {
+            // removeBot() handles: activeBots.remove, botsByName.remove, bot.destroy() (fires BotDespawnEvent)
+            activeBots.remove(deadBot.getBotId());
+            botsByName.remove(deadBot.getName().toLowerCase());
+            if (!deadBot.isDestroyed()) {
+                deadBot.destroy();
             }
         }
     }
@@ -255,8 +295,6 @@ public class BotManager {
 
     /**
      * Returns all bots in a specific arena.
-     * This is the key method that GameEventListener and other game integration
-     * classes need to find bots participating in a specific SkyWars game.
      *
      * @param arena the arena to search
      * @return list of bots in that arena (may be empty, never null)
@@ -264,7 +302,7 @@ public class BotManager {
     @Nonnull
     public List<TrainerBot> getBotsInArena(@Nonnull Arena<?> arena) {
         return activeBots.values().stream()
-                .filter(bot -> !bot.isDestroyed() && bot.getArena().equals(arena))
+                .filter(bot -> !bot.isDestroyed() && bot.getArena() != null && bot.getArena().equals(arena))
                 .collect(Collectors.toList());
     }
 
@@ -278,6 +316,7 @@ public class BotManager {
     public List<TrainerBot> getBotsInArena(@Nonnull String arenaServerName) {
         return activeBots.values().stream()
                 .filter(bot -> !bot.isDestroyed()
+                        && bot.getArena() != null
                         && bot.getArena().getServerName() != null
                         && bot.getArena().getServerName().equals(arenaServerName))
                 .collect(Collectors.toList());

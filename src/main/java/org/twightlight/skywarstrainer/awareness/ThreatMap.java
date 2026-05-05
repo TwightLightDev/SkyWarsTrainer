@@ -377,6 +377,28 @@ public class ThreatMap {
         return ((long) (gx & 0xFFFFF) << 40) | ((long) (gy & 0xFFF) << 20) | (gz & 0xFFFFF);
     }
 
+    /**
+     * Resolves a ThreatEntry to its actual LivingEntity by searching nearby entities.
+     * This is a shared utility method to avoid duplicate entity resolution logic
+     * in TrainerBot.findNearestThreat() and CombatEngine.selectBestTarget().
+     *
+     * @param entry     the threat entry to resolve
+     * @param botEntity the bot's living entity (center of search)
+     * @param radius    the search radius
+     * @return the resolved LivingEntity, or null if not found nearby
+     */
+    @Nullable
+    public static LivingEntity resolveEntity(@Nonnull ThreatEntry entry,
+                                             @Nonnull LivingEntity botEntity,
+                                             double radius) {
+        for (Entity entity : botEntity.getNearbyEntities(radius, radius, radius)) {
+            if (entity.getUniqueId().equals(entry.playerId) && entity instanceof LivingEntity) {
+                return (LivingEntity) entity;
+            }
+        }
+        return null;
+    }
+
     // ═════════════════════════════════════════════════════════════
     //  INNER: ThreatEntry
     // ═════════════════════════════════════════════════════════════

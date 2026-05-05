@@ -1,14 +1,19 @@
 package org.twightlight.skywarstrainer.commands.subcommands;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.twightlight.skywars.api.server.SkyWarsServer;
+import org.twightlight.skywars.arena.Arena;
+import org.twightlight.skywars.database.Database;
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.commands.CommandHandler;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -63,10 +68,18 @@ public class SpawnCommand implements org.twightlight.skywarstrainer.commands.sub
             name = args[2];
         }
 
-        // Spawn the bot — note: arena parameter needs to be resolved from the player's current game
-        // For testing, we pass null arena and the spawn method handles it
+        // [FIX 1.2] Resolve the arena from the player's current LostSkyWars game.
+        // Passing null arena causes NPE in BotManager.spawnBot() and downstream.
+        Arena<?> arena = resolveArena(player);
+        if (arena == null) {
+            sender.sendMessage(CommandHandler.getPrefix() + ChatColor.RED
+                    + "You must be in a SkyWars game to spawn bots. "
+                    + "Join an arena first, or ensure LostSkyWars is installed.");
+            return;
+        }
+
         TrainerBot bot = plugin.getBotManager().spawnBot(
-                null, // Arena resolved from context
+                arena,
                 player.getLocation(),
                 difficulty,
                 personalities,
@@ -80,6 +93,27 @@ public class SpawnCommand implements org.twightlight.skywarstrainer.commands.sub
                     + (personalities.isEmpty() ? "" : " " + personalities));
         } else {
             sender.sendMessage(CommandHandler.getPrefix() + ChatColor.RED + "Failed to spawn bot. Check console for details.");
+        }
+    }
+
+    /**
+     * Attempts to resolve the SkyWars arena the player is currently in.
+     * Uses the LostSkyWars API (SkyWarsServer) to find the player's game.
+     *
+     * @param player the player
+     * @return the arena, or null if the player is not in one / LostSkyWars unavailable
+     */
+    @Nullable
+    private Arena<?> resolveArena(@Nonnull Player player) {
+        try {
+            SkyWarsServer server = Database.getInstance().getAccount(player.getUniqueId()).getServer();
+            if (server instanceof Arena) {
+                return (Arena<?>) server;
+            }
+            return null;
+        } catch (Exception e) {
+            plugin.getLogger().warning("Failed to resolve arena for player " + player.getName() + ": " + e.getMessage());
+            return null;
         }
     }
 

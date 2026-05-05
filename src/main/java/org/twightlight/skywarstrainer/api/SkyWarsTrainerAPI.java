@@ -12,25 +12,16 @@ import org.twightlight.skywarstrainer.loot.strategies.LootStrategy;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Public API for the SkyWarsTrainer plugin. External plugins can use this
- * to programmatically spawn, remove, query bots, and register custom
- * strategies, considerations, and personalities.
+ * Public API for the SkyWarsTrainer plugin.
  *
- * <p>Access via {@code SkyWarsTrainerAPI.getInstance()}.</p>
- *
- * <p>Example usage:
- * <pre>
- * SkyWarsTrainerAPI api = SkyWarsTrainerAPI.getInstance();
- * if (api != null) {
- *     TrainerBot bot = api.spawnBot(arena, location, Difficulty.HARD, personalityProfile);
- *     // Register custom combat strategy
- *     api.registerCustomCombatStrategy(new MyCustomStrategy());
- * }
- * </pre></p>
+ * <p>[FIX 3.3] Custom strategies and considerations are now stored in pending lists.
+ * When a new bot is spawned, {@link #applyPendingRegistrations(TrainerBot)} is called
+ * to apply all previously registered custom strategies to the new bot.</p>
  */
 public class SkyWarsTrainerAPI {
 
@@ -38,44 +29,28 @@ public class SkyWarsTrainerAPI {
 
     private final SkyWarsTrainer plugin;
 
-    /**
-     * Creates a new API instance. Should only be called by the plugin.
-     *
-     * @param plugin the owning plugin
-     */
+    // [FIX 3.3] Pending custom registrations applied to newly spawned bots
+    private final List<CombatStrategy> pendingCombatStrategies = new ArrayList<>();
+    private final List<BridgeStrategy> pendingBridgeStrategies = new ArrayList<>();
+    private final List<LootStrategy> pendingLootStrategies = new ArrayList<>();
+    private final List<UtilityScorer> pendingConsiderations = new ArrayList<>();
+
     public SkyWarsTrainerAPI(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
         instance = this;
     }
 
-    /**
-     * Returns the singleton API instance, or null if the plugin is not loaded.
-     *
-     * @return the API instance
-     */
     @Nullable
     public static SkyWarsTrainerAPI getInstance() {
         return instance;
     }
 
-    /**
-     * Clears the singleton instance. Called on plugin disable.
-     */
     public static void clearInstance() {
         instance = null;
     }
 
     // ─── Bot Lifecycle ──────────────────────────────────────────
 
-    /**
-     * Spawns a bot in a specific arena at the given location.
-     *
-     * @param arena      the LostSkyWars arena
-     * @param location   the spawn location
-     * @param difficulty the difficulty level
-     * @param profile    the personality profile
-     * @return the spawned bot, or null if spawning failed
-     */
     @Nullable
     public TrainerBot spawnBot(@Nonnull org.twightlight.skywars.arena.Arena<?> arena,
                                @Nonnull Location location,
@@ -85,17 +60,6 @@ public class SkyWarsTrainerAPI {
                 arena, location, difficulty, profile.toNameList(), null);
     }
 
-    /**
-     * Spawns a bot with a specific difficulty profile and personality profile.
-     * This overload allows specifying a custom name.
-     *
-     * @param arena      the arena
-     * @param location   the spawn location
-     * @param difficulty the difficulty level
-     * @param profile    the personality profile
-     * @param name       the custom bot name, or null for random
-     * @return the spawned bot, or null if spawning failed
-     */
     @Nullable
     public TrainerBot spawnBot(@Nonnull org.twightlight.skywars.arena.Arena<?> arena,
                                @Nonnull Location location,
@@ -106,51 +70,24 @@ public class SkyWarsTrainerAPI {
                 arena, location, difficulty, profile.toNameList(), name);
     }
 
-    /**
-     * Removes a bot.
-     *
-     * @param bot the bot to remove
-     */
     public void removeBot(@Nonnull TrainerBot bot) {
         plugin.getBotManager().removeBot(bot);
     }
 
-    /**
-     * Returns a bot by its display name.
-     *
-     * @param name the bot name (case-insensitive)
-     * @return the bot, or null
-     */
     @Nullable
     public TrainerBot getBotByName(@Nonnull String name) {
         return plugin.getBotManager().getBotByName(name);
     }
 
-    /**
-     * Returns all active bots.
-     *
-     * @return unmodifiable list of all bots
-     */
     @Nonnull
     public List<TrainerBot> getAllBots() {
         return plugin.getBotManager().getAllBots();
     }
 
-    /**
-     * Returns the number of active bots.
-     *
-     * @return active bot count
-     */
     public int getBotCount() {
         return plugin.getBotManager().getActiveBotCount();
     }
 
-    /**
-     * Checks if an entity UUID belongs to a trainer bot.
-     *
-     * @param entityUuid the entity UUID
-     * @return true if it's a bot
-     */
     public boolean isBot(@Nonnull UUID entityUuid) {
         return plugin.getBotManager().isBot(entityUuid);
     }
@@ -158,12 +95,13 @@ public class SkyWarsTrainerAPI {
     // ─── Custom Strategy Registration ───────────────────────────
 
     /**
-     * Registers a custom combat strategy that will be available to all bots.
-     * The strategy will be evaluated alongside built-in strategies during combat.
+     * Registers a custom combat strategy. Applied to all existing bots AND
+     * stored for future bots.
      *
-     * @param strategy the custom combat strategy to register
+     * <p>[FIX 3.3] Now stores in pending list for bots spawned after registration.</p>
      */
     public void registerCustomCombatStrategy(@Nonnull CombatStrategy strategy) {
+        pendingCombatStrategies.add(strategy);
         for (TrainerBot bot : plugin.getBotManager().getAllBots()) {
             if (bot.getCombatEngine() != null) {
                 bot.getCombatEngine().getStrategies().add(strategy);
@@ -173,12 +111,13 @@ public class SkyWarsTrainerAPI {
     }
 
     /**
-     * Registers a custom bridge strategy that will be available to all bots.
-     * The strategy will be considered during bridge type selection.
+     * Registers a custom bridge strategy. Applied to all existing bots AND
+     * stored for future bots.
      *
-     * @param strategy the custom bridge strategy to register
+     * <p>[FIX 3.3] Now stores in pending list for bots spawned after registration.</p>
      */
     public void registerCustomBridgeStrategy(@Nonnull BridgeStrategy strategy) {
+        pendingBridgeStrategies.add(strategy);
         for (TrainerBot bot : plugin.getBotManager().getAllBots()) {
             if (bot.getBridgeEngine() != null) {
                 bot.getBridgeEngine().registerStrategy(strategy);
@@ -188,12 +127,13 @@ public class SkyWarsTrainerAPI {
     }
 
     /**
-     * Registers a custom loot strategy that will be available to all bots.
-     * The strategy will be considered during loot strategy selection.
+     * Registers a custom loot strategy. Applied to all existing bots AND
+     * stored for future bots.
      *
-     * @param strategy the custom loot strategy to register
+     * <p>[FIX 3.3] Now stores in pending list for bots spawned after registration.</p>
      */
     public void registerCustomLootStrategy(@Nonnull LootStrategy strategy) {
+        pendingLootStrategies.add(strategy);
         for (TrainerBot bot : plugin.getBotManager().getAllBots()) {
             if (bot.getLootEngine() != null) {
                 bot.getLootEngine().registerStrategy(strategy);
@@ -203,13 +143,13 @@ public class SkyWarsTrainerAPI {
     }
 
     /**
-     * Registers a custom utility consideration that will be used in decision
-     * making for all bots. Custom considerations are evaluated alongside
-     * built-in ones during each utility evaluation cycle.
+     * Registers a custom utility consideration. Applied to all existing bots AND
+     * stored for future bots.
      *
-     * @param consideration the custom consideration to register
+     * <p>[FIX 3.3] Now stores in pending list for bots spawned after registration.</p>
      */
     public void registerCustomConsideration(@Nonnull UtilityScorer consideration) {
+        pendingConsiderations.add(consideration);
         for (TrainerBot bot : plugin.getBotManager().getAllBots()) {
             if (bot.getDecisionEngine() != null) {
                 bot.getDecisionEngine().registerCustomConsideration(consideration);
@@ -219,11 +159,34 @@ public class SkyWarsTrainerAPI {
     }
 
     /**
-     * Returns the plugin instance. Useful for external plugins that need
-     * to access configuration or other plugin services.
+     * Applies all pending custom registrations to a newly spawned bot.
+     * Called by BotManager.spawnBot() after the bot is fully initialized.
      *
-     * @return the plugin instance
+     * @param bot the newly spawned bot
      */
+    public void applyPendingRegistrations(@Nonnull TrainerBot bot) {
+        for (CombatStrategy strategy : pendingCombatStrategies) {
+            if (bot.getCombatEngine() != null) {
+                bot.getCombatEngine().getStrategies().add(strategy);
+            }
+        }
+        for (BridgeStrategy strategy : pendingBridgeStrategies) {
+            if (bot.getBridgeEngine() != null) {
+                bot.getBridgeEngine().registerStrategy(strategy);
+            }
+        }
+        for (LootStrategy strategy : pendingLootStrategies) {
+            if (bot.getLootEngine() != null) {
+                bot.getLootEngine().registerStrategy(strategy);
+            }
+        }
+        for (UtilityScorer consideration : pendingConsiderations) {
+            if (bot.getDecisionEngine() != null) {
+                bot.getDecisionEngine().registerCustomConsideration(consideration);
+            }
+        }
+    }
+
     @Nonnull
     public SkyWarsTrainer getPlugin() {
         return plugin;

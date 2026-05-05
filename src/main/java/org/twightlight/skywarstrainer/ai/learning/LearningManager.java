@@ -19,16 +19,22 @@ public class LearningManager {
             this.learningConfig = new LearningConfig(plugin);
             this.sharedMemoryBank = new MemoryBank(learningConfig);
             this.sharedReplayBuffer = new ReplayBuffer(learningConfig);
-            LearningSerializer.load(plugin, sharedMemoryBank, sharedReplayBuffer);
-            plugin.getLogger().info("Learning system initialized.");
 
-            // 5c. Schedule periodic auto-save (every 10 minutes = 12000 ticks)
+            // [FIX 3.5] Only load learning data if learning is enabled.
+            // Previously LearningSerializer.load() was called unconditionally,
+            // but the auto-save timer was properly gated. Now both are consistent.
             if (learningConfig.isEnabled()) {
+                LearningSerializer.load(plugin, sharedMemoryBank, sharedReplayBuffer);
+                plugin.getLogger().info("Learning system initialized and data loaded.");
+
+                // Schedule periodic auto-save (every 10 minutes = 12000 ticks)
                 Bukkit.getScheduler().runTaskTimer(plugin, () -> {
                     if (sharedMemoryBank != null && sharedReplayBuffer != null) {
                         LearningSerializer.saveAsync(plugin, sharedMemoryBank, sharedReplayBuffer);
                     }
                 }, 12000L, 12000L);
+            } else {
+                plugin.getLogger().info("Learning system initialized (disabled — no data loaded).");
             }
         } catch (Exception e) {
             plugin.getLogger().log(Level.WARNING, "Failed to initialize learning system. Bots will work without learning.", e);

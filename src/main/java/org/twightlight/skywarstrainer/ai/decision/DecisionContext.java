@@ -430,18 +430,34 @@ public class DecisionContext {
         }
     }
 
-// In DecisionContext.populateMapInfo(), replace the O(n³) enchanting table scan
-// with a cached lookup from MapScanner:
-
+    // In DecisionContext.populateMapInfo(), replace the O(n³) enchanting table scan
+    // with a cached lookup from MapScanner:
     private void populateMapInfo(@Nonnull TrainerBot bot) {
-        try {
-            alivePlayerCount = bot.getArena().getAlive();
-        } catch (Exception e) {
-            alivePlayerCount = 8;
+        // [FIX 5.2] Check arena for null explicitly instead of try-catch Exception
+        if (bot.getArena() != null) {
+            try {
+                alivePlayerCount = bot.getArena().getAlive();
+            } catch (Exception e) {
+                alivePlayerCount = 8;
+            }
+        } else {
+            // Arena is null (e.g., spawned outside a game). Count nearby players instead.
+            org.bukkit.entity.LivingEntity entity = bot.getLivingEntity();
+            if (entity != null) {
+                int count = 0;
+                for (org.bukkit.entity.Entity nearby : entity.getNearbyEntities(50, 50, 50)) {
+                    if (nearby instanceof org.bukkit.entity.Player) {
+                        count++;
+                    }
+                }
+                alivePlayerCount = Math.max(1, count);
+            } else {
+                alivePlayerCount = 8;
+            }
         }
 
         IslandGraph graph = bot.getIslandGraph();
-        if (graph != null) {
+        if (graph != null && botLocation != null) {
             onMidIsland = graph.isOnMidIsland(botLocation);
             bridgeToMidExists = graph.hasBridgeToMid(botLocation);
         } else {
@@ -449,9 +465,6 @@ public class DecisionContext {
             bridgeToMidExists = false;
         }
 
-        // [FIX E1/E2] Use MapScanner's cached enchanting table locations instead
-        // of scanning a 17×5×17 block cube (1445 blocks!) every evaluation.
-        // MapScanner already scans the world incrementally and can track special blocks.
         enchantingTableAccessible = false;
         MapScanner scanner = bot.getMapScanner();
         if (scanner != null && botLocation != null) {
@@ -461,6 +474,7 @@ public class DecisionContext {
             }
         }
     }
+
 
 
     /**

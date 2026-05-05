@@ -33,24 +33,11 @@ import java.util.logging.Level;
 /**
  * Listens to both LostSkyWars events and standard Bukkit events to keep
  * bots synchronized with game state.
- *
- * <p>This listener handles LostSkyWars game lifecycle events (start, end, death,
- * join, quit, refill, doom), combat events (damage dealt to/from bots), and
- * interrupt triggers for the bot decision engine.</p>
- *
- * <p>All LostSkyWars event classes extend SkyWarsEvent which extends Bukkit Event.
- * Each event has getServer() returning SkyWarsServer. We cast to Arena&lt;?&gt; to
- * access full arena functionality.</p>
  */
 public class GameEventListener implements Listener {
 
     private final SkyWarsTrainer plugin;
 
-    /**
-     * Creates a new GameEventListener.
-     *
-     * @param plugin the owning plugin
-     */
     public GameEventListener(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
     }
@@ -59,10 +46,6 @@ public class GameEventListener implements Listener {
     //  LostSkyWars Game Events
     // ═════════════════════════════════════════════════════════════
 
-    /**
-     * Called when a SkyWars game starts (cages open, game timer begins).
-     * SkyWarsGameStartEvent.getServer() returns SkyWarsServer.
-     */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onGameStart(SkyWarsGameStartEvent event) {
         SkyWarsServer server = event.getServer();
@@ -79,7 +62,6 @@ public class GameEventListener implements Listener {
             try {
                 bot.getProfile().addGamePlayed();
                 BotChatManager.sendChatMessage(bot, "game_start");
-                // Trigger decision engine interrupt to start AI
                 DecisionEngine de = bot.getDecisionEngine();
                 if (de != null) {
                     de.triggerInterrupt();
@@ -97,7 +79,13 @@ public class GameEventListener implements Listener {
 
     /**
      * Called when a SkyWars game ends.
-     * SkyWarsGameEndEvent has getServer(), getWinnerTeam(), hasWinner().
+     *
+     * <p>[FIX 2.4] The winner check is now computed once into a {@code boolean won}
+     * variable, then used for both the profile/chat update and the learning engine call.
+     * Previously it was duplicated.</p>
+     *
+     * <p>[FIX 6.3] Call bot.getProfile().addGameForLearning() when the learning engine
+     * processes the game result.</p>
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onGameEnd(SkyWarsGameEndEvent event) {
@@ -113,25 +101,29 @@ public class GameEventListener implements Listener {
 
         for (TrainerBot bot : bots) {
             try {
-                // Check if this bot won
+                // [FIX 2.4] Compute winner status once
+                boolean won = false;
                 if (event.hasWinner() && event.getWinnerTeam() != null) {
                     Player botPlayer = bot.getPlayerEntity();
                     if (botPlayer != null && event.getWinnerTeam().hasMember(botPlayer)) {
-                        bot.getProfile().addGameWon();
-                        BotChatManager.sendChatMessage(bot, "win");
+                        won = true;
                     }
                 }
+
+                // Profile and chat update
+                if (won) {
+                    bot.getProfile().addGameWon();
+                    BotChatManager.sendChatMessage(bot, "win");
+                }
+
+                // Learning engine notification
                 LearningEngine lm = bot.getLearningEngine();
                 if (lm != null) {
-                    boolean won = false;
-                    if (event.hasWinner() && event.getWinnerTeam() != null) {
-                        Player botPlayer = bot.getPlayerEntity();
-                        if (botPlayer != null && event.getWinnerTeam().hasMember(botPlayer)) {
-                            won = true;
-                        }
-                    }
                     lm.onGameEnd(won, bot.getProfile().getKills(), bot.getProfile().getDeaths(), 1.0);
+                    // [FIX 6.3] Increment learning game counter
+                    bot.getProfile().addGameForLearning();
                 }
+
                 plugin.getBotManager().removeBot(bot);
             } catch (Exception e) {
                 plugin.getLogger().log(Level.WARNING,
@@ -142,7 +134,10 @@ public class GameEventListener implements Listener {
 
     /**
      * Called when a player dies in LostSkyWars.
-     * SkyWarsPlayerDeathEvent has getServer(), getPlayer(), getKiller().
+     *
+     * <p>[FIX 2.3] The "first_kill" chat message now only fires when
+     * {@code killerBot.getProfile().getKills() == 1} (after addKill()).
+     * Subsequent kills send a "kill" message type instead.</p>
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerDeath(SkyWarsPlayerDeathEvent event) {
@@ -178,7 +173,14 @@ public class GameEventListener implements Listener {
             TrainerBot killerBot = botManager.getBotByEntityUUID(killer.getUniqueId());
             if (killerBot != null) {
                 killerBot.getProfile().addKill();
-                BotChatManager.sendChatMessage(killerBot, "first_kill");
+
+                // [FIX 2.3] Only send "first_kill" for the actual first kill
+                if (killerBot.getProfile().getKills() == 1) {
+                    BotChatManager.sendChatMessage(killerBot, "first_kill");
+                } else {
+                    BotChatManager.sendChatMessage(killerBot, "kill");
+                }
+
                 LearningEngine lmKiller = killerBot.getLearningEngine();
                 if (lmKiller != null) {
                     lmKiller.onSignificantEvent("kill", 1.0);
@@ -197,10 +199,6 @@ public class GameEventListener implements Listener {
         }
     }
 
-    /**
-     * Called when a player joins a SkyWars arena.
-     * SkyWarsPlayerJoinEvent has getServer(), getPlayer().
-     */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerJoin(SkyWarsPlayerJoinEvent event) {
         SkyWarsServer server = event.getServer();
@@ -215,10 +213,6 @@ public class GameEventListener implements Listener {
         }
     }
 
-    /**
-     * Called when a player quits a SkyWars arena.
-     * SkyWarsPlayerQuitEvent has getServer(), getPlayer().
-     */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerQuit(SkyWarsPlayerQuitEvent event) {
         SkyWarsServer server = event.getServer();
@@ -233,10 +227,6 @@ public class GameEventListener implements Listener {
         }
     }
 
-    /**
-     * Called when chests are refilled.
-     * SkyWarsChestRefillEvent has getServer().
-     */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onChestRefill(SkyWarsChestRefillEvent event) {
         SkyWarsServer server = event.getServer();
@@ -244,7 +234,6 @@ public class GameEventListener implements Listener {
         Arena<?> arena = (Arena<?>) server;
 
         for (TrainerBot bot : plugin.getBotManager().getBotsInArena(arena)) {
-            // Reset chest memory — chests have new loot
             if (bot.getChestLocator() != null) {
                 bot.getChestLocator().markAllUnlooted();
             }
@@ -255,10 +244,6 @@ public class GameEventListener implements Listener {
         }
     }
 
-    /**
-     * Called when doom event activates (deathmatch phase).
-     * SkyWarsDoomEvent has getServer().
-     */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onDoom(SkyWarsDoomEvent event) {
         SkyWarsServer server = event.getServer();
@@ -277,16 +262,12 @@ public class GameEventListener implements Listener {
     //  Standard Bukkit Combat Events
     // ═════════════════════════════════════════════════════════════
 
-    /**
-     * Handles damage dealt to or by bots. Triggers combat interrupts.
-     */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         Entity damager = event.getDamager();
         Entity victim = event.getEntity();
         BotManager botManager = plugin.getBotManager();
 
-        // Resolve actual damager (for projectiles, get the shooter)
         Entity actualDamager = damager;
         if (damager instanceof Projectile) {
             Projectile projectile = (Projectile) damager;
@@ -295,7 +276,6 @@ public class GameEventListener implements Listener {
             }
         }
 
-        // Case 1: Bot was hit
         if (victim instanceof LivingEntity) {
             TrainerBot victimBot = botManager.getBotByEntityUUID(victim.getUniqueId());
             if (victimBot != null) {
@@ -315,7 +295,6 @@ public class GameEventListener implements Listener {
             }
         }
 
-        // Case 2: Bot dealt damage
         if (actualDamager instanceof LivingEntity) {
             TrainerBot damagerBot = botManager.getBotByEntityUUID(actualDamager.getUniqueId());
             if (damagerBot != null && damagerBot.getCombatEngine() != null) {
@@ -323,15 +302,11 @@ public class GameEventListener implements Listener {
                 LearningEngine lmDamager = damagerBot.getLearningEngine();
                 if (lmDamager != null) {
                     lmDamager.onSignificantEvent("health_lost", -event.getDamage() / 2.0);
-                    // Note: negative health_lost for the damager = health damage dealt to enemy
                 }
             }
         }
     }
 
-    /**
-     * Handles any damage taken by bots (environmental: fire, lava, void, fall).
-     */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntityDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof LivingEntity)) return;
@@ -346,9 +321,6 @@ public class GameEventListener implements Listener {
         }
     }
 
-    /**
-     * Handles projectile hit events for bot-fired projectiles.
-     */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onProjectileHit(ProjectileHitEvent event) {
         Projectile projectile = event.getEntity();

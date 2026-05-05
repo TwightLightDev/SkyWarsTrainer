@@ -140,7 +140,6 @@ public class BotStateMachine {
      *   <li>Reset the current state's behavior tree (so it starts fresh if re-entered).</li>
      *   <li>Log the transition.</li>
      *   <li>Set the new state as current and record entry tick.</li>
-     *   <li>[FIX-A1/A4/D3/E1] Notify all transition listeners for subsystem cleanup.</li>
      * </ol></p>
      *
      * @param newState the state to transition to
@@ -160,7 +159,7 @@ public class BotStateMachine {
             try {
                 oldTree.reset(bot);
             } catch (Exception e) {
-                SkyWarsTrainer.getInstance().getLogger().log(Level.WARNING,
+                bot.getPlugin().getLogger().log(Level.WARNING,
                         "Error resetting BT for state " + oldState.name(), e);
             }
         }
@@ -178,12 +177,11 @@ public class BotStateMachine {
             try {
                 listener.onTransition(oldState, newState);
             } catch (Exception e) {
-                SkyWarsTrainer.getInstance().getLogger().log(Level.WARNING,
+                bot.getPlugin().getLogger().log(Level.WARNING,
                         "Error in transition listener for " + oldState + " -> " + newState, e);
             }
         }
 
-        // Fire BotStateChangeEvent (external API event)
         try {
             org.twightlight.skywarstrainer.api.events.BotStateChangeEvent event =
                     new org.twightlight.skywarstrainer.api.events.BotStateChangeEvent(bot, oldState, newState);
@@ -193,7 +191,7 @@ public class BotStateMachine {
         }
 
         if (bot.getProfile().isDebugMode()) {
-            SkyWarsTrainer.getInstance().getLogger().info(
+            bot.getPlugin().getLogger().info(
                     "[DEBUG] " + bot.getName() + " " + transition);
         }
 
@@ -222,17 +220,19 @@ public class BotStateMachine {
         currentState = state;
         stateEnteredTick = bot.getLocalTickCount();
 
-        // [FIX-A1/A4/D3/E1] Notify listeners even on forced transitions
-        // (old != state is not guaranteed, but cleanup is still needed for force-restart)
+        // This is force-restart semantics — when old == state, we still want subsystems to
+        // reset their internal state (e.g., CombatEngine re-acquires target, DefensiveEngine
+        // cancels stale behavior). The listeners handle old==new gracefully.
         for (StateTransitionListener listener : transitionListeners) {
             try {
                 listener.onTransition(old, state);
             } catch (Exception e) {
-                SkyWarsTrainer.getInstance().getLogger().log(Level.WARNING,
+                bot.getPlugin().getLogger().log(Level.WARNING,
                         "Error in transition listener for forced " + old + " -> " + state, e);
             }
         }
     }
+
 
     // ─── Tick ───────────────────────────────────────────────────
 

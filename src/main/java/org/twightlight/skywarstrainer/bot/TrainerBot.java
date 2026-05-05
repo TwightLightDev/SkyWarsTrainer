@@ -129,6 +129,7 @@ public class TrainerBot {
         this.plugin = plugin;
         this.botId = UUID.randomUUID();
         this.profile = profile;
+        profile.setOwnerBot(this);
         this.skin = skin;
         this.initialized = false;
         this.destroyed = false;

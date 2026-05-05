@@ -53,6 +53,13 @@ public final class SkyWarsTrainer extends JavaPlugin {
             return;
         }
 
+        // 1.2. Validate SkyWars
+        if (!validateCitizens()) {
+            getLogger().severe("LostSkyWars plugin not found or not enabled! SkyWarsTrainer requires LostSkyWars.");
+            Bukkit.getPluginManager().disablePlugin(this);
+            return;
+        }
+
         // 2. Register the Citizens trait
         try {
             CitizensAPI.getTraitFactory().registerTrait(
@@ -72,6 +79,14 @@ public final class SkyWarsTrainer extends JavaPlugin {
             getLogger().log(Level.SEVERE, "Failed to load configuration!", e);
             Bukkit.getPluginManager().disablePlugin(this);
             return;
+        }
+
+        // [FIX 3.2] Initialize DebugLogger immediately after config loading so that
+        // any debug logging during subsequent initialization (steps 4-9) actually works.
+        DebugLogger.init(this);
+
+        if (configManager.isDebugMode()) {
+            getLogger().info("[DEBUG] Debug mode is ON.");
         }
 
         // 4. Load difficulty profiles
@@ -100,6 +115,15 @@ public final class SkyWarsTrainer extends JavaPlugin {
         // 6. Initialize bot manager
         this.botManager = new BotManager(this);
 
+        // [FIX 1.3] Schedule BotManager.maintenance() every 100 ticks (5 seconds)
+        // to clean up dead bots. Do NOT schedule tickAll() — the Citizens Trait
+        // handles individual bot ticking via SkyWarsTrainerTrait.run().
+        Bukkit.getScheduler().runTaskTimer(this, () -> {
+            if (botManager != null) {
+                botManager.maintenance();
+            }
+        }, 100L, 100L);
+
         // 7. Initialize API
         this.api = new SkyWarsTrainerAPI(this);
 
@@ -120,12 +144,6 @@ public final class SkyWarsTrainer extends JavaPlugin {
 
         getLogger().info("SkyWarsTrainer v" + getDescription().getVersion() + " enabled successfully!");
         getLogger().info("Use /swt spawn <difficulty> to create a practice bot.");
-
-        DebugLogger.init(this);
-
-        if (configManager.isDebugMode()) {
-            getLogger().info("[DEBUG] Debug mode is ON.");
-        }
     }
 
     @Override
@@ -154,6 +172,10 @@ public final class SkyWarsTrainer extends JavaPlugin {
         } catch (ClassNotFoundException e) {
             return false;
         }
+    }
+
+    private boolean validateSkyWars() {
+        return  (Bukkit.getPluginManager().getPlugin("LostSkyWars") != null);
     }
 
     // ─── Accessors ──────────────────────────────────────────────

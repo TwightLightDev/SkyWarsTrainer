@@ -334,7 +334,9 @@ public class CombatEngine {
         // Step 8-10: Survival, combo, positioning
         performSurvivalChecks(botEntity, range);
         comboTracker.tick();
-        handlePositioning(botEntity, range);
+        if (bestStrategy == null) {
+            handlePositioning(botEntity, range);
+        }
     }
 
 
@@ -377,17 +379,9 @@ public class CombatEngine {
         LivingEntity botEntity = bot.getLivingEntity();
         if (botEntity == null) return null;
 
-        for (org.bukkit.entity.Entity entity : botEntity.getNearbyEntities(
-                bot.getDifficultyProfile().getAwarenessRadius(),
-                bot.getDifficultyProfile().getAwarenessRadius(),
-                bot.getDifficultyProfile().getAwarenessRadius())) {
-            if (entity.getUniqueId().equals(bestEntry.playerId) && entity instanceof LivingEntity) {
-                return (LivingEntity) entity;
-            }
-        }
-
-        return null;
+        return ThreatMap.resolveEntity(bestEntry, botEntity, bot.getDifficultyProfile().getAwarenessRadius());
     }
+
 
     @Nullable
     private CombatStrategy selectBestStrategy() {
@@ -430,9 +424,6 @@ public class CombatEngine {
     }
 
     private void performSurvivalChecks(@Nonnull LivingEntity botEntity, double range) {
-        DifficultyProfile diff = bot.getDifficultyProfile();
-        double healthFraction = botEntity.getHealth() / botEntity.getMaxHealth();
-
         VoidDetector voidDetector = bot.getVoidDetector();
         if (voidDetector != null && voidDetector.isOnEdge()) {
             MovementController mc = bot.getMovementController();
@@ -447,14 +438,8 @@ public class CombatEngine {
                 }
             }
         }
-
-        // Water bucket MLG check: if falling during combat
-        if (botEntity.getVelocity().getY() < -0.5 && diff.getWaterBucketMLG() > 0.1) {
-            if (bot.getInventoryEngine() != null) {
-                bot.getInventoryEngine().getUtilityItemHandler().tryWaterBucketMLG();
-            }
-        }
     }
+
 
     private void handlePositioning(@Nonnull LivingEntity botEntity, double range) {
         MovementController mc = bot.getMovementController();

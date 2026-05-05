@@ -359,6 +359,7 @@ public class ConfigManager {
         switch (eventType) {
             case "game_start": return chatChanceGameStart;
             case "first_kill": return chatChanceFirstKill;
+            case "kill": return 0.3;
             case "death": return chatChanceDeath;
             case "win": return chatChanceWin;
             case "close_fight_won": return chatChanceCloseFightWon;

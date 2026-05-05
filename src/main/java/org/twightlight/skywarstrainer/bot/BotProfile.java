@@ -3,8 +3,10 @@ package org.twightlight.skywarstrainer.bot;
 import org.twightlight.skywarstrainer.ai.personality.PersonalityProfile;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
+import org.twightlight.skywarstrainer.util.DebugLogger;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -12,34 +14,12 @@ import java.util.List;
 /**
  * Stores the complete profile for a single trainer bot: its difficulty level,
  * personality set, skin, statistics, and runtime state flags.
- *
- * <p>BotProfile is the central data object that defines what a bot IS. It is
- * created when a bot is spawned and persists for the bot's lifetime. Other
- * subsystems (combat, movement, decisions) read from this profile to
- * determine behavior parameters.</p>
- *
- * <p>The personality profile is lazily built from stored personality names
- * and cached. It is automatically invalidated when personalities are
- * added, removed, or replaced.</p>
  */
 public class BotProfile {
 
-    /** The difficulty level of this bot. */
     private Difficulty difficulty;
-
-    /** The resolved difficulty profile with all numeric parameters. */
     private DifficultyProfile difficultyProfile;
-
-    /**
-     * Cached personality profile. Lazily built from personalityNames.
-     * Invalidated whenever the personality list changes.
-     */
     private PersonalityProfile personalityProfile;
-
-    /**
-     * Personality names assigned to this bot (1-3). These are stored as
-     * strings and resolved to full Personality enums in the PersonalityProfile.
-     */
     private final List<String> personalityNames;
 
     // ── Statistics ──
@@ -54,11 +34,12 @@ public class BotProfile {
     private int totalGamesForLearning;
 
     /**
-     * Creates a new BotProfile with the specified difficulty.
-     *
-     * @param difficulty        the difficulty level
-     * @param difficultyProfile the resolved difficulty profile
+     * Optional back-reference to the owning bot, used for unified debug checks.
+     * Set after construction by TrainerBot.
      */
+    @Nullable
+    private TrainerBot ownerBot;
+
     public BotProfile(@Nonnull Difficulty difficulty, @Nonnull DifficultyProfile difficultyProfile) {
         this.difficulty = difficulty;
         this.difficultyProfile = difficultyProfile;
@@ -71,28 +52,30 @@ public class BotProfile {
         this.paused = false;
         this.debugMode = false;
         this.totalGamesForLearning = 0;
+        this.ownerBot = null;
+    }
+
+    /**
+     * Sets the owner bot reference for unified debug checks.
+     *
+     * @param bot the owning bot
+     */
+    public void setOwnerBot(@Nullable TrainerBot bot) {
+        this.ownerBot = bot;
     }
 
     // ─── Difficulty ─────────────────────────────────────────────
 
-    /** @return the difficulty level */
     @Nonnull
     public Difficulty getDifficulty() {
         return difficulty;
     }
 
-    /** @return the resolved difficulty profile containing all numeric parameters */
     @Nonnull
     public DifficultyProfile getDifficultyProfile() {
         return difficultyProfile;
     }
 
-    /**
-     * Sets a new difficulty level and profile. Used by the /swt difficulty command.
-     *
-     * @param difficulty the new difficulty
-     * @param profile    the new profile
-     */
     public void setDifficulty(@Nonnull Difficulty difficulty, @Nonnull DifficultyProfile profile) {
         this.difficulty = difficulty;
         this.difficultyProfile = profile;
@@ -100,18 +83,11 @@ public class BotProfile {
 
     // ─── Personalities ──────────────────────────────────────────
 
-    /** @return unmodifiable list of personality names */
     @Nonnull
     public List<String> getPersonalityNames() {
         return Collections.unmodifiableList(personalityNames);
     }
 
-    /**
-     * Adds a personality name to this bot's profile. Invalidates the
-     * cached PersonalityProfile so it will be rebuilt on next access.
-     *
-     * @param personalityName the personality name (e.g., "AGGRESSIVE")
-     */
     public void addPersonality(@Nonnull String personalityName) {
         if (!personalityNames.contains(personalityName)) {
             personalityNames.add(personalityName);
@@ -119,13 +95,6 @@ public class BotProfile {
         }
     }
 
-    /**
-     * Removes a personality name from this bot's profile. Invalidates the
-     * cached PersonalityProfile so it will be rebuilt on next access.
-     *
-     * @param personalityName the personality name to remove
-     * @return true if it was present and removed
-     */
     public boolean removePersonality(@Nonnull String personalityName) {
         boolean removed = personalityNames.remove(personalityName);
         if (removed) {
@@ -134,34 +103,16 @@ public class BotProfile {
         return removed;
     }
 
-    /**
-     * Replaces all personality names with the given list. Invalidates the
-     * cached PersonalityProfile so it will be rebuilt on next access.
-     *
-     * @param personalities the new personality names
-     */
     public void setPersonalities(@Nonnull List<String> personalities) {
         personalityNames.clear();
         personalityNames.addAll(personalities);
         invalidateProfile();
     }
 
-    /**
-     * Returns true if this bot has the specified personality.
-     *
-     * @param personalityName the personality to check
-     * @return true if present
-     */
     public boolean hasPersonality(@Nonnull String personalityName) {
         return personalityNames.contains(personalityName);
     }
 
-    /**
-     * Returns the resolved PersonalityProfile. Lazily builds from stored names.
-     * The profile is cached and only rebuilt when personalities change.
-     *
-     * @return the personality profile (never null; may be empty)
-     */
     @Nonnull
     public PersonalityProfile getPersonalityProfile() {
         if (personalityProfile == null) {
@@ -170,78 +121,55 @@ public class BotProfile {
         return personalityProfile;
     }
 
-    /**
-     * Invalidates the cached personality profile. Called automatically when
-     * personalities are added, removed, or replaced.
-     */
     private void invalidateProfile() {
         this.personalityProfile = null;
     }
 
     // ─── Statistics ─────────────────────────────────────────────
 
-    /** @return total kills across all games */
     public int getKills() { return kills; }
-
-    /** @return total deaths across all games */
     public int getDeaths() { return deaths; }
-
-    /** @return number of games played */
     public int getGamesPlayed() { return gamesPlayed; }
-
-    /** @return number of games won */
     public int getGamesWon() { return gamesWon; }
 
-    /**
-     * Returns the win rate as a percentage (0-100).
-     *
-     * @return the win rate, or 0 if no games played
-     */
     public double getWinRate() {
         if (gamesPlayed == 0) return 0.0;
         return (gamesWon / (double) gamesPlayed) * 100.0;
     }
 
-    /**
-     * Returns the K/D ratio.
-     *
-     * @return the kill/death ratio, or kills if no deaths
-     */
     public double getKDRatio() {
         if (deaths == 0) return kills;
         return kills / (double) deaths;
     }
 
-    /** Increments the kill counter. */
     public void addKill() { kills++; }
-
-    /** Increments the death counter. */
     public void addDeath() { deaths++; }
-
-    /** Increments the games played counter. */
     public void addGamePlayed() { gamesPlayed++; }
-
-    /** Increments the games won counter. */
     public void addGameWon() { gamesWon++; }
 
     // ─── Runtime Flags ──────────────────────────────────────────
 
-    /** @return true if the bot's AI is paused */
     public boolean isPaused() { return paused; }
-
-    /** @param paused whether the bot AI should be paused */
     public void setPaused(boolean paused) { this.paused = paused; }
 
-    /** @return true if debug mode is active for this bot */
-    public boolean isDebugMode() { return debugMode; }
+    /**
+     * Returns true if debug mode is active for this bot.
+     *
+     * <p>[FIX 6.4] Unified debug check: returns true if EITHER the per-bot debug
+     * flag is set OR {@link DebugLogger#isDebugEnabled(TrainerBot)} returns true
+     * (which checks global debug and per-bot UUID toggles).</p>
+     *
+     * @return true if debug output is enabled for this bot
+     */
+    public boolean isDebugMode() {
+        if (debugMode) return true;
+        // [FIX 6.4] Also check DebugLogger for global/per-bot-UUID debug
+        return DebugLogger.isDebugEnabled(ownerBot);
+    }
 
-    /** @param debugMode whether debug output is shown for this bot */
     public void setDebugMode(boolean debugMode) { this.debugMode = debugMode; }
 
-    /** @return total games tracked for learning (may differ from gamesPlayed if learning was paused) */
     public int getTotalGamesForLearning() { return totalGamesForLearning; }
-
-    /** Increments the learning game counter. */
     public void addGameForLearning() { totalGamesForLearning++; }
 
     @Override
