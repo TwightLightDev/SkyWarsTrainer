@@ -1,0 +1,75 @@
+# ══════════════════════════════════════════════════════════════
+# SkyWarsTrainer — LLM Integration Configuration
+# ══════════════════════════════════════════════════════════════
+# This system is 100% optional. If 'enabled' is false or no API
+# keys are provided, the LLM system is completely dormant with
+# zero performance impact.
+#
+# Supported providers: OPENAI, GEMINI, ANTHROPIC, CEREBRAS, OPENROUTER
+# ══════════════════════════════════════════════════════════════
+
+llm:
+  # Master toggle — set to true to enable LLM advisory system
+  enabled: false
+
+  # Provider to use. One of: OPENAI, GEMINI, ANTHROPIC, CEREBRAS, OPENROUTER
+  provider: "OPENAI"
+
+  # API keys for the selected provider. Multiple keys enable rotation.
+  # Keys that return 401/403 are permanently disabled.
+  # Keys that return 429 are temporarily cooled down.
+  api-keys:
+    - "YOUR_API_KEY_HERE"
+
+  # Model identifier (provider-specific)
+  # OpenAI: "gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"
+  # Gemini: "gemini-1.5-flash", "gemini-1.5-pro"
+  # Anthropic: "claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"
+  # Cerebras: "llama3.1-8b", "llama3.1-70b"
+  # OpenRouter: "openai/gpt-4o-mini", "anthropic/claude-3.5-sonnet"
+  model: "gpt-4o-mini"
+
+  # Minimum seconds between LLM requests (per bot)
+  request-interval-seconds: 10
+
+  # Maximum tokens in the LLM response
+  max-tokens: 200
+
+  # Temperature for response generation (0.0 = deterministic, 1.0 = creative)
+  temperature: 0.3
+
+  # HTTP connection timeout in seconds
+  timeout-seconds: 10
+
+  # Maximum retry attempts per request before giving up
+  max-retries: 2
+
+  # System prompt sent to the LLM explaining its role
+  system-prompt: >
+    You are a strategic advisor for an AI bot playing Minecraft SkyWars.
+    You receive a game state summary and must provide concise strategic advice.
+    Respond ONLY in this exact format:
+    STRATEGY: <one-line strategy description>
+    PRIORITIES: <action1>action2>action3 (from highest to lowest priority)
+    REASONING: <brief 1-2 sentence explanation>
+    
+    Valid actions: LOOT_OWN_ISLAND, LOOT_MID, LOOT_OTHER_ISLAND, BRIDGE_TO_MID,
+    BRIDGE_TO_PLAYER, FIGHT_NEAREST, FIGHT_WEAKEST, FIGHT_TARGETED, FLEE, HEAL,
+    ENCHANT, ORGANIZE_INVENTORY, CAMP_POSITION, HUNT_PLAYER, USE_ENDER_PEARL,
+    BUILD_FORTIFICATION, BREAK_ENEMY_BRIDGE, EAT_FOOD, DRINK_POTION
+
+# Key health management
+key-management:
+  # Cooldown in seconds for a key that returns HTTP 429 (rate limited)
+  rate-limit-cooldown-seconds: 60
+  # Cooldown in seconds for a key that returns HTTP 500 or timeout
+  server-error-cooldown-seconds: 30
+
+# Custom API endpoints (for self-hosted or proxy setups)
+# Leave empty to use default provider endpoints
+custom-endpoints:
+  openai: ""
+  gemini: ""
+  anthropic: ""
+  cerebras: ""
+  openrouter: ""

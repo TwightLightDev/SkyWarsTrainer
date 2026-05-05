@@ -23,6 +23,8 @@ import org.twightlight.skywars.arena.Arena;
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.decision.DecisionEngine;
 import org.twightlight.skywarstrainer.ai.learning.LearningEngine;
+import org.twightlight.skywarstrainer.ai.strategy.StrategyPlanner;
+import org.twightlight.skywarstrainer.awareness.ThreatPredictor;
 import org.twightlight.skywarstrainer.bot.BotManager;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 
@@ -69,6 +71,13 @@ public class GameEventListener implements Listener {
                 LearningEngine lm = bot.getLearningEngine();
                 if (lm != null) {
                     lm.onGameStart();
+
+                    // Reset threat predictor
+                    ThreatPredictor tp = bot.getThreatPredictor();
+                    if (tp != null) {
+                        tp.reset();
+                    }
+
                 }
             } catch (Exception e) {
                 plugin.getLogger().log(Level.WARNING,
@@ -122,6 +131,13 @@ public class GameEventListener implements Listener {
                     lm.onGameEnd(won, bot.getProfile().getKills(), bot.getProfile().getDeaths(), 1.0);
                     // [FIX 6.3] Increment learning game counter
                     bot.getProfile().addGameForLearning();
+
+                    // Reset threat predictor
+                    ThreatPredictor tp = bot.getThreatPredictor();
+                    if (tp != null) {
+                        tp.reset();
+                    }
+
                 }
 
                 plugin.getBotManager().removeBot(bot);
@@ -196,7 +212,13 @@ public class GameEventListener implements Listener {
             if (de != null) {
                 de.triggerInterrupt();
             }
+            // Notify strategy planner of player count change
+            StrategyPlanner sp = bot.getStrategyPlanner();
+            if (sp != null) {
+                sp.onSignificantEvent("player_death");
+            }
         }
+
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

@@ -15,6 +15,9 @@ import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.util.MathUtil;
 import org.twightlight.skywarstrainer.util.RandomUtil;
+import org.twightlight.skywarstrainer.ai.strategy.StrategyPlanner;
+import org.twightlight.skywarstrainer.ai.decision.considerations.ThreatPredictionConsideration;
+import org.twightlight.skywarstrainer.ai.decision.considerations.StrategyAlignmentConsideration;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -91,6 +94,13 @@ public class DecisionEngine {
     private final ResourceConsideration resourceConsideration = new ResourceConsideration();
     private final CounterPlayConsideration counterPlayConsideration = new CounterPlayConsideration();
     private final PositionalConsideration positionalConsideration = new PositionalConsideration();
+
+    private final ThreatPredictionConsideration threatPredCombat = new ThreatPredictionConsideration(ThreatPredictionConsideration.ResponseType.COMBAT_URGENCY);
+    private final ThreatPredictionConsideration threatPredDefense = new ThreatPredictionConsideration(ThreatPredictionConsideration.ResponseType.DEFENSIVE_URGENCY);
+    private final ThreatPredictionConsideration threatPredBridgeCut = new ThreatPredictionConsideration(ThreatPredictionConsideration.ResponseType.BRIDGE_CUT_OPPORTUNITY);
+    private final ThreatPredictionConsideration threatPredPursuit = new ThreatPredictionConsideration(ThreatPredictionConsideration.ResponseType.PURSUIT_OPPORTUNITY);
+    private final StrategyAlignmentConsideration strategyAlignmentConsideration = new StrategyAlignmentConsideration();
+
     /**
      * Creates a new DecisionEngine for the given bot.
      *
@@ -182,6 +192,10 @@ public class DecisionEngine {
                     score *= learnedMult;
                 }
             }
+
+            // ═══ Step 3e: Apply strategy plan multipliers ═══
+            score = applyStrategyMultipliers(action, score);
+
 
             // Step 4: Apply personality multipliers
             score *= getPersonalityMultiplier(action);
@@ -480,6 +494,29 @@ public class DecisionEngine {
     }
 
     /**
+     * Applies score multipliers from the active strategy plan.
+     *
+     * @param action the action being scored
+     * @param score  the current score
+     * @return the modified score
+     */
+    private double applyStrategyMultipliers(@Nonnull BotAction action, double score) {
+        StrategyPlanner planner = bot.getStrategyPlanner();
+        if (planner == null || !planner.hasActivePlan()) return score;
+
+        Map<BotAction, Double> multipliers = planner.getActiveMultipliers();
+        if (multipliers.isEmpty()) return score;
+
+        Double multiplier = multipliers.get(action);
+        if (multiplier != null) {
+            score *= multiplier;
+        }
+
+        return score;
+    }
+
+
+    /**
      * Maps a BotAction to a specific personality modifier key.
      * These are the exact keys as defined in Personality enum modifiers.
      *
@@ -755,8 +792,32 @@ public class DecisionEngine {
                 healthConsideration, -1.0,
                 timePressureConsideration, 0.5,
                 gamePhaseConsideration, 0.4,
-                counterPlayConsideration, 0.6,   // [FIX B2] CounterPlay now evaluated
-                positionalConsideration, 0.4);   // [FIX B3] Positional now evaluated
+                counterPlayConsideration, 0.6,
+                positionalConsideration, 0.4);
+
+        // Add threat prediction to fight actions
+        List<WeightedConsideration> fightNearestList = actionWeights.get(BotAction.FIGHT_NEAREST);
+        if (fightNearestList != null) {
+            fightNearestList.add(new WeightedConsideration(threatPredCombat, 0.5));
+            fightNearestList.add(new WeightedConsideration(strategyAlignmentConsideration, 0.3));
+        }
+
+        List<WeightedConsideration> fleeList = actionWeights.get(BotAction.FLEE);
+        if (fleeList != null) {
+            fleeList.add(new WeightedConsideration(threatPredDefense, 0.6));
+        }
+
+        List<WeightedConsideration> huntList = actionWeights.get(BotAction.HUNT_PLAYER);
+        if (huntList != null) {
+            huntList.add(new WeightedConsideration(threatPredPursuit, 0.5));
+            huntList.add(new WeightedConsideration(strategyAlignmentConsideration, 0.3));
+        }
+
+        List<WeightedConsideration> bridgeCutList = actionWeights.get(BotAction.BREAK_ENEMY_BRIDGE);
+        if (bridgeCutList != null) {
+            bridgeCutList.add(new WeightedConsideration(threatPredBridgeCut, 0.6));
+        }
+
 
         // ── FIGHT_WEAKEST ──
         addWeight(BotAction.FIGHT_WEAKEST,

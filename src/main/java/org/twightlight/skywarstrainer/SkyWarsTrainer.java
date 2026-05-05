@@ -5,6 +5,7 @@ import net.citizensnpcs.api.trait.TraitInfo;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.twightlight.skywarstrainer.ai.learning.LearningManager;
+import org.twightlight.skywarstrainer.ai.llm.LLMManager;
 import org.twightlight.skywarstrainer.api.SkyWarsTrainerAPI;
 import org.twightlight.skywarstrainer.bot.BotManager;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
@@ -40,6 +41,8 @@ public final class SkyWarsTrainer extends JavaPlugin {
     private SkyWarsTrainerAPI api;
     private CommandHandler commandHandler;
     private LearningManager learningManager;
+    private LLMManager llmManager;
+
     // ─── Lifecycle ──────────────────────────────────────────────
 
     @Override
@@ -111,6 +114,8 @@ public final class SkyWarsTrainer extends JavaPlugin {
         }
 
         this.learningManager = new LearningManager(this);
+        // 5.5. Initialize LLM Manager (optional — disabled if no keys)
+        this.llmManager = new LLMManager(this);
 
         // 6. Initialize bot manager
         this.botManager = new BotManager(this);
@@ -218,4 +223,11 @@ public final class SkyWarsTrainer extends JavaPlugin {
     public LearningManager getLearningManager() {
         return learningManager;
     }
+
+    /** @return the LLM manager, or null if not initialized */
+    @Nullable
+    public LLMManager getLLMManager() {
+        return llmManager;
+    }
+
 }

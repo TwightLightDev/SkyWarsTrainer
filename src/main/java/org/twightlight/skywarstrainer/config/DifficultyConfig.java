@@ -204,6 +204,20 @@ public class DifficultyConfig {
         builder.antiRushReaction(section.getDouble("antiRushReaction", 0.4));
         builder.baitDetectionSkill(section.getDouble("baitDetectionSkill", 0.3));
         builder.learningRate(section.getDouble("learningRate", 0.1));
+
+        // ── Strategy Planning ──
+        builder.strategyPlanningEnabled(section.getBoolean("strategyPlanningEnabled", true));
+        builder.planComplexity(section.getInt("planComplexity", 3));
+        builder.planReevalIntervalTicks(section.getInt("planReevalIntervalTicks", 200));
+        builder.planConfidenceDecayRate(section.getDouble("planConfidenceDecayRate", 0.003));
+        builder.planLearningInfluence(section.getDouble("planLearningInfluence", 0.3));
+        builder.planLLMConsultChance(section.getDouble("planLLMConsultChance", 0.2));
+        builder.planFallbackEnabled(section.getBoolean("planFallbackEnabled", true));
+
+        // ── Threat Prediction ──
+        builder.threatPredictionEnabled(section.getBoolean("threatPredictionEnabled", true));
+        builder.threatPredictionAccuracy(section.getDouble("threatPredictionAccuracy", 0.4));
+
         return builder.build();
     }
 
@@ -235,7 +249,10 @@ public class DifficultyConfig {
                         .thirdPartyTendency(0.0).bridgeCutSkill(0.0)
                         .projectileZoningTendency(0.05).retreatHealSkill(0.1)
                         .counterPlayIQ(0.05).antiRushReaction(0.1).baitDetectionSkill(0.0).learningRate(0.15);
-
+                b.strategyPlanningEnabled(false).planComplexity(1).planReevalIntervalTicks(400)
+                        .planConfidenceDecayRate(0.005).planLearningInfluence(0.0)
+                        .planLLMConsultChance(0.0).planFallbackEnabled(false);
+                b.threatPredictionEnabled(false).threatPredictionAccuracy(0.0);
                 break;
             case EASY:
                 b.reactionTimeMin(400).reactionTimeMax(800).aimAccuracy(0.5).aimSpeedDegPerTick(5.0)
@@ -257,6 +274,10 @@ public class DifficultyConfig {
                         .thirdPartyTendency(0.1).bridgeCutSkill(0.1)
                         .projectileZoningTendency(0.15).retreatHealSkill(0.2)
                         .counterPlayIQ(0.15).antiRushReaction(0.2).baitDetectionSkill(0.1).learningRate(0.12);
+                b.strategyPlanningEnabled(true).planComplexity(2).planReevalIntervalTicks(300)
+                        .planConfidenceDecayRate(0.004).planLearningInfluence(0.1)
+                        .planLLMConsultChance(0.0).planFallbackEnabled(false);
+                b.threatPredictionEnabled(false).threatPredictionAccuracy(0.1);
                 break;
             case MEDIUM:
                 b.reactionTimeMin(250).reactionTimeMax(500).aimAccuracy(0.7).aimSpeedDegPerTick(10.0)
@@ -278,6 +299,10 @@ public class DifficultyConfig {
                         .thirdPartyTendency(0.3).bridgeCutSkill(0.3)
                         .projectileZoningTendency(0.35).retreatHealSkill(0.4)
                         .counterPlayIQ(0.35).antiRushReaction(0.4).baitDetectionSkill(0.3).learningRate(0.10);
+                b.strategyPlanningEnabled(true).planComplexity(3).planReevalIntervalTicks(200)
+                        .planConfidenceDecayRate(0.003).planLearningInfluence(0.3)
+                        .planLLMConsultChance(0.2).planFallbackEnabled(true);
+                b.threatPredictionEnabled(true).threatPredictionAccuracy(0.4);
                 break;
             case HARD:
                 b.reactionTimeMin(150).reactionTimeMax(300).aimAccuracy(0.85).aimSpeedDegPerTick(18.0)
@@ -299,6 +324,10 @@ public class DifficultyConfig {
                         .thirdPartyTendency(0.55).bridgeCutSkill(0.6)
                         .projectileZoningTendency(0.6).retreatHealSkill(0.7)
                         .counterPlayIQ(0.6).antiRushReaction(0.65).baitDetectionSkill(0.6).learningRate(0.08);
+                b.strategyPlanningEnabled(true).planComplexity(4).planReevalIntervalTicks(150)
+                        .planConfidenceDecayRate(0.002).planLearningInfluence(0.6)
+                        .planLLMConsultChance(0.5).planFallbackEnabled(true);
+                b.threatPredictionEnabled(true).threatPredictionAccuracy(0.7);
                 break;
             case EXPERT:
                 b.reactionTimeMin(80).reactionTimeMax(150).aimAccuracy(0.95).aimSpeedDegPerTick(25.0)
@@ -320,6 +349,10 @@ public class DifficultyConfig {
                         .thirdPartyTendency(0.8).bridgeCutSkill(0.9)
                         .projectileZoningTendency(0.85).retreatHealSkill(0.9)
                         .counterPlayIQ(0.9).antiRushReaction(0.9).baitDetectionSkill(0.85).learningRate(0.05);
+                b.strategyPlanningEnabled(true).planComplexity(5).planReevalIntervalTicks(100)
+                        .planConfidenceDecayRate(0.001).planLearningInfluence(0.9)
+                        .planLLMConsultChance(0.8).planFallbackEnabled(true);
+                b.threatPredictionEnabled(true).threatPredictionAccuracy(0.9);
                 break;
         }
         return b.build();
@@ -373,7 +406,7 @@ public class DifficultyConfig {
          * @return the difficulty fraction
          */
         public double asFraction() {
-            return ordinal() / 4.0; // 0/4=0.0, 1/4=0.25, 2/4=0.5, 3/4=0.75, 4/4=1.0
+            return ordinal() / 4.0;
         }
     }
 
@@ -444,6 +477,7 @@ public class DifficultyConfig {
         private final double mistakeFrequency;
         private final double headMovementNoise;
         private final double itemDropOnDeathPanic;
+
         // ── Advanced Bridging Movement ──
         private final double jumpBridgeChance;
         private final double stairBridgeSkill;
@@ -478,6 +512,19 @@ public class DifficultyConfig {
         private final double baitDetectionSkill;
 
         private final double learningRate;
+
+        // ── Strategy Planning (NEW) ──
+        private final boolean strategyPlanningEnabled;
+        private final int planComplexity;
+        private final int planReevalIntervalTicks;
+        private final double planConfidenceDecayRate;
+        private final double planLearningInfluence;
+        private final double planLLMConsultChance;
+        private final boolean planFallbackEnabled;
+
+        // ── Threat Prediction (NEW) ──
+        private final boolean threatPredictionEnabled;
+        private final double threatPredictionAccuracy;
 
         private DifficultyProfile(Builder builder) {
             this.difficulty = builder.difficulty;
@@ -536,6 +583,15 @@ public class DifficultyConfig {
             this.antiRushReaction = builder.antiRushReaction;
             this.baitDetectionSkill = builder.baitDetectionSkill;
             this.learningRate = builder.learningRate;
+            this.strategyPlanningEnabled = builder.strategyPlanningEnabled;
+            this.planComplexity = builder.planComplexity;
+            this.planReevalIntervalTicks = builder.planReevalIntervalTicks;
+            this.planConfidenceDecayRate = builder.planConfidenceDecayRate;
+            this.planLearningInfluence = builder.planLearningInfluence;
+            this.planLLMConsultChance = builder.planLLMConsultChance;
+            this.planFallbackEnabled = builder.planFallbackEnabled;
+            this.threatPredictionEnabled = builder.threatPredictionEnabled;
+            this.threatPredictionAccuracy = builder.threatPredictionAccuracy;
         }
 
         // ── Getters ─────────────────────────────────────────────
@@ -707,7 +763,35 @@ public class DifficultyConfig {
         /** @return skill at detecting bait/trick plays [0.0, 1.0] */
         public double getBaitDetectionSkill() { return baitDetectionSkill; }
 
+        /** @return base learning rate for RL updates */
         public double getLearningRate() { return learningRate; }
+
+        /** @return whether strategy planning is enabled for this difficulty */
+        public boolean isStrategyPlanningEnabled() { return strategyPlanningEnabled; }
+
+        /** @return maximum number of phases in a generated plan (1-5) */
+        public int getPlanComplexity() { return planComplexity; }
+
+        /** @return ticks between plan re-evaluations */
+        public int getPlanReevalIntervalTicks() { return planReevalIntervalTicks; }
+
+        /** @return per-tick confidence decay rate for active plans */
+        public double getPlanConfidenceDecayRate() { return planConfidenceDecayRate; }
+
+        /** @return how much Q-values from learning influence plan generation [0,1] */
+        public double getPlanLearningInfluence() { return planLearningInfluence; }
+
+        /** @return chance to consult LLM when generating a plan [0,1] */
+        public double getPlanLLMConsultChance() { return planLLMConsultChance; }
+
+        /** @return whether plans include fallback/abort conditions */
+        public boolean isPlanFallbackEnabled() { return planFallbackEnabled; }
+
+        /** @return whether threat prediction is enabled for this difficulty */
+        public boolean isThreatPredictionEnabled() { return threatPredictionEnabled; }
+
+        /** @return accuracy of enemy behavior predictions [0,1] */
+        public double getThreatPredictionAccuracy() { return threatPredictionAccuracy; }
 
         /**
          * Returns a randomized reaction time within the profile's range.
@@ -726,7 +810,6 @@ public class DifficultyConfig {
          */
         public int getMistakeIntervalTicks() {
             if (mistakeFrequency <= 0.0) return Integer.MAX_VALUE;
-            // mistakes/min → seconds/mistake → ticks/mistake
             double secondsPerMistake = 60.0 / mistakeFrequency;
             return Math.max(20, (int) (secondsPerMistake * 20.0));
         }
@@ -803,6 +886,15 @@ public class DifficultyConfig {
             private double antiRushReaction = 0.4;
             private double baitDetectionSkill = 0.3;
             private double learningRate = 0.1;
+            private boolean strategyPlanningEnabled = true;
+            private int planComplexity = 3;
+            private int planReevalIntervalTicks = 200;
+            private double planConfidenceDecayRate = 0.003;
+            private double planLearningInfluence = 0.3;
+            private double planLLMConsultChance = 0.2;
+            private boolean planFallbackEnabled = true;
+            private boolean threatPredictionEnabled = true;
+            private double threatPredictionAccuracy = 0.4;
 
             public Builder(@Nonnull Difficulty difficulty) {
                 this.difficulty = difficulty;
@@ -861,15 +953,22 @@ public class DifficultyConfig {
             public Builder retreatHealSkill(double v) { this.retreatHealSkill = v; return this; }
             public Builder counterPlayIQ(double v) { this.counterPlayIQ = v; return this; }
             public Builder antiRushReaction(double v) { this.antiRushReaction = v; return this; }
-            public Builder baitDetectionSkill(double v) {
-                this.baitDetectionSkill = v;
-                return this;
-            }
+            public Builder baitDetectionSkill(double v) { this.baitDetectionSkill = v; return this; }
+            public Builder learningRate(double v) { this.learningRate = v; return this; }
+            public Builder strategyPlanningEnabled(boolean v) { this.strategyPlanningEnabled = v; return this; }
+            public Builder planComplexity(int v) { this.planComplexity = v; return this; }
+            public Builder planReevalIntervalTicks(int v) { this.planReevalIntervalTicks = v; return this; }
+            public Builder planConfidenceDecayRate(double v) { this.planConfidenceDecayRate = v; return this; }
+            public Builder planLearningInfluence(double v) { this.planLearningInfluence = v; return this; }
+            public Builder planLLMConsultChance(double v) { this.planLLMConsultChance = v; return this; }
+            public Builder planFallbackEnabled(boolean v) { this.planFallbackEnabled = v; return this; }
+            public Builder threatPredictionEnabled(boolean v) { this.threatPredictionEnabled = v; return this; }
+            public Builder threatPredictionAccuracy(double v) { this.threatPredictionAccuracy = v; return this; }
+
             @Nonnull
             public DifficultyProfile build() {
                 return new DifficultyProfile(this);
             }
-            public Builder learningRate(double v) { this.learningRate = v; return this; }
         }
     }
 }

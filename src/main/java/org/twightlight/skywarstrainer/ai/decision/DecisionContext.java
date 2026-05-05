@@ -11,6 +11,8 @@ import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 
 import javax.annotation.Nonnull;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * An immutable snapshot of the world state relevant to decision-making.
@@ -138,6 +140,17 @@ public class DecisionContext {
     /** The bot's difficulty profile. */
     public DifficultyProfile difficultyProfile;
 
+    // ── Strategy Plan Info (NEW) ──
+    /** Whether the bot has an active strategy plan. */
+    public boolean hasActivePlan;
+    /** The active plan's confidence [0.0, 1.0]. 0 if no plan. */
+    public double planConfidence;
+
+    // ── Threat Predictions (NEW) ──
+    /** Predicted behaviors for all tracked enemies. May be null. */
+    public Map<UUID, ThreatPredictor.PredictedBehavior> threatPredictions;
+
+
     /**
      * Creates an empty context. Call {@link #populate(TrainerBot)} to fill it.
      */
@@ -164,6 +177,8 @@ public class DecisionContext {
         populateGamePhase(bot);
         populateLoot(bot);
         populateMapInfo(bot);
+        populateStrategyInfo(bot);
+        populateThreatPredictions(bot);
 
         return this;
     }
@@ -430,6 +445,34 @@ public class DecisionContext {
         }
     }
 
+    /**
+     * Populates strategy plan info from the StrategyPlanner.
+     */
+    private void populateStrategyInfo(@Nonnull TrainerBot bot) {
+        org.twightlight.skywarstrainer.ai.strategy.StrategyPlanner planner = bot.getStrategyPlanner();
+        if (planner != null && planner.hasActivePlan()) {
+            hasActivePlan = true;
+            org.twightlight.skywarstrainer.ai.strategy.StrategyPlan plan = planner.getActivePlan();
+            planConfidence = (plan != null) ? plan.getConfidence() : 0.0;
+        } else {
+            hasActivePlan = false;
+            planConfidence = 0.0;
+        }
+    }
+
+    /**
+     * Populates threat prediction data from the ThreatPredictor.
+     */
+    private void populateThreatPredictions(@Nonnull TrainerBot bot) {
+        org.twightlight.skywarstrainer.awareness.ThreatPredictor predictor = bot.getThreatPredictor();
+        if (predictor != null) {
+            threatPredictions = predictor.getPredictions();
+        } else {
+            threatPredictions = null;
+        }
+    }
+
+
     // In DecisionContext.populateMapInfo(), replace the O(n³) enchanting table scan
     // with a cached lookup from MapScanner:
     private void populateMapInfo(@Nonnull TrainerBot bot) {
@@ -524,6 +567,10 @@ public class DecisionContext {
         bridgeToMidExists = false;
         enchantingTableAccessible = false;
         difficultyProfile = null;
+        hasActivePlan = false;
+        planConfidence = 0.0;
+        threatPredictions = null;
+
     }
 
     @Override

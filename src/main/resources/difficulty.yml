@@ -95,6 +95,17 @@ difficulties:
     antiRushReaction: 0.1
     baitDetectionSkill: 0.0
     learningRate: 0.15
+    # ── Strategy Planning ──
+    strategyPlanningEnabled: false
+    planComplexity: 1
+    planReevalIntervalTicks: 400
+    planConfidenceDecayRate: 0.005
+    planLearningInfluence: 0.0
+    planLLMConsultChance: 0.0
+    planFallbackEnabled: false
+    # ── Threat Prediction ──
+    threatPredictionEnabled: false
+    threatPredictionAccuracy: 0.0
 
   EASY:
     reactionTimeMin: 400
@@ -152,6 +163,17 @@ difficulties:
     antiRushReaction: 0.2
     baitDetectionSkill: 0.1
     learningRate: 0.12
+    # ── Strategy Planning ──
+    strategyPlanningEnabled: true
+    planComplexity: 2
+    planReevalIntervalTicks: 300
+    planConfidenceDecayRate: 0.004
+    planLearningInfluence: 0.1
+    planLLMConsultChance: 0.0
+    planFallbackEnabled: false
+    # ── Threat Prediction ──
+    threatPredictionEnabled: false
+    threatPredictionAccuracy: 0.1
 
   MEDIUM:
     reactionTimeMin: 250
@@ -209,6 +231,17 @@ difficulties:
     antiRushReaction: 0.4
     baitDetectionSkill: 0.3
     learningRate: 0.10
+    # ── Strategy Planning ──
+    strategyPlanningEnabled: true
+    planComplexity: 3
+    planReevalIntervalTicks: 200
+    planConfidenceDecayRate: 0.003
+    planLearningInfluence: 0.3
+    planLLMConsultChance: 0.2
+    planFallbackEnabled: true
+    # ── Threat Prediction ──
+    threatPredictionEnabled: true
+    threatPredictionAccuracy: 0.4
 
   HARD:
     reactionTimeMin: 150
@@ -266,6 +299,17 @@ difficulties:
     antiRushReaction: 0.65
     baitDetectionSkill: 0.6
     learningRate: 0.08
+    # ── Strategy Planning ──
+    strategyPlanningEnabled: true
+    planComplexity: 4
+    planReevalIntervalTicks: 150
+    planConfidenceDecayRate: 0.002
+    planLearningInfluence: 0.6
+    planLLMConsultChance: 0.5
+    planFallbackEnabled: true
+    # ── Threat Prediction ──
+    threatPredictionEnabled: true
+    threatPredictionAccuracy: 0.7
 
   EXPERT:
     reactionTimeMin: 80
@@ -323,3 +367,14 @@ difficulties:
     antiRushReaction: 0.9
     baitDetectionSkill: 0.85
     learningRate: 0.05
+    # ── Strategy Planning ──
+    strategyPlanningEnabled: true
+    planComplexity: 5
+    planReevalIntervalTicks: 100
+    planConfidenceDecayRate: 0.001
+    planLearningInfluence: 0.9
+    planLLMConsultChance: 0.8
+    planFallbackEnabled: true
+    # ── Threat Prediction ──
+    threatPredictionEnabled: true
+    threatPredictionAccuracy: 0.9

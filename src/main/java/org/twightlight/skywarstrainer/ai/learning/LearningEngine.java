@@ -275,6 +275,19 @@ public class LearningEngine {
         System.arraycopy(currentVector, 0, lastStateVector, 0, StateEncoder.STATE_VECTOR_SIZE);
         lastAction = action;
         adjustmentsDirty = true;
+
+        // Log whether chosen action aligns with strategy plan (for future reward shaping)
+        org.twightlight.skywarstrainer.ai.strategy.StrategyPlanner planner = bot.getStrategyPlanner();
+        if (planner != null && planner.hasActivePlan()) {
+            Map<BotAction, Double> planMultipliers = planner.getActiveMultipliers();
+            Double planMult = planMultipliers.get(action);
+            boolean aligned = (planMult != null && planMult > 1.0);
+            if (aligned) {
+                // Small positive signal for plan-aligned decisions
+                experienceRecorder.onGameEvent("plan_aligned", 0.05);
+            }
+        }
+
     }
 
     /**

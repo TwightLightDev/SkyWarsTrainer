@@ -57,7 +57,6 @@ public final class DifficultyGateDecorator extends DecoratorNode {
     public NodeStatus tick(@Nonnull TrainerBot bot) {
         DifficultyProfile profile = bot.getDifficultyProfile();
         if (!gatePredicate.test(profile)) {
-            // Difficulty too low — treat as failure so parent tries a fallback
             return NodeStatus.FAILURE;
         }
         return child.tick(bot);

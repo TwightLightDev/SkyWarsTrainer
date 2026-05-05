@@ -108,6 +108,8 @@ public class ConfigManager {
     private int timerInventoryAuditInterval;
     private int timerPositionalInterval;
     private int timerEnemyAnalyzerInterval;
+    private int timerStrategyPlannerInterval;
+    private int timerThreatPredictorInterval;
 
     public ConfigManager(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
@@ -118,6 +120,7 @@ public class ConfigManager {
         saveResourceIfMissing("difficulty.yml");
         saveResourceIfMissing("messages.yml");
         saveResourceIfMissing("personalities.yml");
+        saveResourceIfMissing("llm_config.yml");
 
         plugin.reloadConfig();
         this.mainConfig = plugin.getConfig();
@@ -179,7 +182,7 @@ public class ConfigManager {
         this.subsystemTimeoutMs = mainConfig.getLong("performance.subsystem-timeout-ms", 3);
         this.perfLogInterval = mainConfig.getInt("performance.perf-log-interval", 0);
 
-        // ── Skins v2 ── [FIX: was reading nonexistent skins.use-random-skins / skins.skin-list]
+        // ── Skins v2 ──
         this.skinsEnabled = mainConfig.getBoolean("skins.enabled", true);
         this.skinsMode = mainConfig.getString("skins.mode", "MIXED");
         this.skinsRandomSelection = mainConfig.getBoolean("skins.random-selection", true);
@@ -187,7 +190,7 @@ public class ConfigManager {
         this.skinsCacheMaxEntries = mainConfig.getInt("skins.cache.max-entries", 200);
         this.skinsCacheExpiryHours = mainConfig.getInt("skins.cache.expiry-hours", 72);
 
-        // ── Random Names v2 ── [FIX: was reading random-names.prefixes instead of random-names.composite.prefixes]
+        // ── Random Names v2 ──
         this.nameStrategy = mainConfig.getString("random-names.strategy", "MIXED");
         this.compositeNamePrefixes = mainConfig.getStringList("random-names.composite.prefixes");
         this.compositeNameRoots = mainConfig.getStringList("random-names.composite.roots");
@@ -197,7 +200,7 @@ public class ConfigManager {
         this.nameRandomCapsChance = mainConfig.getDouble("random-names.formatting.random-caps-chance", 0.03);
         this.nameUnderscoreSeparatorChance = mainConfig.getDouble("random-names.formatting.underscore-separator-chance", 0.15);
 
-        // ── Chat v2 ── [FIX: was ignoring message-chance and show-typing-particles]
+        // ── Chat v2 ──
         this.chatCooldownSeconds = mainConfig.getInt("chat.cooldown-seconds", 5);
         this.chatTypingSpeedMinMs = mainConfig.getInt("chat.typing-speed-min-ms", 20);
         this.chatTypingSpeedMaxMs = mainConfig.getInt("chat.typing-speed-max-ms", 80);
@@ -210,7 +213,7 @@ public class ConfigManager {
         this.chatChanceCloseFightWon = mainConfig.getDouble("chat.message-chance.close_fight_won", 0.3);
         this.chatChanceCloseFightLost = mainConfig.getDouble("chat.message-chance.close_fight_lost", 0.3);
 
-        // ── Tick Timers ── [FIX: these were entirely missing — hardcoded in TrainerBot]
+        // ── Tick Timers ──
         this.timerVoidDetectInterval = mainConfig.getInt("timers.void-detect-interval", 5);
         this.timerLavaDetectInterval = mainConfig.getInt("timers.lava-detect-interval", 15);
         this.timerChestUpdateInterval = mainConfig.getInt("timers.chest-update-interval", 60);
@@ -220,6 +223,8 @@ public class ConfigManager {
         this.timerInventoryAuditInterval = mainConfig.getInt("timers.inventory-audit-interval", 100);
         this.timerPositionalInterval = mainConfig.getInt("timers.positional-interval", 50);
         this.timerEnemyAnalyzerInterval = mainConfig.getInt("timers.enemy-analyzer-interval", 20);
+        this.timerStrategyPlannerInterval = mainConfig.getInt("timers.strategy-planner-interval", 100);
+        this.timerThreatPredictorInterval = mainConfig.getInt("timers.threat-predictor-interval", 10);
     }
 
     // ─── Reloading ──────────────────────────────────────────────
@@ -381,6 +386,12 @@ public class ConfigManager {
     public int getTimerInventoryAuditInterval() { return timerInventoryAuditInterval; }
     public int getTimerPositionalInterval() { return timerPositionalInterval; }
     public int getTimerEnemyAnalyzerInterval() { return timerEnemyAnalyzerInterval; }
+
+    /** @return tick interval for the strategy planner subsystem */
+    public int getTimerStrategyPlannerInterval() { return timerStrategyPlannerInterval; }
+
+    /** @return tick interval for the threat predictor subsystem */
+    public int getTimerThreatPredictorInterval() { return timerThreatPredictorInterval; }
 
     // ═══════════════════════════════════════════════════════════
     //  RAW CONFIG ACCESS

@@ -35,6 +35,8 @@ import org.twightlight.skywarstrainer.movement.strategies.ApproachEngine;
 import org.twightlight.skywarstrainer.movement.strategies.ApproachTickResult;
 import org.twightlight.skywarstrainer.util.RandomUtil;
 import org.twightlight.skywarstrainer.util.TickTimer;
+import org.twightlight.skywarstrainer.ai.strategy.StrategyPlanner;
+import org.twightlight.skywarstrainer.awareness.ThreatPredictor;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -110,6 +112,16 @@ public class TrainerBot {
     private EnemyBehaviorAnalyzer enemyAnalyzer;
     private LearningEngine learningEngine;
     private BridgeMovementController bridgeMovementController;
+
+    // ═══════════════════════════════════════════════════════════
+    //  STRATEGY & THREAT PREDICTION (NEW)
+    // ═══════════════════════════════════════════════════════════
+    private StrategyPlanner strategyPlanner;
+    private ThreatPredictor threatPredictor;
+
+    // ── New Tick Timers ──
+    private TickTimer strategyPlannerTimer;
+    private TickTimer threatPredictorTimer;
 
     // ── New Tick Timers ──
     private TickTimer positionalTimer;  // 50 ticks
@@ -221,6 +233,17 @@ public class TrainerBot {
             this.learningEngine = new LearningEngine(this, plugin.getLearningManager().getSharedMemoryBank(), plugin.getLearningManager().getSharedReplayBuffer());
         }
 
+        // ── Strategy Planner (NEW) ──
+        if (profile.getDifficultyProfile().isStrategyPlanningEnabled()) {
+            this.strategyPlanner = new StrategyPlanner(this);
+        }
+
+        // ── Threat Predictor (NEW) ──
+        if (profile.getDifficultyProfile().isThreatPredictionEnabled()) {
+            this.threatPredictor = new ThreatPredictor(this);
+        }
+
+
         this.stateMachine = new BotStateMachine(this);
         this.decisionEngine = new DecisionEngine(this, stateMachine);
 
@@ -241,6 +264,8 @@ public class TrainerBot {
         int invInterval = cfg.getTimerInventoryAuditInterval();
         int posInterval = cfg.getTimerPositionalInterval();
         int enemyInterval = cfg.getTimerEnemyAnalyzerInterval();
+        int strategyInterval = cfg.getTimerStrategyPlannerInterval();
+        int threatInterval = cfg.getTimerThreatPredictorInterval();
 
         this.voidDetectTimer = new TickTimer(voidInterval, 1 + (staggerOffset % Math.max(1, voidInterval)));
         this.lavaDetectTimer = new TickTimer(lavaInterval, 3 + (staggerOffset % Math.max(1, lavaInterval)));
@@ -252,6 +277,8 @@ public class TrainerBot {
         this.positionalTimer = new TickTimer(posInterval, 10 + (staggerOffset % Math.max(1, posInterval)));
         this.enemyAnalyzerTimer = new TickTimer(enemyInterval, 4 + (staggerOffset % Math.max(1, enemyInterval)));
         this.learningModuleTimer = new TickTimer(10, 2 + (staggerOffset % 10));
+        this.strategyPlannerTimer = new TickTimer(strategyInterval, 15 + (staggerOffset % Math.max(1, strategyInterval)));
+        this.threatPredictorTimer = new TickTimer(threatInterval, 7 + (staggerOffset % Math.max(1, threatInterval)));
 
         mapScanner.forceRescan();
     }
@@ -964,6 +991,8 @@ public class TrainerBot {
         enemyAnalyzer = null;
         bridgeMovementController = null;
         learningEngine = null;
+        strategyPlanner = null;
+        threatPredictor = null;
 
         if (npc != null) {
             if (npc.isSpawned()) {
@@ -1134,14 +1163,28 @@ public class TrainerBot {
             });
         }
 
-        // ── 14b. Learning Module (every 10 ticks) ──
+        // ── 15. Threat Predictor (every ~10 ticks) ──
+        if (threatPredictorTimer != null && threatPredictorTimer.tick()) {
+            tickSafe("threatPredictor", () -> {
+                if (threatPredictor != null) threatPredictor.tick();
+            });
+        }
+
+        // ── 16. Strategy Planner (every ~100 ticks) ──
+        if (strategyPlannerTimer != null && strategyPlannerTimer.tick()) {
+            tickSafe("strategyPlanner", () -> {
+                if (strategyPlanner != null) strategyPlanner.tick();
+            });
+        }
+
+        // ── 17. Learning Module (every ~10 ticks) ──
         if (learningModuleTimer != null && learningModuleTimer.tick()) {
             tickSafe("learning", () -> {
                 if (learningEngine != null) learningEngine.tick();
             });
         }
 
-        // ── 15. Defense Manager interrupt check (every tick) — NEW ──
+        // ── 18. Defense Manager interrupt check (every tick) — NEW ──
         // Check if enemy is bridging toward us — trigger defensive action
         // [FIX-A5/E1] Also exclude CAMPING state to prevent double-ticking DefensiveEngine.
         // CAMPING BT already ticks DefensiveEngine via CooldownDecorator.
@@ -1168,7 +1211,7 @@ public class TrainerBot {
             }
         });
 
-        // ── 16. Mistake injection ──
+        // ── 19. Mistake injection ──
         if (mistakeTimer != null && mistakeTimer.tick()) {
             injectMistake();
         }
@@ -1358,6 +1401,17 @@ public class TrainerBot {
     @Nullable public EnemyBehaviorAnalyzer getEnemyAnalyzer() { return enemyAnalyzer; }
     @Nullable public BridgeMovementController getBridgeMovementController() { return bridgeMovementController; }
     @Nullable public LearningEngine getLearningEngine() { return learningEngine; }
+    /** @return the strategy planner, or null if strategy planning is disabled */
+    @Nullable
+    public StrategyPlanner getStrategyPlanner() {
+        return strategyPlanner;
+    }
+
+    /** @return the threat predictor, or null if threat prediction is disabled */
+    @Nullable
+    public ThreatPredictor getThreatPredictor() {
+        return threatPredictor;
+    }
 
     private static String formatLocation(Location loc) {
         return String.format("(%.1f, %.1f, %.1f in %s)",

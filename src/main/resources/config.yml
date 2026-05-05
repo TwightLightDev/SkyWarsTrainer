@@ -166,12 +166,6 @@ random-names:
       - "_TTV"
 
   # ── REALISTIC strategy ──
-  # Generates names that mimic common real-player username patterns:
-  #   - firstname + numbers (Jake2847)
-  #   - firstname + year (Emily2011)
-  #   - word + word (SilentArrow)
-  #   - word + numbers (Block987)
-  #   - all lowercase (shadowplay)
   realistic:
     first-names:
       - "Jake"
@@ -232,7 +226,6 @@ random-names:
       max: 9999
 
   # ── FIXED_POOL strategy ──
-  # Picks a complete name from this list. Good for curated bot rosters.
   fixed-pool:
     - "xShadowPvP"
     - "NotDream"
@@ -307,3 +300,6 @@ timers:
   inventory-audit-interval: 100
   positional-interval: 50
   enemy-analyzer-interval: 20
+  # ── New: Strategy & Awareness Timers ──
+  strategy-planner-interval: 100
+  threat-predictor-interval: 10
