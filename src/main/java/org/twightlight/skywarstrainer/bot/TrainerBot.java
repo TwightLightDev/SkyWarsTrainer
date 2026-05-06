@@ -29,6 +29,7 @@ import org.twightlight.skywarstrainer.inventory.FoodHandler;
 import org.twightlight.skywarstrainer.inventory.InventoryEngine;
 import org.twightlight.skywarstrainer.inventory.PotionHandler;
 import org.twightlight.skywarstrainer.loot.LootEngine;
+import org.twightlight.skywarstrainer.movement.ElevationHandler;
 import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.movement.positional.PositionalEngine;
 import org.twightlight.skywarstrainer.movement.strategies.ApproachEngine;
@@ -94,6 +95,9 @@ public class TrainerBot {
     private VoidDetector voidDetector;
     private FallDamageEstimator fallDamageEstimator;
     private GamePhaseTracker gamePhaseTracker;
+    private SurvivalGuard survivalGuard;
+    private ElevationHandler elevationHandler;
+
 
     // ═══════════════════════════════════════════════════════════
     //  TICK TIMERS
@@ -218,6 +222,7 @@ public class TrainerBot {
         this.fallDamageEstimator = new FallDamageEstimator(this);
         this.gamePhaseTracker = new GamePhaseTracker(this);
         this.movementController = new MovementController(this);
+        this.survivalGuard = new SurvivalGuard(this);
         this.combatEngine = new CombatEngine(this);
         this.bridgeEngine = new BridgeEngine(this);
         this.bridgeMovementController = new BridgeMovementController(this);
@@ -227,6 +232,7 @@ public class TrainerBot {
         this.positionalEngine = new PositionalEngine(this);
         this.defenseEngine = new DefensiveEngine(this);
         this.enemyAnalyzer = new EnemyBehaviorAnalyzer(this);
+        this.elevationHandler = new ElevationHandler(this);
 
         if (plugin.getLearningManager().getLearningConfig() != null && plugin.getLearningManager().getLearningConfig().isEnabled()
                 && plugin.getLearningManager().getSharedMemoryBank() != null && plugin.getLearningManager().getSharedReplayBuffer() != null) {
@@ -993,6 +999,8 @@ public class TrainerBot {
         learningEngine = null;
         strategyPlanner = null;
         threatPredictor = null;
+        survivalGuard = null;
+        elevationHandler = null;
 
         if (npc != null) {
             if (npc.isSpawned()) {
@@ -1031,6 +1039,12 @@ public class TrainerBot {
         if (!isAlive()) return;
 
         localTickCount++;
+
+        // ── 0. Survival Guard (BEFORE movement — emergency overrides) ──
+        tickSafe("survivalGuard", () -> {
+            if (survivalGuard != null) survivalGuard.tick();
+        });
+
 
         tickSafe("fallCheck", () -> {
             LivingEntity entity = getLivingEntity();
@@ -1095,6 +1109,29 @@ public class TrainerBot {
                 }
             });
         }
+
+        // ── Step 5b: Micro-actions (eat while traveling, swing hand) ──
+        tickSafe("microActions", () -> {
+            if (inventoryEngine == null) return;
+            Player player = getPlayerEntity();
+            if (player == null) return;
+
+            BotState currentState = stateMachine != null ? stateMachine.getCurrentState() : null;
+
+            // Eat food while traveling (HUNTING, BRIDGING, LOOTING — not FIGHTING/FLEEING)
+            if (currentState == BotState.HUNTING || currentState == BotState.LOOTING || currentState == BotState.BRIDGING) {
+                double healthFrac = player.getHealth() / player.getMaxHealth();
+                if (healthFrac < 0.8 && player.getFoodLevel() < 18) {
+                    inventoryEngine.getFoodHandler().tick();
+                }
+            }
+
+            // Arm swing animation when idle or camping (makes bot look alive)
+            if ((currentState == BotState.IDLE || currentState == BotState.CAMPING) && RandomUtil.chance(0.02)) {
+                org.twightlight.skywarstrainer.util.NMSHelper.playArmSwing(player);
+            }
+        });
+
 
 
         // ── 6. Void/edge detection (every 5 ticks) ──
@@ -1401,6 +1438,17 @@ public class TrainerBot {
     @Nullable public EnemyBehaviorAnalyzer getEnemyAnalyzer() { return enemyAnalyzer; }
     @Nullable public BridgeMovementController getBridgeMovementController() { return bridgeMovementController; }
     @Nullable public LearningEngine getLearningEngine() { return learningEngine; }
+    /** @return the survival guard, or null if not initialized */
+    @Nullable
+    public SurvivalGuard getSurvivalGuard() {
+        return survivalGuard;
+    }
+    /** @return the elevation handler, or null if not initialized */
+    @Nullable
+    public ElevationHandler getElevationHandler() {
+        return elevationHandler;
+    }
+
     /** @return the strategy planner, or null if strategy planning is disabled */
     @Nullable
     public StrategyPlanner getStrategyPlanner() {

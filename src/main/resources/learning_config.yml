@@ -16,6 +16,14 @@ learning:
   trace-prune-threshold: 0.001
   max-games-before-stable: 200
   stability-lr-multiplier: 0.1
+  # ── Exploration & Adaptation ──
+  epsilon-start: 0.3
+  epsilon-end: 0.02
+  epsilon-decay-games: 150
+  q-value-decay-rate: 0.995
+  q-value-decay-interval-games: 5
+  meta-shift-detection-window: 15
+  meta-shift-reward-drop-threshold: 0.4
 
 memory:
   max-entries: 50000

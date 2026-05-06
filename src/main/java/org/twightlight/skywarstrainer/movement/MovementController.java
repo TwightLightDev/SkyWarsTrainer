@@ -3,12 +3,10 @@ package org.twightlight.skywarstrainer.movement;
 import org.bukkit.Location;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.util.Vector;
+import org.twightlight.skywarstrainer.awareness.VoidDetector;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
-import org.twightlight.skywarstrainer.util.MathUtil;
-import org.twightlight.skywarstrainer.util.NMSHelper;
-import org.twightlight.skywarstrainer.util.PacketUtil;
-import org.twightlight.skywarstrainer.util.RandomUtil;
+import org.twightlight.skywarstrainer.util.*;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -288,6 +286,15 @@ public class MovementController {
             return false;
         }
         if (authority.ordinal() >= currentAuthority.ordinal()) {
+            // ── Void safety: reject move targets that are directly over void (unless BRIDGE authority) ──
+            if (authority != MovementAuthority.BRIDGE) {
+                VoidDetector vd = bot.getVoidDetector();
+                if (vd != null && vd.isVoidBelow(target)) {
+                    DebugLogger.log(bot, "Movement: Rejected void-targeted move to (%.1f, %.1f, %.1f)",
+                            target.getX(), target.getY(), target.getZ());
+                    return false;
+                }
+            }
             this.moveTarget = target;
             this.currentAuthority = authority;
             this.movingForward = false;
@@ -296,6 +303,7 @@ public class MovementController {
         }
         return false;
     }
+
 
     public boolean claimAuthority(@Nonnull MovementAuthority authority) {
         if (authority.ordinal() >= currentAuthority.ordinal()) {

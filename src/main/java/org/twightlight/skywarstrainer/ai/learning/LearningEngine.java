@@ -1,7 +1,3 @@
-// ═══════════════════════════════════════════════════════════════════
-// FILE: src/main/java/org/twightlight/skywarstrainer/ai/learning/LearningModule.java
-// ═══════════════════════════════════════════════════════════════════
-
 package org.twightlight.skywarstrainer.ai.learning;
 
 import org.twightlight.skywarstrainer.ai.decision.DecisionContext;
@@ -66,6 +62,9 @@ public class LearningEngine {
     // ── Performance tracking ──
     private long totalGamesLearned;
 
+    // ── Epsilon-greedy exploration ──
+    private double currentEpsilon;
+
     /**
      * Creates a new LearningModule for the given bot.
      *
@@ -99,6 +98,9 @@ public class LearningEngine {
         this.recentGameRewardCount = 0;
         this.learningPaused = false;
         this.totalGamesLearned = 0;
+
+        // Initialize epsilon from config
+        this.currentEpsilon = config.getEpsilonStart();
     }
 
     // ═════════════════════════════════════════════════════════════
@@ -213,13 +215,41 @@ public class LearningEngine {
         // 9. Mark adjustments dirty
         adjustmentsDirty = true;
 
+        // ── 9b. Epsilon decay ──
+        double epsilonStart = config.getEpsilonStart();
+        double epsilonEnd = config.getEpsilonEnd();
+        int decayGames = config.getEpsilonDecayGames();
+        double progress = Math.min(1.0, (double) totalGamesLearned / Math.max(1, decayGames));
+        currentEpsilon = epsilonStart + (epsilonEnd - epsilonStart) * progress;
+
+        // ── 9c. Q-value decay (every N games) ──
+        if (totalGamesLearned > 0 && totalGamesLearned % config.getQValueDecayIntervalGames() == 0) {
+            memoryBank.decayAllQValues(config.getQValueDecayRate());
+            DebugLogger.log(bot, "Learning: Q-value decay applied (factor=%.4f, QTable=%d)",
+                    config.getQValueDecayRate(), memoryBank.size());
+        }
+
+        // ── 9d. Meta-shift detection ──
+        int metaWindow = config.getMetaShiftDetectionWindow();
+        if (recentGameRewardCount >= metaWindow * 2) {
+            double recentAvg = computeRollingAverage(metaWindow, 0);
+            double olderAvg = computeRollingAverage(metaWindow, metaWindow);
+            if (olderAvg > 0 && recentAvg < olderAvg * config.getMetaShiftRewardDropThreshold()) {
+                // Meta shift detected — partially reset Q-values toward zero
+                memoryBank.decayAllQValues(0.5);
+                currentEpsilon = Math.max(currentEpsilon, config.getEpsilonStart() * 0.5);
+                DebugLogger.log(bot, "META SHIFT DETECTED: recent=%.2f, older=%.2f. Resetting exploration (ε=%.3f).",
+                        recentAvg, olderAvg, currentEpsilon);
+            }
+        }
+
         // 10. Track for emergency brake
         trackGamePerformance(terminalReward);
 
         totalGamesLearned++;
 
-        DebugLogger.log(bot, "Learning: game ended. QTable=%d, Replay=%d, experiences=%d, reward=%.2f",
-                memoryBank.size(), replayBuffer.getSize(), gameExperiences.size(), terminalReward);
+        DebugLogger.log(bot, "Learning: game ended. QTable=%d, Replay=%d, experiences=%d, reward=%.2f, ε=%.3f",
+                memoryBank.size(), replayBuffer.getSize(), gameExperiences.size(), terminalReward, currentEpsilon);
     }
 
     /**
@@ -495,6 +525,28 @@ public class LearningEngine {
         return effectiveLR;
     }
 
+    /**
+     * Computes the rolling average of the most recent {@code windowSize} game rewards,
+     * starting from {@code offset} games back from the current head.
+     *
+     * <p>Used by meta-shift detection to compare recent performance against
+     * slightly older performance.</p>
+     *
+     * @param windowSize the number of games to average
+     * @param offset     how many games back from the head to start (0 = most recent)
+     * @return the average reward over the window, or 0.0 if insufficient data
+     */
+    private double computeRollingAverage(int windowSize, int offset) {
+        if (recentGameRewardCount < windowSize + offset) return 0.0;
+
+        double sum = 0.0;
+        for (int i = 0; i < windowSize; i++) {
+            int idx = (recentGameRewardHead - 1 - offset - i + recentGameRewards.length) % recentGameRewards.length;
+            sum += recentGameRewards[idx];
+        }
+        return sum / windowSize;
+    }
+
     // ═════════════════════════════════════════════════════════════
     //  QUERIES (for commands / debug)
     // ═════════════════════════════════════════════════════════════
@@ -518,6 +570,19 @@ public class LearningEngine {
         if (!paused) {
             DebugLogger.log(bot, "Learning resumed.");
         }
+    }
+
+    /**
+     * Returns the current epsilon-greedy exploration rate.
+     *
+     * <p>Epsilon decays linearly from {@code epsilon-start} to {@code epsilon-end}
+     * over {@code epsilon-decay-games} games. After a meta-shift is detected,
+     * epsilon is partially reset to re-enable exploration.</p>
+     *
+     * @return the current epsilon value
+     */
+    public double getCurrentEpsilon() {
+        return currentEpsilon;
     }
 
     /**

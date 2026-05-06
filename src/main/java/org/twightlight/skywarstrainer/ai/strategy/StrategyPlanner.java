@@ -51,6 +51,11 @@ public class StrategyPlanner {
     /** LLM-sourced multipliers that persist until the next LLM update. */
     private Map<BotAction, Double> llmMultipliers;
 
+    // ADD THIS FIELD after lastLLMAdvice
+    /** Confidence of the last LLM advice, used for blending in getActiveMultipliers(). */
+    private double lastLLMConfidence;
+
+
     /** Description from last LLM advice for debug output. */
     private String lastLLMAdvice;
 
@@ -183,6 +188,9 @@ public class StrategyPlanner {
     /**
      * Generates phases for the early game (looting, initial setup).
      */
+    /**
+     * Generates phases for the early game (looting, initial setup).
+     */
     private void generateEarlyGamePhases(@Nonnull List<StrategicPhase> phases,
                                          @Nonnull StringBuilder description,
                                          @Nonnull DecisionContext context,
@@ -289,8 +297,32 @@ public class StrategyPlanner {
                 description.append(" → Bridge to mid");
             }
         }
+
+        if (maxPhases >= 3 && (diff.getDifficulty() == org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty.NIGHTMARE || maxPhases >= 5)) {
+            Map<BotAction, Double> enchantRushMultipliers = new EnumMap<>(BotAction.class);
+            enchantRushMultipliers.put(BotAction.ENCHANT, 2.5);
+            enchantRushMultipliers.put(BotAction.ORGANIZE_INVENTORY, 1.8);
+            enchantRushMultipliers.put(BotAction.LOOT_MID, 1.5);
+            enchantRushMultipliers.put(BotAction.HEAL, 1.3);
+            applyLearnedInfluence(enchantRushMultipliers, learnedPreferences, diff);
+
+            phases.add(new StrategicPhase("Enchant & Optimize",
+                    "Enchant all gear and optimize inventory for maximum combat power",
+                    enchantRushMultipliers,
+                    new StrategicPhase.PhaseCondition() {
+                        @Override
+                        public boolean test(@Nonnull DecisionContext ctx) {
+                            return ctx.equipmentScore > 0.8;
+                        }
+                    }, null, 600));
+            description.append(" → Enchant & Optimize");
+        }
     }
 
+
+    /**
+     * Generates phases for the mid game (equipment gap decisions, hunting or defense).
+     */
     /**
      * Generates phases for the mid game (equipment gap decisions, hunting or defense).
      */
@@ -427,6 +459,34 @@ public class StrategyPlanner {
             }
         }
 
+        // Additional phase for high-complexity plans: Targeted Elimination
+        if (maxPhases >= 4) {
+            Map<BotAction, Double> eliminateMultipliers = new EnumMap<>(BotAction.class);
+            eliminateMultipliers.put(BotAction.FIGHT_WEAKEST, 2.5);
+            eliminateMultipliers.put(BotAction.HUNT_PLAYER, 2.0);
+            eliminateMultipliers.put(BotAction.BRIDGE_TO_PLAYER, 1.8);
+            eliminateMultipliers.put(BotAction.FIGHT_NEAREST, 1.3);
+            eliminateMultipliers.put(BotAction.CAMP_POSITION, 0.2);
+            applyLearnedInfluence(eliminateMultipliers, learnedPreferences, diff);
+
+            phases.add(new StrategicPhase("Targeted Elimination",
+                    "Identify and eliminate the weakest remaining opponent first",
+                    eliminateMultipliers,
+                    new StrategicPhase.PhaseCondition() {
+                        @Override
+                        public boolean test(@Nonnull DecisionContext ctx) {
+                            return ctx.alivePlayerCount <= 2;
+                        }
+                    },
+                    hasFallbacks ? new StrategicPhase.PhaseCondition() {
+                        @Override
+                        public boolean test(@Nonnull DecisionContext ctx) {
+                            return ctx.healthFraction < 0.2;
+                        }
+                    } : null, 1000));
+            description.append(" → Targeted Elimination");
+        }
+
         // Healing phase if low health (added as first phase if applicable)
         if (context.healthFraction < 0.5 && maxPhases >= 2) {
             Map<BotAction, Double> healMultipliers = new EnumMap<>(BotAction.class);
@@ -449,6 +509,10 @@ public class StrategyPlanner {
         }
     }
 
+
+    /**
+     * Generates phases for the late game (forced engagement, final battles).
+     */
     /**
      * Generates phases for the late game (forced engagement, final battles).
      */
@@ -487,6 +551,32 @@ public class StrategyPlanner {
             }
         }
 
+        // Pre-Final Preparation phase for high-complexity plans (planComplexity >= 5)
+        if (maxPhases >= 5) {
+            Map<BotAction, Double> prepFinalMultipliers = new EnumMap<>(BotAction.class);
+            prepFinalMultipliers.put(BotAction.HEAL, 2.5);
+            prepFinalMultipliers.put(BotAction.EAT_FOOD, 2.0);
+            prepFinalMultipliers.put(BotAction.DRINK_POTION, 2.0);
+            prepFinalMultipliers.put(BotAction.ORGANIZE_INVENTORY, 1.5);
+            prepFinalMultipliers.put(BotAction.FIGHT_NEAREST, 0.5);
+            prepFinalMultipliers.put(BotAction.HUNT_PLAYER, 0.3);
+            applyLearnedInfluence(prepFinalMultipliers, learnedPreferences, diff);
+
+            phases.add(new StrategicPhase("Pre-Final Preparation",
+                    "Heal to full, organize inventory, and use potions before the final engagement",
+                    prepFinalMultipliers,
+                    new StrategicPhase.PhaseCondition() {
+                        @Override
+                        public boolean test(@Nonnull DecisionContext ctx) {
+                            return ctx.healthFraction > 0.9 || ctx.timePressure > 0.95;
+                        }
+                    }, null, 400));
+            if (description.length() > 0) {
+                description.append(" → ");
+            }
+            description.append("Pre-Final Prep");
+        }
+
         // Final engagement phase (always present in late game)
         Map<BotAction, Double> finalMultipliers = new EnumMap<>(BotAction.class);
         finalMultipliers.put(BotAction.FIGHT_NEAREST, 2.0);
@@ -513,6 +603,7 @@ public class StrategyPlanner {
         }
         description.append("Final engagement");
     }
+
 
     // ─── Learning Data Consultation ─────────────────────────────
 
@@ -608,21 +699,33 @@ public class StrategyPlanner {
      *
      * @param advice the parsed LLM advice as action multipliers
      */
+    // REPLACE THIS METHOD in StrategyPlanner.java
+    /**
+     * Called when the LLM provides strategic advice. Parses the advice
+     * and incorporates it into the current plan or stores it for the next plan.
+     *
+     * @param adviceDescription  the human-readable strategy description
+     * @param adviceMultipliers  the action priority multipliers
+     * @param confidence         the validated confidence score from LLMAdviceValidator [0.0, 1.0]
+     */
     public void onLLMAdviceReceived(@Nullable String adviceDescription,
-                                    @Nonnull Map<BotAction, Double> adviceMultipliers) {
+                                    @Nonnull Map<BotAction, Double> adviceMultipliers,
+                                    double confidence) {
         this.lastLLMAdvice = adviceDescription;
+        this.lastLLMConfidence = confidence;
         this.llmMultipliers.clear();
         this.llmMultipliers.putAll(adviceMultipliers);
 
         // If there's an active plan, slightly boost relevant multipliers
         if (activePlan != null && !adviceMultipliers.isEmpty()) {
-            activePlan.setConfidence(Math.min(1.0, activePlan.getConfidence() + 0.15));
+            activePlan.setConfidence(Math.min(1.0, activePlan.getConfidence() + 0.15 * confidence));
         }
 
-        DebugLogger.log(bot, "LLM advice received: %s (multipliers=%d)",
+        DebugLogger.log(bot, "LLM advice received: %s (multipliers=%d, confidence=%.3f)",
                 adviceDescription != null ? adviceDescription : "none",
-                adviceMultipliers.size());
+                adviceMultipliers.size(), confidence);
     }
+
 
     // ─── Queries ────────────────────────────────────────────────
 
@@ -631,6 +734,10 @@ public class StrategyPlanner {
      * combined with any LLM-sourced multipliers.
      *
      * <p>Called by DecisionEngine.evaluate() to apply strategy bias.</p>
+     *
+     * <p>LLM multipliers are blended with plan multipliers weighted by the
+     * LLM confidence score. Low-confidence LLM advice barely nudges the plan;
+     * high-confidence advice blends equally.</p>
      *
      * @return map of action → multiplier (1.0 = no change)
      */
@@ -643,23 +750,26 @@ public class StrategyPlanner {
             result.putAll(activePlan.getActiveMultipliers());
         }
 
-        // Blend in LLM multipliers (if any)
+        // Blend in LLM multipliers weighted by confidence
         if (!llmMultipliers.isEmpty()) {
+            double conf = lastLLMConfidence;
             for (Map.Entry<BotAction, Double> entry : llmMultipliers.entrySet()) {
                 BotAction action = entry.getKey();
                 double llmMult = entry.getValue();
                 if (result.containsKey(action)) {
-                    // Average the plan and LLM multipliers
                     double planMult = result.get(action);
-                    result.put(action, (planMult + llmMult) / 2.0);
+                    // Low confidence: almost entirely plan. High confidence: 50/50 blend.
+                    result.put(action, planMult * (1.0 - conf * 0.5) + llmMult * conf * 0.5);
                 } else {
-                    result.put(action, llmMult);
+                    // No plan multiplier — blend LLM toward neutral
+                    result.put(action, 1.0 + conf * (llmMult - 1.0));
                 }
             }
         }
 
         return result;
     }
+
 
     /** @return the currently active plan, or null */
     @Nullable

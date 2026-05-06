@@ -39,14 +39,23 @@ public class LLMResponseParser {
         @Nonnull
         public final String reasoning;
 
+        /**
+         * Confidence score for this advice, in [0.0, 1.0].
+         * Set by {@link LLMAdviceValidator} after validation.
+         * Defaults to 1.0 (fully trusted) before validation.
+         */
+        public double confidence;
+
         public ParsedAdvice(@Nonnull String strategyDescription,
                             @Nonnull Map<BotAction, Double> actionMultipliers,
                             @Nonnull String reasoning) {
             this.strategyDescription = strategyDescription;
             this.actionMultipliers = actionMultipliers;
             this.reasoning = reasoning;
+            this.confidence = 1.0;
         }
     }
+
 
     /**
      * Parses an LLM response string into actionable advice.

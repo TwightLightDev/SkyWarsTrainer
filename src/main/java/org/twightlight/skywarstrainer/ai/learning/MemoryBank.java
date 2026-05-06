@@ -162,13 +162,7 @@ public class MemoryBank {
      */
     public void recordOutcomeSign(int stateId, int actionOrdinal, int sign) {
         QEntry entry = getOrCreateEntry(stateId);
-        // Store in circular buffer — we pack (actionOrdinal, sign) together.
-        // The circular buffer tracks overall outcome signs per entry (not per-action).
-        // For per-action contradiction detection, we index by action in the pruner
-        // using the raw recentOutcomeSigns + knowledge of which action was taken.
-        //
-        // Simplified approach: store packed (actionOrdinal << 2 | (sign+1)) to fit in int
-        int packed = (actionOrdinal << 2) | (sign + 1); // sign+1 maps {-1,0,1} → {0,1,2}
+        int packed = (actionOrdinal << 2) | (sign + 1);
         entry.recentOutcomeSigns[entry.recentOutcomeHead] = packed;
         entry.recentOutcomeHead = (entry.recentOutcomeHead + 1) % entry.recentOutcomeSigns.length;
     }
@@ -185,6 +179,35 @@ public class MemoryBank {
         entry.centroidSampleCount++;
         for (int i = 0; i < entry.stateCentroid.length && i < stateVector.length; i++) {
             entry.stateCentroid[i] += (stateVector[i] - entry.stateCentroid[i]) / entry.centroidSampleCount;
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════
+    //  Q-VALUE DECAY
+    // ═════════════════════════════════════════════════════════════
+
+    /**
+     * Multiplicatively decays all Q-values in the entire Q-table by the given factor.
+     *
+     * <p>This implements a "forgetting" mechanism: over time, old Q-values shrink toward
+     * zero unless reinforced by new experiences. This prevents the system from being
+     * permanently stuck in strategies learned against opponents that no longer appear.</p>
+     *
+     * <p>Called periodically from {@link LearningEngine#onGameEnd(boolean, int, int, double)}
+     * every N games (controlled by {@code q-value-decay-interval-games}). Also called
+     * aggressively (with factor 0.5) when a meta-shift is detected.</p>
+     *
+     * <p>Performance: single pass over all entries, no allocation. O(entries × actions).</p>
+     *
+     * @param factor the multiplicative decay factor (e.g. 0.995 for gentle decay,
+     *               0.5 for aggressive reset). Must be in (0.0, 1.0].
+     */
+    public void decayAllQValues(double factor) {
+        if (factor <= 0.0 || factor > 1.0) return;
+        for (QEntry entry : qTable.values()) {
+            for (int i = 0; i < entry.qValues.length; i++) {
+                entry.qValues[i] *= factor;
+            }
         }
     }
 

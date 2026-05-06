@@ -35,6 +35,15 @@ public class LearningConfig {
     private int maxGamesBeforeStable;
     private double stabilityLrMultiplier;
 
+    // ── Exploration ──
+    private double epsilonStart;
+    private double epsilonEnd;
+    private int epsilonDecayGames;
+    private double qValueDecayRate;
+    private int qValueDecayIntervalGames;
+    private int metaShiftDetectionWindow;
+    private double metaShiftRewardDropThreshold;
+
     // ── Memory ──
     private int maxEntries;
     private int binsPerDimension;
@@ -125,6 +134,15 @@ public class LearningConfig {
         this.maxGamesBeforeStable = getOrDefaultInt(learning, "max-games-before-stable", 200);
         this.stabilityLrMultiplier = getOrDefault(learning, "stability-lr-multiplier", 0.1);
 
+        // ── Exploration section (within learning) ──
+        this.epsilonStart = getOrDefault(learning, "epsilon-start", 0.3);
+        this.epsilonEnd = getOrDefault(learning, "epsilon-end", 0.02);
+        this.epsilonDecayGames = getOrDefaultInt(learning, "epsilon-decay-games", 150);
+        this.qValueDecayRate = getOrDefault(learning, "q-value-decay-rate", 0.995);
+        this.qValueDecayIntervalGames = getOrDefaultInt(learning, "q-value-decay-interval-games", 5);
+        this.metaShiftDetectionWindow = getOrDefaultInt(learning, "meta-shift-detection-window", 15);
+        this.metaShiftRewardDropThreshold = getOrDefault(learning, "meta-shift-reward-drop-threshold", 0.4);
+
         // ── Memory section ──
         ConfigurationSection memory = config.getConfigurationSection("memory");
         this.maxEntries = getOrDefaultInt(memory, "max-entries", 50000);
@@ -208,6 +226,29 @@ public class LearningConfig {
     public double getTracePruneThreshold() { return tracePruneThreshold; }
     public int getMaxGamesBeforeStable() { return maxGamesBeforeStable; }
     public double getStabilityLrMultiplier() { return stabilityLrMultiplier; }
+
+    // ── Exploration ──
+
+    /** @return the initial epsilon-greedy exploration rate */
+    public double getEpsilonStart() { return epsilonStart; }
+
+    /** @return the final (minimum) epsilon-greedy exploration rate */
+    public double getEpsilonEnd() { return epsilonEnd; }
+
+    /** @return the number of games over which epsilon decays from start to end */
+    public int getEpsilonDecayGames() { return epsilonDecayGames; }
+
+    /** @return the per-game multiplicative decay factor applied to all Q-values */
+    public double getQValueDecayRate() { return qValueDecayRate; }
+
+    /** @return apply Q-value decay every N games (for performance) */
+    public int getQValueDecayIntervalGames() { return qValueDecayIntervalGames; }
+
+    /** @return the number of games to look back for meta shift detection */
+    public int getMetaShiftDetectionWindow() { return metaShiftDetectionWindow; }
+
+    /** @return if recent avg reward drops below this fraction of historical avg, trigger meta shift */
+    public double getMetaShiftRewardDropThreshold() { return metaShiftRewardDropThreshold; }
 
     // ── Memory ──
     public int getMaxEntries() { return maxEntries; }

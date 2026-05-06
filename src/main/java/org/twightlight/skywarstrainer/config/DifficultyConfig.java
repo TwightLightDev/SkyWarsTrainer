@@ -354,6 +354,48 @@ public class DifficultyConfig {
                         .planLLMConsultChance(0.8).planFallbackEnabled(true);
                 b.threatPredictionEnabled(true).threatPredictionAccuracy(0.9);
                 break;
+            case NIGHTMARE:
+                b.reactionTimeMin(30).reactionTimeMax(60)
+                        .aimAccuracy(1.0)
+                        .aimSpeedDegPerTick(45.0)
+                        .maxCPS(20).cpsVariance(0.0)
+                        .sprintResetChance(1.0).wTapEfficiency(1.0)
+                        .strafeIntensity(1.0).strafeUnpredictability(1.0)
+                        .blockHitChance(1.0)
+                        .projectileAccuracy(1.0)
+                        .bridgeSpeed(12.0).bridgeMaxType("GOD").bridgeFailRate(0.0)
+                        .lootSpeedMultiplier(2.0).lootDecisionQuality(1.0)
+                        .inventoryManageSkill(1.0).hotbarOrganization(1.0)
+                        .decisionQuality(1.0).awarenessRadius(120)
+                        .fleeHealthThreshold(0.5)
+                        .pearlUsageIQ(1.0).potionUsageIQ(1.0)
+                        .comboLength(15)
+                        .rodUsageSkill(1.0).blockPlaceChance(1.0)
+                        .comboBreakPriority(1.0).antiKBReduction(0.8)
+                        .waterBucketMLG(1.0)
+                        .mistakeFrequency(0.0)
+                        .headMovementNoise(0.0)
+                        .itemDropOnDeathPanic(0.0);
+                b.jumpBridgeChance(1.0).stairBridgeSkill(1.0)
+                        .fakeBridgeChance(0.8).bridgeSafetyRailChance(0.0)
+                        .diagonalApproachTendency(1.0).verticalApproachTendency(1.0)
+                        .splitPathChance(0.7).approachPatienceTicks(400)
+                        .edgeKnockSkill(1.0).comboLockSkill(1.0)
+                        .kbCancelSkill(1.0).preferredEngageDistance(3.0)
+                        .highGroundPriority(1.0).islandRotationTendency(1.0)
+                        .thirdPartyTendency(1.0).bridgeCutSkill(1.0)
+                        .projectileZoningTendency(1.0).retreatHealSkill(1.0)
+                        .counterPlayIQ(1.0).antiRushReaction(1.0).baitDetectionSkill(1.0)
+                        .learningRate(0.03);
+                b.strategyPlanningEnabled(true).planComplexity(6)
+                        .planReevalIntervalTicks(50)
+                        .planConfidenceDecayRate(0.0005)
+                        .planLearningInfluence(1.0)
+                        .planLLMConsultChance(1.0)
+                        .planFallbackEnabled(true);
+                b.threatPredictionEnabled(true).threatPredictionAccuracy(1.0);
+                break;
+
         }
         return b.build();
     }
@@ -381,14 +423,9 @@ public class DifficultyConfig {
         EASY,
         MEDIUM,
         HARD,
-        EXPERT;
+        EXPERT,
+        NIGHTMARE;
 
-        /**
-         * Attempts to parse a difficulty name (case-insensitive).
-         *
-         * @param name the name to parse
-         * @return the Difficulty, or null if not found
-         */
         @Nullable
         public static Difficulty fromString(@Nullable String name) {
             if (name == null) return null;
@@ -400,15 +437,17 @@ public class DifficultyConfig {
         }
 
         /**
-         * Returns the ordinal as a 0.0–1.0 fraction. BEGINNER=0.0, EXPERT=1.0.
-         * Useful for interpolation between difficulty extremes.
+         * Returns the ordinal as a 0.0–1.0+ fraction. BEGINNER=0.0, EXPERT=1.0,
+         * NIGHTMARE=1.25 (above 1.0 so interpolation-based code scales beyond EXPERT).
          *
          * @return the difficulty fraction
          */
         public double asFraction() {
+            if (this == NIGHTMARE) return 1.25;
             return ordinal() / 4.0;
         }
     }
+
 
     // ═════════════════════════════════════════════════════════════
     //  INNER: DifficultyProfile

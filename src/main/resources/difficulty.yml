@@ -7,71 +7,38 @@
 
 difficulties:
   BEGINNER:
-    # Reaction time range in milliseconds
     reactionTimeMin: 600
     reactionTimeMax: 1200
-    # Aim accuracy from 0.0 (terrible) to 1.0 (perfect)
     aimAccuracy: 0.3
-    # Maximum degrees the bot can rotate per tick toward a target
     aimSpeedDegPerTick: 3.0
-    # Clicks per second for melee attacks
     maxCPS: 5
-    # Variance in CPS (actual CPS = random in [maxCPS - variance, maxCPS])
     cpsVariance: 3.0
-    # Probability of performing a sprint-reset on each hit
     sprintResetChance: 0.0
-    # Efficiency of W-tap timing (0 = never, 1 = frame-perfect)
     wTapEfficiency: 0.0
-    # How aggressively the bot strafes during combat (0 = stationary)
     strafeIntensity: 0.1
-    # How unpredictable strafe patterns are (0 = simple L-R)
     strafeUnpredictability: 0.0
-    # Probability of block-hitting between melee swings
     blockHitChance: 0.0
-    # Accuracy for projectile aiming (snowball, bow, egg, rod)
     projectileAccuracy: 0.15
-    # Blocks placed per second while bridging
     bridgeSpeed: 1.5
-    # Highest bridge technique the bot can attempt
-    # Options: NORMAL, SPEED, NINJA, MOONWALK, GOD
     bridgeMaxType: "NORMAL"
-    # Probability of a bridging mistake per block placed
     bridgeFailRate: 0.15
-    # Multiplier on how fast the bot loots chests
     lootSpeedMultiplier: 0.5
-    # How well the bot decides which items to take (0 = random, 1 = optimal)
     lootDecisionQuality: 0.3
-    # Skill at managing inventory (equip speed, organization)
     inventoryManageSkill: 0.2
-    # How well the hotbar is organized (0 = chaotic, 1 = perfect layout)
     hotbarOrganization: 0.1
-    # Overall quality of strategic decisions (noise reduction in utility AI)
     decisionQuality: 0.3
-    # Block radius the bot can detect enemies, chests, terrain
     awarenessRadius: 15
-    # HP fraction below which the bot considers fleeing
     fleeHealthThreshold: 0.15
-    # Skill with ender pearl usage (0 = won't use, 1 = clutch pearls)
     pearlUsageIQ: 0.0
-    # Skill with potion usage (timing, type selection)
     potionUsageIQ: 0.0
-    # Average maximum combo length the bot can sustain
     comboLength: 1
-    # Skill with fishing rod (aim, timing, combo follow-up)
     rodUsageSkill: 0.0
-    # Chance to place blocks tactically during combat
     blockPlaceChance: 0.05
-    # How aggressively the bot places blocks to break enemy combos
     comboBreakPriority: 0.1
-    # Percentage of incoming knockback the bot can reduce via movement countering
     antiKBReduction: 0.0
-    # Success chance for water bucket MLG when falling
     waterBucketMLG: 0.0
-    # Number of intentional mistakes per minute (makes bot feel human)
     mistakeFrequency: 12.0
-    # Constant subtle head movement noise when idle (degrees)
     headMovementNoise: 0.3
-    # Chance to panic-drop items when near death
     itemDropOnDeathPanic: 0.4
     jumpBridgeChance: 0.0
     stairBridgeSkill: 0.1
@@ -95,7 +62,6 @@ difficulties:
     antiRushReaction: 0.1
     baitDetectionSkill: 0.0
     learningRate: 0.15
-    # ── Strategy Planning ──
     strategyPlanningEnabled: false
     planComplexity: 1
     planReevalIntervalTicks: 400
@@ -103,7 +69,6 @@ difficulties:
     planLearningInfluence: 0.0
     planLLMConsultChance: 0.0
     planFallbackEnabled: false
-    # ── Threat Prediction ──
     threatPredictionEnabled: false
     threatPredictionAccuracy: 0.0
 
@@ -163,7 +128,6 @@ difficulties:
     antiRushReaction: 0.2
     baitDetectionSkill: 0.1
     learningRate: 0.12
-    # ── Strategy Planning ──
     strategyPlanningEnabled: true
     planComplexity: 2
     planReevalIntervalTicks: 300
@@ -171,7 +135,6 @@ difficulties:
     planLearningInfluence: 0.1
     planLLMConsultChance: 0.0
     planFallbackEnabled: false
-    # ── Threat Prediction ──
     threatPredictionEnabled: false
     threatPredictionAccuracy: 0.1
 
@@ -231,7 +194,6 @@ difficulties:
     antiRushReaction: 0.4
     baitDetectionSkill: 0.3
     learningRate: 0.10
-    # ── Strategy Planning ──
     strategyPlanningEnabled: true
     planComplexity: 3
     planReevalIntervalTicks: 200
@@ -239,7 +201,6 @@ difficulties:
     planLearningInfluence: 0.3
     planLLMConsultChance: 0.2
     planFallbackEnabled: true
-    # ── Threat Prediction ──
     threatPredictionEnabled: true
     threatPredictionAccuracy: 0.4
 
@@ -299,7 +260,6 @@ difficulties:
     antiRushReaction: 0.65
     baitDetectionSkill: 0.6
     learningRate: 0.08
-    # ── Strategy Planning ──
     strategyPlanningEnabled: true
     planComplexity: 4
     planReevalIntervalTicks: 150
@@ -307,7 +267,6 @@ difficulties:
     planLearningInfluence: 0.6
     planLLMConsultChance: 0.5
     planFallbackEnabled: true
-    # ── Threat Prediction ──
     threatPredictionEnabled: true
     threatPredictionAccuracy: 0.7
 
@@ -367,7 +326,6 @@ difficulties:
     antiRushReaction: 0.9
     baitDetectionSkill: 0.85
     learningRate: 0.05
-    # ── Strategy Planning ──
     strategyPlanningEnabled: true
     planComplexity: 5
     planReevalIntervalTicks: 100
@@ -375,6 +333,71 @@ difficulties:
     planLearningInfluence: 0.9
     planLLMConsultChance: 0.8
     planFallbackEnabled: true
-    # ── Threat Prediction ──
     threatPredictionEnabled: true
     threatPredictionAccuracy: 0.9
+
+  NIGHTMARE:
+    reactionTimeMin: 30
+    reactionTimeMax: 60
+    aimAccuracy: 1.0
+    aimSpeedDegPerTick: 45.0
+    maxCPS: 20
+    cpsVariance: 0.0
+    sprintResetChance: 1.0
+    wTapEfficiency: 1.0
+    strafeIntensity: 1.0
+    strafeUnpredictability: 1.0
+    blockHitChance: 1.0
+    projectileAccuracy: 1.0
+    bridgeSpeed: 12.0
+    bridgeMaxType: "GOD"
+    bridgeFailRate: 0.0
+    lootSpeedMultiplier: 2.0
+    lootDecisionQuality: 1.0
+    inventoryManageSkill: 1.0
+    hotbarOrganization: 1.0
+    decisionQuality: 1.0
+    awarenessRadius: 120
+    fleeHealthThreshold: 0.5
+    pearlUsageIQ: 1.0
+    potionUsageIQ: 1.0
+    comboLength: 15
+    rodUsageSkill: 1.0
+    blockPlaceChance: 1.0
+    comboBreakPriority: 1.0
+    antiKBReduction: 0.8
+    waterBucketMLG: 1.0
+    mistakeFrequency: 0.0
+    headMovementNoise: 0.0
+    itemDropOnDeathPanic: 0.0
+    jumpBridgeChance: 1.0
+    stairBridgeSkill: 1.0
+    fakeBridgeChance: 0.8
+    bridgeSafetyRailChance: 0.0
+    diagonalApproachTendency: 1.0
+    verticalApproachTendency: 1.0
+    splitPathChance: 0.7
+    approachPatienceTicks: 400
+    edgeKnockSkill: 1.0
+    comboLockSkill: 1.0
+    kbCancelSkill: 1.0
+    preferredEngageDistance: 3.0
+    highGroundPriority: 1.0
+    islandRotationTendency: 1.0
+    thirdPartyTendency: 1.0
+    bridgeCutSkill: 1.0
+    projectileZoningTendency: 1.0
+    retreatHealSkill: 1.0
+    counterPlayIQ: 1.0
+    antiRushReaction: 1.0
+    baitDetectionSkill: 1.0
+    learningRate: 0.03
+    strategyPlanningEnabled: true
+    planComplexity: 6
+    planReevalIntervalTicks: 50
+    planConfidenceDecayRate: 0.0005
+    planLearningInfluence: 1.0
+    planLLMConsultChance: 1.0
+    planFallbackEnabled: true
+    threatPredictionEnabled: true
+    threatPredictionAccuracy: 1.0

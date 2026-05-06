@@ -7,6 +7,7 @@ import org.twightlight.skywarstrainer.ai.decision.DecisionEngine.BotAction;
 import org.twightlight.skywarstrainer.ai.strategy.StrategyPlan;
 import org.twightlight.skywarstrainer.ai.strategy.StrategyPlanner;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
+import org.twightlight.skywarstrainer.config.DifficultyConfig;
 import org.twightlight.skywarstrainer.util.DebugLogger;
 
 import javax.annotation.Nonnull;
@@ -137,9 +138,17 @@ public class LLMManager {
         });
     }
 
+    // REPLACE THIS METHOD in LLMManager.java
     /**
      * Processes pending LLM responses on the main thread. Delivers parsed
-     * advice to the appropriate bot's StrategyPlanner.
+     * and validated advice to the appropriate bot's StrategyPlanner.
+     *
+     * <p>Each response goes through three stages:</p>
+     * <ol>
+     *   <li>Parse the raw text into {@link LLMResponseParser.ParsedAdvice}</li>
+     *   <li>Validate against the bot's current context via {@link LLMAdviceValidator}</li>
+     *   <li>Deliver to the bot's {@link org.twightlight.skywarstrainer.ai.strategy.StrategyPlanner}</li>
+     * </ol>
      */
     public void processPendingResponses() {
         PendingResponse pending;
@@ -156,15 +165,32 @@ public class LLMManager {
                 continue;
             }
 
-            StrategyPlanner planner = bot.getStrategyPlanner();
-            if (planner != null) {
-                planner.onLLMAdviceReceived(advice.strategyDescription, advice.actionMultipliers);
+            // ═══ Validation step: check coherence, contradictions, trust ═══
+            DecisionContext context = null;
+            if (bot.getDecisionEngine() != null) {
+                context = bot.getDecisionEngine().getContext();
+            }
+            DifficultyConfig.DifficultyProfile diff = bot.getDifficultyProfile();
+
+            if (context != null && diff != null) {
+                advice = LLMAdviceValidator.validateAndScore(advice, context, diff);
+                if (advice == null) {
+                    DebugLogger.log(bot, "LLM advice rejected (low confidence).");
+                    continue;
+                }
             }
 
-            DebugLogger.log(bot, "LLM advice delivered: %s (multipliers=%d)",
-                    advice.strategyDescription, advice.actionMultipliers.size());
+            StrategyPlanner planner = bot.getStrategyPlanner();
+            if (planner != null) {
+                planner.onLLMAdviceReceived(advice.strategyDescription,
+                        advice.actionMultipliers, advice.confidence);
+            }
+
+            DebugLogger.log(bot, "LLM advice delivered: %s (multipliers=%d, confidence=%.3f)",
+                    advice.strategyDescription, advice.actionMultipliers.size(), advice.confidence);
         }
     }
+
 
     /**
      * Finds a bot by its UUID. Searches the BotManager.

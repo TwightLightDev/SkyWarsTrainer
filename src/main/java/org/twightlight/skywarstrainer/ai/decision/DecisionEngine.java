@@ -15,6 +15,7 @@ import org.twightlight.skywarstrainer.config.DifficultyConfig.DifficultyProfile;
 import org.twightlight.skywarstrainer.movement.MovementController;
 import org.twightlight.skywarstrainer.util.MathUtil;
 import org.twightlight.skywarstrainer.util.RandomUtil;
+import org.twightlight.skywarstrainer.util.DebugLogger;
 import org.twightlight.skywarstrainer.ai.strategy.StrategyPlanner;
 import org.twightlight.skywarstrainer.ai.decision.considerations.ThreatPredictionConsideration;
 import org.twightlight.skywarstrainer.ai.decision.considerations.StrategyAlignmentConsideration;
@@ -34,6 +35,7 @@ import java.util.*;
  *       weighted {@link UtilityScorer} considerations</li>
  *   <li>Applies personality multipliers to the scores via {@link org.twightlight.skywarstrainer.ai.personality.PersonalityProfile}</li>
  *   <li>Applies decision quality noise (lower quality = more random)</li>
+ *   <li>Applies epsilon-greedy exploration from the learning system</li>
  *   <li>Picks the highest-scoring action and transitions the {@link BotStateMachine}</li>
  * </ol></p>
  *
@@ -209,6 +211,19 @@ public class DecisionEngine {
             lastScores.put(action, score);
         }
 
+        // ═══ Step 5b: Epsilon-greedy exploration from learning system ═══
+        LearningEngine lm = bot.getLearningEngine();
+        if (lm != null && !lm.isLearningPaused()) {
+            double epsilon = lm.getCurrentEpsilon();
+            if (RandomUtil.chance(epsilon)) {
+                // Exploration: pick a random action and boost its score to force selection
+                BotAction[] allActions = BotAction.values();
+                BotAction randomAction = allActions[RandomUtil.nextInt(0, allActions.length - 1)];
+                lastScores.put(randomAction, lastScores.getOrDefault(randomAction, 0.0) + 5.0);
+                DebugLogger.log(bot, "Learning: EXPLORING with %s (ε=%.3f)", randomAction.name(), epsilon);
+            }
+        }
+
         // 6. Select the best action
         BotAction bestAction = selectBestAction(decisionQuality);
 
@@ -282,7 +297,6 @@ public class DecisionEngine {
      * @param action the action to check
      * @return true if fight-related
      */
-    // [FIX-B1] Helper for same-action target staleness detection
     private boolean isFightAction(@Nonnull BotAction action) {
         return action == BotAction.FIGHT_NEAREST
                 || action == BotAction.FIGHT_WEAKEST
@@ -345,7 +359,6 @@ public class DecisionEngine {
                 bot.getEnemyAnalyzer();
         if (analyzer == null) return score;
 
-        // Get primary threat's counter modifiers
         org.twightlight.skywarstrainer.awareness.ThreatMap threatMap = bot.getThreatMap();
         if (threatMap == null) return score;
 
@@ -385,7 +398,6 @@ public class DecisionEngine {
      * Handles decision-making during grace period. Only looting and idle are allowed.
      */
     private void handleGracePeriod() {
-        // Check if RUSHER personality — should bridge to mid even during grace
         boolean isRusher = bot.getProfile().hasPersonality("RUSHER");
 
         if (isRusher && context.blockCount > 0) {
@@ -421,7 +433,6 @@ public class DecisionEngine {
             totalWeight += Math.abs(wc.weight);
         }
 
-        // Normalize by total weight so all actions are on the same scale
         if (totalWeight > 0) {
             totalScore /= totalWeight;
         }
@@ -431,7 +442,6 @@ public class DecisionEngine {
 
     /**
      * Selects the best action from the scored map.
-     *
      */
     @Nullable
     private BotAction selectBestAction(double decisionQuality) {
@@ -441,7 +451,6 @@ public class DecisionEngine {
         sorted.sort((a, b) -> Double.compare(b.getValue(), a.getValue()));
 
         if (decisionQuality < 0.3 && sorted.size() > 1 && RandomUtil.chance(0.3)) {
-            // [FIX 5.4] Upper bound is sorted.size()-1 (inclusive), minimum index 1
             int maxIdx = Math.min(3, sorted.size() - 1);
             if (maxIdx >= 1) {
                 int pick = RandomUtil.nextInt(1, maxIdx);
@@ -460,12 +469,7 @@ public class DecisionEngine {
 
     /**
      * Returns the personality multiplier for a given action based on the bot's
-     * PersonalityProfile. Uses the resolved modifiers from all assigned personalities.
-     *
-     * <p>The mapping from BotAction to modifier key accounts for the fact that
-     * multiple actions may share a modifier key (e.g., all FIGHT variants use "FIGHT"),
-     * and some personalities define specific keys (e.g., RUSHER defines "LOOT_OWN_ISLAND"
-     * separately from "LOOT").</p>
+     * PersonalityProfile.
      *
      * @param action the action to get the multiplier for
      * @return the combined personality multiplier, clamped to [0.01, 5.0]
@@ -475,13 +479,11 @@ public class DecisionEngine {
                 bot.getProfile().getPersonalityProfile();
         if (profile.isEmpty()) return 1.0;
 
-        // Try specific key first, then generic key
         String specificKey = actionToSpecificKey(action);
         String genericKey = actionToGenericKey(action);
 
         double multiplier = profile.getModifier(specificKey);
 
-        // If the specific key returned 1.0 (default / not defined), also check generic
         if (Math.abs(multiplier - 1.0) < 0.001 && !specificKey.equals(genericKey)) {
             double genericMult = profile.getModifier(genericKey);
             if (Math.abs(genericMult - 1.0) > 0.001) {
@@ -489,7 +491,6 @@ public class DecisionEngine {
             }
         }
 
-        // Clamp to prevent extreme values
         return MathUtil.clamp(multiplier, 0.01, 5.0);
     }
 
@@ -518,7 +519,6 @@ public class DecisionEngine {
 
     /**
      * Maps a BotAction to a specific personality modifier key.
-     * These are the exact keys as defined in Personality enum modifiers.
      *
      * @param action the action
      * @return the specific modifier key
@@ -547,7 +547,6 @@ public class DecisionEngine {
 
     /**
      * Maps a BotAction to a generic/fallback modifier key.
-     * Used when the specific key has no modifier defined.
      *
      * @param action the action
      * @return the generic modifier key
@@ -567,12 +566,6 @@ public class DecisionEngine {
 
     /**
      * Maps a utility action to the corresponding BotState for state machine transition.
-     *
-     * FIX for issues #10-#13:
-     * - HEAL, EAT_FOOD, DRINK_POTION now map to CONSUMING instead of IDLE
-     * - ORGANIZE_INVENTORY now maps to ORGANIZING instead of IDLE
-     * - USE_ENDER_PEARL still returns null but is handled by executeImmediateAction()
-     * - ENCHANTING already mapped correctly; the BT itself was the problem (fixed in TrainerBot)
      */
     @Nullable
     private BotState actionToState(@Nonnull BotAction action) {
@@ -625,11 +618,6 @@ public class DecisionEngine {
 
     /**
      * Executes actions that are immediate (single-tick) and don't need a state transition.
-     * Called from evaluate() when actionToState() returns null.
-     *
-     * FIX for issue #12: USE_ENDER_PEARL was a dead action — selected by the utility
-     * system, returned null from actionToState(), and then nothing happened. Now
-     * the pearl is actually thrown here.
      *
      * @param action the immediate action to execute
      */
@@ -639,14 +627,12 @@ public class DecisionEngine {
                 executeEnderPearlThrow();
                 break;
             default:
-                // No other immediate actions currently
                 break;
         }
     }
 
     /**
      * Actually throws an ender pearl toward the best target location.
-     * Targets the nearest threat's position, or mid island if no threat is visible.
      */
     private void executeEnderPearlThrow() {
         org.bukkit.entity.Player player = bot.getPlayerEntity();
@@ -699,11 +685,9 @@ public class DecisionEngine {
 
         int previousSlot = player.getInventory().getHeldItemSlot();
 
-        // If pearl is in hotbar, just switch to it
         if (pearlSlot < 9) {
             player.getInventory().setHeldItemSlot(pearlSlot);
         } else {
-            // Pearl is in main inventory — swap it into the current hotbar slot
             org.bukkit.inventory.ItemStack pearl = player.getInventory().getItem(pearlSlot);
             org.bukkit.inventory.ItemStack swap = player.getInventory().getItem(previousSlot);
             player.getInventory().setItem(previousSlot, pearl);
@@ -719,8 +703,6 @@ public class DecisionEngine {
                 org.bukkit.entity.EnderPearl.class,
                 target.toVector().subtract(player.getEyeLocation().toVector()).normalize().multiply(1.5));
 
-        // [FIX 5.5] Consume the pearl by slot index instead of relying on getItemInHand()
-        // which may not be the pearl after slot switching shenanigans.
         int consumeSlot = (pearlSlot < 9) ? pearlSlot : previousSlot;
         org.bukkit.inventory.ItemStack pearlItem = player.getInventory().getItem(consumeSlot);
         if (pearlItem != null && pearlItem.getType() == org.bukkit.Material.ENDER_PEARL) {
@@ -731,7 +713,6 @@ public class DecisionEngine {
             }
         }
 
-        // [FIX 5.6] Use bot's stored plugin reference instead of SkyWarsTrainer.getInstance()
         if (bot.getProfile().isDebugMode()) {
             bot.getPlugin().getLogger().info(
                     "[DEBUG] " + bot.getName() + " threw ender pearl toward " +
@@ -744,7 +725,6 @@ public class DecisionEngine {
 
     /**
      * Builds the consideration-weight tables for each possible action.
-     * This defines how each consideration influences each action's utility score.
      */
     private void buildActionWeights() {
         // ── LOOT_OWN_ISLAND ──
@@ -825,7 +805,7 @@ public class DecisionEngine {
                 equipmentGapConsideration, 0.6,
                 healthConsideration, -0.7,
                 timePressureConsideration, 0.6,
-                counterPlayConsideration, 0.5);  // [FIX B2]
+                counterPlayConsideration, 0.5);
 
         // ── FIGHT_TARGETED ──
         addWeight(BotAction.FIGHT_TARGETED,
@@ -840,7 +820,7 @@ public class DecisionEngine {
                 threatConsideration, 1.0,
                 equipmentGapConsideration, -1.2,
                 resourceConsideration, -0.3,
-                counterPlayConsideration, 0.4);  // [FIX B2]
+                counterPlayConsideration, 0.4);
 
         // ── HEAL ──
         addWeight(BotAction.HEAL,
@@ -876,7 +856,7 @@ public class DecisionEngine {
                 resourceConsideration, 0.4,
                 threatConsideration, -0.3,
                 playerCountConsideration, 0.5,
-                counterPlayConsideration, 0.5,   // [FIX B2]
+                counterPlayConsideration, 0.5,
                 positionalConsideration, 0.6);
 
         // ── HUNT_PLAYER ──
@@ -923,8 +903,7 @@ public class DecisionEngine {
     // ─── Custom Consideration Registration ──────────────────────
 
     /**
-     * Registers a custom utility consideration via the API. Custom considerations
-     * are evaluated alongside built-in ones during each evaluation cycle.
+     * Registers a custom utility consideration via the API.
      *
      * @param consideration the custom consideration to register
      */
