@@ -308,6 +308,14 @@ public class TrainerBot {
             movementController.resetAuthority();
         }
 
+        // [FIX] Cancel any active tower sequence on state change
+        if (elevationHandler != null && elevationHandler.isTowering()) {
+            // Tower sequences are short, but if we change state, we should stop
+            // to avoid placing blocks in wrong states
+            elevationHandler.cancelTower();
+        }
+
+
         // [FIX-E1] Cancel active defensive behavior on ANY state change.
         // Without this, a BridgeCutter active during CAMPING persists into FIGHTING,
         // and the FIGHTING BT's defensive tick runs the stale BridgeCutter instead
@@ -474,6 +482,19 @@ public class TrainerBot {
                             // (see BridgeEngine changes)
                             BridgeEngine.BridgeTickResult result = bridgeEngine.tick();
 
+                            // [FIX] Handle elevation differences to bridge destination
+                            if (elevationHandler != null) {
+                                LivingEntity entity = getLivingEntity();
+                                if (entity != null && bridgeEngine.getDestination() != null) {
+                                    elevationHandler.handleElevation(entity.getLocation(), bridgeEngine.getDestination());
+                                    if (elevationHandler.isTowering()) {
+                                        elevationHandler.tickTower();
+                                        return NodeStatus.RUNNING;
+                                    }
+                                }
+                            }
+
+
                             // Check for incoming threats while bridging
                             if (threatMap != null && threatMap.getVisibleEnemyCount() > 0) {
                                 ThreatMap.ThreatEntry nearest = threatMap.getNearestThreat();
@@ -527,6 +548,9 @@ public class TrainerBot {
                                 dx /= len; dz /= len;
                                 Location fleeTarget = botLoc.clone().add(dx * 10, 0, dz * 10);
                                 mc.setMoveTarget(fleeTarget, MovementController.MovementAuthority.FLEE);
+                                if (elevationHandler != null && mc.getMoveTarget() != null) {
+                                    elevationHandler.handleElevation(botLoc, mc.getMoveTarget());
+                                }
                             }
                         }
                     }
@@ -794,6 +818,14 @@ public class TrainerBot {
                                             MovementController mc = getMovementController();
                                             if (mc != null) {
                                                 mc.getSprintController().startSprinting();
+                                                // [FIX] Handle elevation differences when hunting
+                                                if (elevationHandler != null) {
+                                                    elevationHandler.handleElevation(entity.getLocation(), target.getLocation());
+                                                    if (elevationHandler.isTowering()) {
+                                                        elevationHandler.tickTower();
+                                                        return NodeStatus.RUNNING;
+                                                    }
+                                                }
                                                 mc.setMoveTarget(target.getLocation(), MovementController.MovementAuthority.HUNTING);
                                                 mc.setLookTarget(target.getLocation().add(0, 1.0, 0));
                                             }
@@ -1212,6 +1244,13 @@ public class TrainerBot {
             tickSafe("strategyPlanner", () -> {
                 if (strategyPlanner != null) strategyPlanner.tick();
             });
+
+            tickSafe("elevationHandler", () -> {
+                if (elevationHandler != null && elevationHandler.isTowering()) {
+                    elevationHandler.tickTower();
+                }
+            });
+
         }
 
         // ── 17. Learning Module (every ~10 ticks) ──

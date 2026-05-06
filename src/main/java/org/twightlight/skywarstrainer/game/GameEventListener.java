@@ -23,6 +23,7 @@ import org.twightlight.skywars.arena.Arena;
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.decision.DecisionEngine;
 import org.twightlight.skywarstrainer.ai.learning.LearningEngine;
+import org.twightlight.skywarstrainer.ai.llm.LLMManager;
 import org.twightlight.skywarstrainer.ai.strategy.StrategyPlanner;
 import org.twightlight.skywarstrainer.awareness.ThreatPredictor;
 import org.twightlight.skywarstrainer.bot.BotManager;
@@ -71,14 +72,25 @@ public class GameEventListener implements Listener {
                 LearningEngine lm = bot.getLearningEngine();
                 if (lm != null) {
                     lm.onGameStart();
-
-                    // Reset threat predictor
-                    ThreatPredictor tp = bot.getThreatPredictor();
-                    if (tp != null) {
-                        tp.reset();
-                    }
-
                 }
+
+                // Reset threat predictor
+                ThreatPredictor tp = bot.getThreatPredictor();
+                if (tp != null) {
+                    tp.reset();
+                }
+
+                // [FIX] Trigger initial LLM consult at game start for strategic planning
+                LLMManager llmManager = plugin.getLLMManager();
+                if (llmManager != null && llmManager.isAvailable()) {
+                    // Delayed slightly to allow context to populate
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                        if (bot.isAlive()) {
+                            llmManager.requestStrategicAdvice(bot);
+                        }
+                    }, 40L);
+                }
+
             } catch (Exception e) {
                 plugin.getLogger().log(Level.WARNING,
                         "Error notifying bot of game start: " + bot.getName(), e);
@@ -86,16 +98,6 @@ public class GameEventListener implements Listener {
         }
     }
 
-    /**
-     * Called when a SkyWars game ends.
-     *
-     * <p>[FIX 2.4] The winner check is now computed once into a {@code boolean won}
-     * variable, then used for both the profile/chat update and the learning engine call.
-     * Previously it was duplicated.</p>
-     *
-     * <p>[FIX 6.3] Call bot.getProfile().addGameForLearning() when the learning engine
-     * processes the game result.</p>
-     */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onGameEnd(SkyWarsGameEndEvent event) {
         SkyWarsServer server = event.getServer();
@@ -110,7 +112,6 @@ public class GameEventListener implements Listener {
 
         for (TrainerBot bot : bots) {
             try {
-                // [FIX 2.4] Compute winner status once
                 boolean won = false;
                 if (event.hasWinner() && event.getWinnerTeam() != null) {
                     Player botPlayer = bot.getPlayerEntity();
@@ -119,25 +120,20 @@ public class GameEventListener implements Listener {
                     }
                 }
 
-                // Profile and chat update
                 if (won) {
                     bot.getProfile().addGameWon();
                     BotChatManager.sendChatMessage(bot, "win");
                 }
 
-                // Learning engine notification
                 LearningEngine lm = bot.getLearningEngine();
                 if (lm != null) {
                     lm.onGameEnd(won, bot.getProfile().getKills(), bot.getProfile().getDeaths(), 1.0);
-                    // [FIX 6.3] Increment learning game counter
                     bot.getProfile().addGameForLearning();
+                }
 
-                    // Reset threat predictor
-                    ThreatPredictor tp = bot.getThreatPredictor();
-                    if (tp != null) {
-                        tp.reset();
-                    }
-
+                ThreatPredictor tp = bot.getThreatPredictor();
+                if (tp != null) {
+                    tp.reset();
                 }
 
                 plugin.getBotManager().removeBot(bot);
@@ -148,13 +144,6 @@ public class GameEventListener implements Listener {
         }
     }
 
-    /**
-     * Called when a player dies in LostSkyWars.
-     *
-     * <p>[FIX 2.3] The "first_kill" chat message now only fires when
-     * {@code killerBot.getProfile().getKills() == 1} (after addKill()).
-     * Subsequent kills send a "kill" message type instead.</p>
-     */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerDeath(SkyWarsPlayerDeathEvent event) {
         SkyWarsServer server = event.getServer();
@@ -190,7 +179,6 @@ public class GameEventListener implements Listener {
             if (killerBot != null) {
                 killerBot.getProfile().addKill();
 
-                // [FIX 2.3] Only send "first_kill" for the actual first kill
                 if (killerBot.getProfile().getKills() == 1) {
                     BotChatManager.sendChatMessage(killerBot, "first_kill");
                 } else {
@@ -201,6 +189,13 @@ public class GameEventListener implements Listener {
                 if (lmKiller != null) {
                     lmKiller.onSignificantEvent("kill", 1.0);
                 }
+
+                // [FIX] Notify killer bot's strategy planner of kill
+                StrategyPlanner killerSP = killerBot.getStrategyPlanner();
+                if (killerSP != null) {
+                    killerSP.onSignificantEvent("kill");
+                }
+
                 Bukkit.getPluginManager().callEvent(
                         new org.twightlight.skywarstrainer.api.events.BotKillPlayerEvent(killerBot, dead));
             }
@@ -212,13 +207,11 @@ public class GameEventListener implements Listener {
             if (de != null) {
                 de.triggerInterrupt();
             }
-            // Notify strategy planner of player count change
             StrategyPlanner sp = bot.getStrategyPlanner();
             if (sp != null) {
                 sp.onSignificantEvent("player_death");
             }
         }
-
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -246,6 +239,11 @@ public class GameEventListener implements Listener {
             if (de != null) {
                 de.triggerInterrupt();
             }
+            // [FIX] Player quitting is same as player dying for strategy purposes
+            StrategyPlanner sp = bot.getStrategyPlanner();
+            if (sp != null) {
+                sp.onSignificantEvent("player_death");
+            }
         }
     }
 
@@ -263,6 +261,11 @@ public class GameEventListener implements Listener {
             if (de != null) {
                 de.triggerInterrupt();
             }
+            // [FIX] Chest refill is a significant event for strategy
+            StrategyPlanner sp = bot.getStrategyPlanner();
+            if (sp != null) {
+                sp.onSignificantEvent("chest_refill");
+            }
         }
     }
 
@@ -276,6 +279,11 @@ public class GameEventListener implements Listener {
             DecisionEngine de = bot.getDecisionEngine();
             if (de != null) {
                 de.triggerInterrupt();
+            }
+            // [FIX] Doom event is a game phase change — re-plan
+            StrategyPlanner sp = bot.getStrategyPlanner();
+            if (sp != null) {
+                sp.onSignificantEvent("phase_change");
             }
         }
     }
@@ -309,10 +317,28 @@ public class GameEventListener implements Listener {
                     if (lmVictim != null) {
                         lmVictim.onSignificantEvent("health_lost", event.getDamage() / 2.0);
                     }
+
+                    // [FIX] Feed damage events to ThreatPredictor for velocity tracking
+                    ThreatPredictor tp = victimBot.getThreatPredictor();
+                    if (tp != null && attackerEntity != null) {
+                        tp.onBotDamaged(attackerEntity);
+                    }
                 }
                 DecisionEngine de = victimBot.getDecisionEngine();
                 if (de != null) {
                     de.triggerInterrupt();
+                }
+
+                // [FIX] Check for health_critical event to trigger strategy re-plan
+                LivingEntity victimEntity = victimBot.getLivingEntity();
+                if (victimEntity != null) {
+                    double healthFrac = victimEntity.getHealth() / victimEntity.getMaxHealth();
+                    if (healthFrac < 0.2) {
+                        StrategyPlanner sp = victimBot.getStrategyPlanner();
+                        if (sp != null) {
+                            sp.onSignificantEvent("health_critical");
+                        }
+                    }
                 }
             }
         }

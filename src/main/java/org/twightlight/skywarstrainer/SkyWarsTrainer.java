@@ -57,7 +57,7 @@ public final class SkyWarsTrainer extends JavaPlugin {
         }
 
         // 1.2. Validate SkyWars
-        if (!validateCitizens()) {
+        if (!validateSkyWars()) {
             getLogger().severe("LostSkyWars plugin not found or not enabled! SkyWarsTrainer requires LostSkyWars.");
             Bukkit.getPluginManager().disablePlugin(this);
             return;
@@ -155,8 +155,16 @@ public final class SkyWarsTrainer extends JavaPlugin {
     public void onDisable() {
         if (botManager != null) {
             int removed = botManager.removeAllBots();
-            learningManager.shutdown();
             getLogger().info("Removed " + removed + " active bot(s).");
+        }
+
+        if (learningManager != null) {
+            learningManager.shutdown();
+        }
+
+        // [FIX] Shut down LLM Manager — cancel async tasks, clean up HTTP client
+        if (llmManager != null) {
+            llmManager.shutdown();
         }
 
         // Clear chat manager cooldowns
@@ -180,7 +188,7 @@ public final class SkyWarsTrainer extends JavaPlugin {
     }
 
     private boolean validateSkyWars() {
-        return  (Bukkit.getPluginManager().getPlugin("LostSkyWars") != null);
+        return (Bukkit.getPluginManager().getPlugin("LostSkyWars") != null);
     }
 
     // ─── Accessors ──────────────────────────────────────────────

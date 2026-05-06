@@ -286,4 +286,16 @@ public class ElevationHandler {
         }
         return -1;
     }
+
+    /**
+     * Cancels any active tower-up sequence immediately.
+     * Used when bot state changes (combat, retreat, etc.).
+     */
+    public void cancelTower() {
+        if (towerStepsRemaining > 0) {
+            towerStepsRemaining = 0;
+            towerCooldown = 10; // small cooldown to prevent instant restart
+            DebugLogger.log(bot, "ElevationHandler: Tower sequence cancelled");
+        }
+    }
 }

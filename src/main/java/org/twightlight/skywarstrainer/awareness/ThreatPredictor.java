@@ -236,6 +236,42 @@ public class ThreatPredictor {
         return airCount >= 3; // At least 3 of 4 sides are air → narrow structure
     }
 
+    /**
+     * Called when this bot is damaged by an entity.
+     * Forces immediate tracking + boosts prediction priority for attacker.
+     */
+    public void onBotDamaged(@Nonnull Entity attacker) {
+        if (!(attacker instanceof LivingEntity)) return;
+
+        UUID id = attacker.getUniqueId();
+        Location loc = attacker.getLocation();
+
+        // Get or create history
+        MovementHistory history = histories.get(id);
+        if (history == null) {
+            history = new MovementHistory();
+            histories.put(id, history);
+        }
+
+        // Inject immediate sample (high priority)
+        history.addSample(loc, bot.getLocalTickCount());
+
+        // Force early prediction (even if not enough samples)
+        PredictedBehavior forcedPrediction = new PredictedBehavior(
+                id,
+                PredictedIntent.APPROACHING_BOT,
+                0.9, // high confidence because they literally attacked
+                loc.clone(),
+                bot.getLocalTickCount()
+        );
+
+        predictions.put(id, forcedPrediction);
+
+        // Debug (optional)
+        DebugLogger.log(bot, "ThreatPredictor: Bot damaged by " + id.toString().substring(0, 8)
+                + " → forcing APPROACHING_BOT prediction");
+    }
+
     // ─── Lifecycle ──────────────────────────────────────────────
 
     /**
