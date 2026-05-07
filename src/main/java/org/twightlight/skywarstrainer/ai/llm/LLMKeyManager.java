@@ -63,7 +63,6 @@ public class LLMKeyManager {
 
             if (entry.permanentlyDead) continue;
             if (entry.cooldownUntil > now) continue;
-
             return entry.key;
         }
 
