@@ -39,14 +39,9 @@
 
     <dependencies>
 
-        <!--
-            Spigot server with NMS classes.
-            Required for net.minecraft.server.v1_8_R3 access (knockback, packets, etc.).
-            Must be installed locally via BuildTools: java -jar BuildTools.jar &#45;&#45;rev 1.8.8
-        -->
         <dependency>
-            <groupId>org.bukkit</groupId>
-            <artifactId>craftbukkit</artifactId>
+            <groupId>org.spigotmc</groupId>
+            <artifactId>spigot</artifactId>
             <version>1.8.8-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
@@ -66,7 +61,6 @@
             <type>jar</type>
             <scope>provided</scope>
         </dependency>
-        <!-- ADD inside <dependencies> in pom.xml, after the LostSkyWars dependency -->
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>

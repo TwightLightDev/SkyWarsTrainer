@@ -17,7 +17,7 @@ import java.util.Map;
  *
  * <p>Subcommands:
  * spawn, remove, list, difficulty, personality, stats, debug,
- * preset, fill, pause, teleport, test, reload</p>
+ * preset, fill, pause, teleport, test, validatekeys, reload</p>
  */
 public class CommandHandler implements CommandExecutor {
 
@@ -53,6 +53,7 @@ public class CommandHandler implements CommandExecutor {
         subCommands.put("teleport", new TeleportCommand(plugin));
         subCommands.put("tp", new TeleportCommand(plugin));
         subCommands.put("test", new TestCommand(plugin));
+        subCommands.put("validatekeys", new ValidateKeysCommand(plugin));
         subCommands.put("reload", new ReloadCommand(plugin));
         subCommands.put("help", new HelpCommand(plugin, subCommands));
         subCommands.put("debugtoggle", new DebugToggleCommand());
@@ -99,12 +100,12 @@ public class CommandHandler implements CommandExecutor {
      * Sends the help overview to the sender.
      */
     private void sendHelp(CommandSender sender) {
-        sender.sendMessage(ChatColor.GOLD + "━━━ SkyWarsTrainer v" + plugin.getDescription().getVersion() + " ━━━");
-        sender.sendMessage(ChatColor.YELLOW + "/swt help" + ChatColor.GRAY + " — Show all commands");
-        sender.sendMessage(ChatColor.YELLOW + "/swt spawn <difficulty> [personalities] [name]" + ChatColor.GRAY + " — Spawn a bot");
-        sender.sendMessage(ChatColor.YELLOW + "/swt remove <name|all>" + ChatColor.GRAY + " — Remove bots");
-        sender.sendMessage(ChatColor.YELLOW + "/swt list" + ChatColor.GRAY + " — List active bots");
-        sender.sendMessage(ChatColor.GOLD + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        sender.sendMessage(ChatColor.GOLD + "\u2501\u2501\u2501 SkyWarsTrainer v" + plugin.getDescription().getVersion() + " \u2501\u2501\u2501");
+        sender.sendMessage(ChatColor.YELLOW + "/swt help" + ChatColor.GRAY + " \u2014 Show all commands");
+        sender.sendMessage(ChatColor.YELLOW + "/swt spawn <difficulty> [personalities] [name]" + ChatColor.GRAY + " \u2014 Spawn a bot");
+        sender.sendMessage(ChatColor.YELLOW + "/swt remove <name|all>" + ChatColor.GRAY + " \u2014 Remove bots");
+        sender.sendMessage(ChatColor.YELLOW + "/swt list" + ChatColor.GRAY + " \u2014 List active bots");
+        sender.sendMessage(ChatColor.GOLD + "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501");
     }
 
     /**

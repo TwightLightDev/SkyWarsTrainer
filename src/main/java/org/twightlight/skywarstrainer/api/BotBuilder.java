@@ -1,8 +1,8 @@
 package org.twightlight.skywarstrainer.api;
 
-import org.bukkit.Location;
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.personality.Personality;
+import org.twightlight.skywarstrainer.bot.BotManager;
 import org.twightlight.skywarstrainer.bot.TrainerBot;
 import org.twightlight.skywarstrainer.config.DifficultyConfig.Difficulty;
 
@@ -13,22 +13,24 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Fluent API for building and spawning trainer bots programmatically.
+ * Fluent API for spawning trainer bots programmatically.
  *
  * <p>Example:
  * <pre>
  * TrainerBot bot = new BotBuilder()
  *     .arena(myArena)
- *     .name("PracticeBot_1")
  *     .difficulty(Difficulty.HARD)
  *     .personality(Personality.AGGRESSIVE, Personality.STRATEGIC)
  *     .skin("Technoblade")
- *     .spawnLocation(location)
+ *     .name("PracticeBot_1")
  *     .build();
  * </pre></p>
  *
- * <p>Note: The arena parameter is required. If not set, the builder will
- * throw an IllegalStateException on build().</p>
+ * <p>The {@code spawnLocation} setter has been removed: there is no
+ * caller-controlled location anymore. Bots join the arena via
+ * {@code Arena.connect}, which places them in a free team's cage. The arena
+ * is required; if it isn't a 1-per-team mode (Solo / 1v1), {@code build()}
+ * returns null.</p>
  */
 public class BotBuilder {
 
@@ -36,83 +38,41 @@ public class BotBuilder {
     private Difficulty difficulty = Difficulty.MEDIUM;
     private final List<String> personalities = new ArrayList<>();
     private String skin;
-    private Location spawnLocation;
     private org.twightlight.skywars.arena.Arena<?> arena;
 
-    /**
-     * Creates a new BotBuilder with default settings.
-     */
     public BotBuilder() {
     }
 
-    /**
-     * Sets the arena for this bot. Required.
-     *
-     * @param arena the arena this bot participates in
-     * @return this builder
-     */
     @Nonnull
     public BotBuilder arena(@Nonnull org.twightlight.skywars.arena.Arena<?> arena) {
         this.arena = arena;
         return this;
     }
 
-    /**
-     * Sets the bot's display name.
-     *
-     * @param name the display name
-     * @return this builder
-     */
     @Nonnull
     public BotBuilder name(@Nonnull String name) {
         this.name = name;
         return this;
     }
 
-    /**
-     * Sets the bot's difficulty level.
-     *
-     * @param difficulty the difficulty
-     * @return this builder
-     */
     @Nonnull
     public BotBuilder difficulty(@Nonnull Difficulty difficulty) {
         this.difficulty = difficulty;
         return this;
     }
 
-    /**
-     * Adds personalities to the bot.
-     *
-     * @param personalities the personalities to add
-     * @return this builder
-     */
     @Nonnull
     public BotBuilder personality(@Nonnull Personality... personalities) {
-        for (Personality p : personalities) {
-            this.personalities.add(p.name());
-        }
+        for (Personality p : personalities) this.personalities.add(p.name());
         return this;
     }
 
-    /**
-     * Adds personality names to the bot.
-     *
-     * @param personalityNames the personality names
-     * @return this builder
-     */
     @Nonnull
     public BotBuilder personality(@Nonnull String... personalityNames) {
         this.personalities.addAll(Arrays.asList(personalityNames));
         return this;
     }
 
-    /**
-     * Sets the skin username for the bot.
-     *
-     * @param skinUsername the Minecraft username to use as skin
-     * @return this builder
-     */
     @Nonnull
     public BotBuilder skin(@Nonnull String skinUsername) {
         this.skin = skinUsername;
@@ -120,28 +80,15 @@ public class BotBuilder {
     }
 
     /**
-     * Sets the spawn location for the bot.
+     * Builds and spawns the bot.
      *
-     * @param location the spawn location
-     * @return this builder
-     */
-    @Nonnull
-    public BotBuilder spawnLocation(@Nonnull Location location) {
-        this.spawnLocation = location;
-        return this;
-    }
-
-    /**
-     * Builds and spawns the bot with the configured settings.
-     *
-     * @return the spawned TrainerBot, or null if spawning failed
-     * @throws IllegalStateException if spawn location or arena is not set
+     * @return the spawned TrainerBot, or null if:
+     *         the arena isn't a 1-per-team mode, the arena has no free team
+     *         seats, or the spawn failed for any other reason
+     * @throws IllegalStateException if arena was never set
      */
     @Nullable
     public TrainerBot build() {
-        if (spawnLocation == null) {
-            throw new IllegalStateException("Spawn location must be set before building a bot.");
-        }
         if (arena == null) {
             throw new IllegalStateException("Arena must be set before building a bot. Use .arena(myArena).");
         }
@@ -151,12 +98,20 @@ public class BotBuilder {
             throw new IllegalStateException("SkyWarsTrainer plugin is not enabled.");
         }
 
-        return plugin.getBotManager().spawnBot(
-                arena,
-                spawnLocation,
-                difficulty,
-                personalities,
-                name
-        );
+        if (!BotManager.isSoloMode(arena)) {
+            plugin.getLogger().warning("BotBuilder: refused to spawn — arena '"
+                    + arena.getServerName() + "' is not a 1-per-team mode.");
+            return null;
+        }
+        if (BotManager.countAvailableSeats(arena) <= 0) {
+            plugin.getLogger().warning("BotBuilder: refused to spawn — arena '"
+                    + arena.getServerName() + "' has no free team seats.");
+            return null;
+        }
+
+        // Note: skin is currently informational — BotSkin generation in
+        // BotManager keys off difficulty + personalities. If you need a
+        // specific skin, set name() to that username (BotSkin.withName uses it).
+        return plugin.getBotManager().spawnBot(arena, difficulty, personalities, name);
     }
 }

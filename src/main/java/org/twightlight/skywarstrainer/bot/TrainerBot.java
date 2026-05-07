@@ -57,6 +57,10 @@ import java.util.logging.Level;
  */
 public class TrainerBot {
 
+    private BotAccount botAccount;
+
+    private UUID npcUuid;
+
     private final SkyWarsTrainer plugin;
     private final Arena<?> arena;
     private final UUID botId;
@@ -158,14 +162,6 @@ public class TrainerBot {
     }
 
     // ─── Lifecycle ──────────────────────────────────────────────
-
-    /**
-     * Spawns the bot's NPC at the given location, creates the Citizens NPC,
-     * applies skin, registers the trait, and initializes ALL subsystems.
-     *
-     * @param location the location to spawn at
-     * @return true if spawning succeeded
-     */
     public boolean spawn(@Nonnull Location location) {
         if (destroyed) {
             plugin.getLogger().warning("Cannot spawn a destroyed bot: " + skin.getDisplayName());
@@ -184,13 +180,17 @@ public class TrainerBot {
             npc.addTrait(new SkyWarsTrainerTrait(this));
             npc.spawn(location);
 
+            if (npc.getEntity() != null) {
+                this.npcUuid = npc.getEntity().getUniqueId();
+            }
+
             initializeAllSubsystems();
             initialized = true;
 
             if (plugin.getConfigManager().isDebugMode()) {
-                plugin.getLogger().info("[DEBUG] Bot spawned: " + skin.getDisplayName()
-                        + " at " + formatLocation(location)
-                        + " (" + profile.getDifficulty().name() + ")");
+                plugin.getLogger().info("[DEBUG] Bot NPC spawned: " + skin.getDisplayName()
+                        + " at cache loc " + formatLocation(location)
+                        + " (Arena.connect will teleport to team cage)");
             }
 
             return true;
@@ -204,6 +204,7 @@ public class TrainerBot {
             return false;
         }
     }
+
 
     /**
      * Initializes ALL subsystems in the correct dependency order.
@@ -994,20 +995,42 @@ public class TrainerBot {
         destroyed = true;
         initialized = false;
 
-        // Disengage combat if active
+        // Disengage subsystems that hold targets / placed blocks
         if (combatEngine != null && combatEngine.isActive()) {
             combatEngine.disengage();
         }
-
-        // Stop bridge if active
         if (bridgeEngine != null && bridgeEngine.isActive()) {
             bridgeEngine.stopBridge();
         }
 
         // Clear chat cooldowns for this bot
-        BotChatManager.clearCooldown(botId);
+        org.twightlight.skywarstrainer.game.BotChatManager.clearCooldown(botId);
 
-        // Clear subsystem references
+        // ─── 1. Pull the BotAccount out of the arena ─────────────────
+        if (botAccount != null && arena != null) {
+            try {
+                if (botAccount.getServer() != null && botAccount.getServer().equals(arena)) {
+                    arena.disconnect(botAccount);
+                }
+            } catch (Exception e) {
+                plugin.getLogger().log(Level.WARNING,
+                        "Arena.disconnect threw while destroying bot " + getName(), e);
+            }
+        }
+
+        // ─── 2. Evict from the Account cache ─────────────────────────
+        // Same map Database.getAccount(uuid) reads from. After this, the
+        // BotAccount instance is unreachable from any LSW code path.
+        if (npcUuid != null) {
+            try {
+                org.twightlight.skywars.database.Database.getInstance().uncacheAccount(npcUuid);
+            } catch (Exception e) {
+                plugin.getLogger().log(Level.WARNING,
+                        "Database.uncacheAccount threw while destroying bot " + getName(), e);
+            }
+        }
+
+        // ─── 3. Clear subsystem references ───────────────────────────
         movementController = null;
         mapScanner = null;
         threatMap = null;
@@ -1033,7 +1056,9 @@ public class TrainerBot {
         threatPredictor = null;
         survivalGuard = null;
         elevationHandler = null;
+        botAccount = null;
 
+        // ─── 4. NPC despawn ─────────────────────────────────────────
         if (npc != null) {
             if (npc.isSpawned()) {
                 npc.despawn();
@@ -1042,6 +1067,7 @@ public class TrainerBot {
             npc = null;
         }
 
+        // ─── 5. Fire the despawn event last ─────────────────────────
         Bukkit.getPluginManager().callEvent(
                 new org.twightlight.skywarstrainer.api.events.BotDespawnEvent(this));
 
@@ -1049,6 +1075,7 @@ public class TrainerBot {
             plugin.getLogger().info("[DEBUG] Bot destroyed: " + skin.getDisplayName());
         }
     }
+
 
     /**
      * Returns true if this bot is alive.
@@ -1423,6 +1450,32 @@ public class TrainerBot {
 
     @Nonnull public UUID getBotId() { return botId; }
     @Nullable public NPC getNpc() { return npc; }
+    /**
+     * @return the cached NPC entity UUID (set during {@link #spawn(Location)}),
+     *         or null if the bot has never been spawned. This is the UUID
+     *         under which the {@link BotAccount} is keyed in the Account cache.
+     */
+    @Nullable
+    public UUID getNpcUuid() {
+        if (npcUuid != null) return npcUuid;
+        // Fallback: derive it on-demand if spawn captured but field somehow null
+        if (npc != null && npc.getEntity() != null) {
+            return npc.getEntity().getUniqueId();
+        }
+        return null;
+    }
+
+    /** @return the RAM-only BotAccount backing this bot, or null before spawn. */
+    @Nullable
+    public BotAccount getBotAccount() {
+        return botAccount;
+    }
+
+    /** Set by {@link BotManager} immediately after the BotAccount is cached. */
+    public void setBotAccount(@Nullable BotAccount botAccount) {
+        this.botAccount = botAccount;
+    }
+
     @Nonnull public Arena<?> getArena() { return arena; }
     @Nonnull public BotProfile getProfile() { return profile; }
     @Nonnull public BotSkin getSkin() { return skin; }

@@ -2,7 +2,10 @@ package org.twightlight.skywarstrainer.bot;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.twightlight.skywars.api.server.SkyWarsTeam;
 import org.twightlight.skywars.arena.Arena;
+import org.twightlight.skywars.arena.ui.enums.SkyWarsMode;
+import org.twightlight.skywars.database.Database;
 import org.twightlight.skywarstrainer.SkyWarsTrainer;
 import org.twightlight.skywarstrainer.ai.personality.Personality;
 import org.twightlight.skywarstrainer.ai.personality.PersonalityConflictTable;
@@ -19,30 +22,54 @@ import java.util.logging.Level;
 import java.util.stream.Collectors;
 
 /**
- * Manages the lifecycle of all trainer bots: creation, spawning, despawning,
- * tick distribution, and cleanup.
+ * Lifecycle manager for trainer bots. The single entry point external code
+ * (commands, API, tests) uses to spawn and remove bots.
  *
- * <p>BotManager is the single entry point for bot operations. External systems
- * (commands, API, game hooks) call BotManager to spawn and remove bots.</p>
+ * <p><b>What spawn does</b> (re-designed — no more passing arbitrary locations
+ * around, no more "11 bots in a single block"):</p>
+ * <ol>
+ *   <li>Validates the arena's mode is 1-per-team (Solo / 1v1 modes only).
+ *       Other modes are soft-locked until the team-update lands.</li>
+ *   <li>Creates the Citizens NPC at the arena world's origin (a throwaway
+ *       cache location). The NPC is invisible to players for the few ticks
+ *       between creation and Arena.connect's teleport.</li>
+ *   <li>Builds a {@link BotAccount} (which, in its own constructor, randomizes
+ *       all cosmetic slots).</li>
+ *   <li>Calls {@code Database.getInstance().cacheAccount(botAccount)} — from
+ *       now on every {@code Database.getAccount(npcUuid)} resolves to it.</li>
+ *   <li>Calls {@code arena.connect(botAccount)} — LSW picks the team, builds
+ *       the cage, teleports the NPC, broadcasts the join, sets up cosmetics,
+ *       all of it. There is nothing for us to re-implement.</li>
+ * </ol>
+ *
+ * <p><b>What destroy does:</b></p>
+ * <ol>
+ *   <li>Calls {@code arena.disconnect(botAccount)} so LSW can clean up the
+ *       team / cage / scoreboard slot.</li>
+ *   <li>Calls {@code Database.getInstance().uncacheAccount(npcUuid)} —
+ *       BotAccount is gone, no SQL row was ever written.</li>
+ *   <li>Despawns and destroys the Citizens NPC.</li>
+ * </ol>
  */
 public class BotManager {
 
     private final SkyWarsTrainer plugin;
 
-    /** All active bots, keyed by their unique bot ID. */
+    /**
+     * Active bots keyed by their internal bot ID (NOT the NPC entity UUID).
+     */
     private final Map<UUID, TrainerBot> activeBots;
 
-    /** Index of bots by display name for quick lookups via commands. */
+    /**
+     * Index of bots by display name for quick command lookups.
+     */
     private final Map<String, TrainerBot> botsByName;
 
-    /** Counter for assigning stagger offsets to new bots. */
+    /**
+     * Counter for assigning stagger offsets to new bots.
+     */
     private int staggerCounter;
 
-    /**
-     * Creates a new BotManager.
-     *
-     * @param plugin the owning plugin instance
-     */
     public BotManager(@Nonnull SkyWarsTrainer plugin) {
         this.plugin = plugin;
         this.activeBots = new ConcurrentHashMap<>();
@@ -53,36 +80,53 @@ public class BotManager {
     // ─── Spawning ───────────────────────────────────────────────
 
     /**
-     * Spawns a new trainer bot at the given location with the specified settings.
+     * Spawns a single trainer bot into {@code arena}. Arena.connect handles
+     * cage placement, team picking, teleport, broadcast, kit, cosmetics.
      *
-     * @param arena         the arena this bot belongs to
-     * @param location      the spawn location
-     * @param difficulty    the difficulty level
-     * @param personalities optional personality names (may be empty)
-     * @param name          the bot display name, or null for random generation
-     * @return the spawned TrainerBot, or null if spawning failed
+     * @param arena         the arena to join (must be in a 1-per-team mode)
+     * @param difficulty    difficulty preset
+     * @param personalities optional personality names (if empty, randomized)
+     * @param name          optional display name (if null, generated from skin)
+     * @return the spawned TrainerBot, or null if spawning was refused or failed
      */
     @Nullable
-    public TrainerBot spawnBot(@Nonnull Arena<?> arena, @Nonnull Location location,
+    public TrainerBot spawnBot(@Nonnull Arena<?> arena,
                                @Nonnull Difficulty difficulty,
-                               @Nonnull List<String> personalities, @Nullable String name) {
+                               @Nonnull List<String> personalities,
+                               @Nullable String name) {
+        // ── 0. Mode soft-lock ──────────────────────────────────────
+        if (!isSoloMode(arena)) {
+            plugin.getLogger().warning("Refusing to spawn bot in arena '"
+                    + arena.getServerName() + "': mode "
+                    + (arena.getMode() != null ? arena.getMode().name() : "?")
+                    + " has team size "
+                    + (arena.getMode() != null ? arena.getMode().getTeamSize() : -1)
+                    + ", bots only support 1-per-team modes for now.");
+            return null;
+        }
+
+        // ── 1. Capacity ────────────────────────────────────────────
         int maxBots = plugin.getConfigManager().getMaxBotsPerGame();
-        if (activeBots.size() >= maxBots) {
+        if (getBotsInArena(arena).size() >= maxBots) {
             plugin.getLogger().warning("Cannot spawn bot: maximum bot limit reached (" + maxBots + ").");
             return null;
         }
 
-        DifficultyProfile difficultyProfile = plugin.getDifficultyConfig().getProfile(difficulty);
+        // Refuse if there's no room left in the arena (no team can fit one more).
+        if (countAvailableSeats(arena) <= 0) {
+            plugin.getLogger().warning("Cannot spawn bot in arena '" + arena.getServerName()
+                    + "': no available team seats.");
+            return null;
+        }
 
+        // ── 2. Profile + skin ──────────────────────────────────────
+        DifficultyProfile difficultyProfile = plugin.getDifficultyConfig().getProfile(difficulty);
         BotProfile profile = new BotProfile(difficulty, difficultyProfile);
 
-        // [FIX 1.5] If no personalities were specified, generate random ones.
-        // This makes every bot unique by default while still allowing explicit specification.
         List<String> resolvedPersonalities = personalities;
         if (resolvedPersonalities == null || resolvedPersonalities.isEmpty()) {
             resolvedPersonalities = generateRandomPersonalities();
         }
-
         for (String personality : resolvedPersonalities) {
             profile.addPersonality(personality);
         }
@@ -100,33 +144,71 @@ public class BotManager {
             skin = new BotSkin(skin.getSkinName(), displayName);
         }
 
+        // ── 3. Bot wrapper + Citizens NPC ──────────────────────────
         TrainerBot bot = new TrainerBot(plugin, arena, profile, skin);
         bot.setStaggerOffset(staggerCounter);
         staggerCounter++;
+        if (staggerCounter >= Integer.MAX_VALUE / 2) staggerCounter = 0;
 
-        // [FIX 6.7] Reset staggerCounter to prevent negative modulo from int overflow
-        if (staggerCounter >= Integer.MAX_VALUE / 2) {
-            staggerCounter = 0;
-        }
-
-        if (!bot.spawn(location)) {
-            plugin.getLogger().warning("Failed to spawn bot: " + displayName);
+        // Spawn the NPC at a throwaway cache location in the arena world.
+        // Arena.connect will teleport it to the team cage in the same tick.
+        Location cacheLocation = pickCacheLocation(arena);
+        if (cacheLocation == null) {
+            plugin.getLogger().warning("Cannot spawn bot in arena '" + arena.getServerName()
+                    + "': arena world is null.");
             return null;
         }
 
-        // Fire BotSpawnEvent
+        if (!bot.spawn(cacheLocation)) {
+            plugin.getLogger().warning("Failed to spawn bot NPC: " + displayName);
+            return null;
+        }
+
+        UUID npcUuid = bot.getNpcUuid();
+        if (npcUuid == null) {
+            plugin.getLogger().warning("NPC entity has no UUID after spawn — aborting: " + displayName);
+            bot.destroy();
+            return null;
+        }
+
+        BotAccount botAccount = new BotAccount(bot, npcUuid, displayName);
+        bot.setBotAccount(botAccount);
+
+        Database.getInstance().cacheAccount(botAccount);
+
+        try {
+            arena.connect(botAccount);
+        } catch (Exception e) {
+            plugin.getLogger().log(Level.SEVERE, "Arena.connect threw for bot " + displayName, e);
+            Database.getInstance().uncacheAccount(npcUuid);
+            bot.destroy();
+            return null;
+        }
+
+        if (botAccount.getServer() == null || !botAccount.getServer().equals(arena)) {
+            plugin.getLogger().warning("Arena.connect did not seat bot " + displayName
+                    + " (probably the arena rejected the join). Cleaning up.");
+            Database.getInstance().uncacheAccount(npcUuid);
+            bot.destroy();
+            return null;
+        }
         org.twightlight.skywarstrainer.api.events.BotSpawnEvent spawnEvent =
-                new org.twightlight.skywarstrainer.api.events.BotSpawnEvent(bot, location);
+                new org.twightlight.skywarstrainer.api.events.BotSpawnEvent(bot, bot.getLocation());
         Bukkit.getPluginManager().callEvent(spawnEvent);
         if (spawnEvent.isCancelled()) {
+            // The event listener vetoed — undo everything we just did.
+            try {
+                arena.disconnect(botAccount);
+            } catch (Exception ignored) {
+            }
+            Database.getInstance().uncacheAccount(npcUuid);
             bot.destroy();
             return null;
         }
 
         SkyWarsTrainer pluginRef = SkyWarsTrainer.getInstance();
         if (pluginRef != null && pluginRef.getApi() != null) {
-            org.twightlight.skywarstrainer.api.SkyWarsTrainerAPI api = pluginRef.getApi();
-            api.applyPendingRegistrations(bot);
+            pluginRef.getApi().applyPendingRegistrations(bot);
         }
 
         activeBots.put(bot.getBotId(), bot);
@@ -134,44 +216,25 @@ public class BotManager {
 
         plugin.getLogger().info("Spawned bot: " + displayName
                 + " [" + difficulty.name() + "] "
-                + (resolvedPersonalities.isEmpty() ? "(no personalities)" : resolvedPersonalities));
+                + (resolvedPersonalities.isEmpty() ? "(no personalities)" : resolvedPersonalities)
+                + " in arena " + arena.getServerName());
 
         return bot;
     }
 
     /**
-     * Convenience method: spawns a bot with the default difficulty.
-     *
-     * @param arena    the arena
-     * @param location the spawn location
-     * @return the spawned bot, or null on failure
+     * Convenience: spawn a single bot with the configured default difficulty.
      */
     @Nullable
-    public TrainerBot spawnBot(@Nonnull Arena<?> arena, @Nonnull Location location) {
+    public TrainerBot spawnBot(@Nonnull Arena<?> arena) {
         String defaultDiff = plugin.getConfigManager().getDefaultDifficulty();
         Difficulty difficulty = Difficulty.fromString(defaultDiff);
         if (difficulty == null) difficulty = Difficulty.MEDIUM;
-        return spawnBot(arena, location, difficulty, Collections.emptyList(), null);
+        return spawnBot(arena, difficulty, Collections.emptyList(), null);
     }
-
-    /**
-     * Periodic maintenance: cleans up dead bots. Called by a lightweight
-     * scheduler in the main plugin (NOT for ticking bots — that is handled
-     * by the Citizens Trait).
-     */
-    public void maintenance() {
-        cleanupDeadBots();
-    }
-
 
     // ─── Removal ────────────────────────────────────────────────
 
-    /**
-     * Removes a specific bot by its instance.
-     *
-     * @param bot the bot to remove
-     * @return true if the bot was found and removed
-     */
     public boolean removeBot(@Nonnull TrainerBot bot) {
         TrainerBot removed = activeBots.remove(bot.getBotId());
         if (removed != null) {
@@ -182,25 +245,11 @@ public class BotManager {
         return false;
     }
 
-    /**
-     * Removes a bot by its display name (case-insensitive).
-     *
-     * @param name the bot name
-     * @return true if found and removed
-     */
     public boolean removeBot(@Nonnull String name) {
         TrainerBot bot = botsByName.get(name.toLowerCase());
-        if (bot != null) {
-            return removeBot(bot);
-        }
-        return false;
+        return bot != null && removeBot(bot);
     }
 
-    /**
-     * Removes all active bots.
-     *
-     * @return the number of bots removed
-     */
     public int removeAllBots() {
         int count = activeBots.size();
         for (TrainerBot bot : new ArrayList<>(activeBots.values())) {
@@ -209,39 +258,23 @@ public class BotManager {
         return count;
     }
 
-    // ─── Tick Distribution ──────────────────────────────────────
+    public void maintenance() {
+        cleanupDeadBots();
+    }
 
-    /**
-     * Ticks all active bots within the given time budget.
-     *
-     * <p><strong>WARNING:</strong> Do NOT call this method when Citizens Traits are active.
-     * The Citizens Trait ({@code SkyWarsTrainerTrait.run()}) already calls {@code bot.tick()}
-     * every server tick. Calling this method would double-tick all bots, causing erratic
-     * behavior, doubled combat speed, and doubled movement speed.</p>
-     *
-     * <p>This method exists only for potential future use in non-Citizens tick modes.
-     * It is currently dead code and intentionally never scheduled.</p>
-     *
-     * @param startNanos   System.nanoTime() when this tick started
-     * @param maxMsPerTick maximum milliseconds allowed for bot processing
-     * @deprecated Citizens Traits handle bot ticking. Do not call this method.
-     */
+    // ─── Tick distribution (kept for future non-Citizens mode) ──
+
     @Deprecated
     public void tickAll(long startNanos, long maxMsPerTick) {
         if (activeBots.isEmpty()) return;
-
         long budgetNanos = maxMsPerTick * 1_000_000L;
-
         cleanupDeadBots();
-
         for (TrainerBot bot : activeBots.values()) {
             if (System.nanoTime() - startNanos > budgetNanos) {
                 DebugLogger.logSystem("Tick budget exceeded, deferring remaining bots.");
                 break;
             }
-
             if (bot.isDestroyed() || !bot.isInitialized()) continue;
-
             try {
                 bot.tick();
             } catch (Exception e) {
@@ -250,39 +283,20 @@ public class BotManager {
         }
     }
 
-    /**
-     * Removes bots whose NPC entity has died or is no longer valid.
-     *
-     * <p>[FIX 3.4] Removed the addDeath() call — the authoritative source for death
-     * counting is GameEventListener.onPlayerDeath(). cleanupDeadBots() only handles
-     * removing from maps and destroying the NPC.</p>
-     *
-     * <p>[FIX 6.8] Fire BotDespawnEvent for bots cleaned up this way, since they
-     * don't go through removeBot() which calls destroy() (which fires the event).
-     * We collect dead bots in a separate list, then delegate to removeBot().</p>
-     */
     private void cleanupDeadBots() {
-        // [FIX 6.8] Collect dead bots first, then delegate to removeBot() which fires events
         List<TrainerBot> deadBots = new ArrayList<>();
-
         for (Map.Entry<UUID, TrainerBot> entry : activeBots.entrySet()) {
             TrainerBot bot = entry.getValue();
-
             if (bot.isDestroyed()) {
                 deadBots.add(bot);
                 continue;
             }
-
             if (bot.isInitialized() && !bot.isAlive()) {
-                // [FIX 3.4] Do NOT call bot.getProfile().addDeath() here —
-                // GameEventListener.onPlayerDeath() is the authoritative source.
                 plugin.getLogger().info("Bot died: " + bot.getName());
                 deadBots.add(bot);
             }
         }
-
         for (TrainerBot deadBot : deadBots) {
-            // removeBot() handles: activeBots.remove, botsByName.remove, bot.destroy() (fires BotDespawnEvent)
             activeBots.remove(deadBot.getBotId());
             botsByName.remove(deadBot.getName().toLowerCase());
             if (!deadBot.isDestroyed()) {
@@ -293,25 +307,13 @@ public class BotManager {
 
     // ─── Queries ────────────────────────────────────────────────
 
-    /**
-     * Returns all bots in a specific arena.
-     *
-     * @param arena the arena to search
-     * @return list of bots in that arena (may be empty, never null)
-     */
     @Nonnull
     public List<TrainerBot> getBotsInArena(@Nonnull Arena<?> arena) {
         return activeBots.values().stream()
-                .filter(bot -> !bot.isDestroyed() && bot.getArena() != null && bot.getArena().equals(arena))
+                .filter(bot -> !bot.isDestroyed() && bot.getArena().equals(arena))
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Returns all bots in the arena identified by its server name.
-     *
-     * @param arenaServerName the arena server name
-     * @return list of bots in that arena
-     */
     @Nonnull
     public List<TrainerBot> getBotsInArena(@Nonnull String arenaServerName) {
         return activeBots.values().stream()
@@ -332,12 +334,6 @@ public class BotManager {
         return activeBots.get(id);
     }
 
-    /**
-     * Returns a bot whose NPC entity matches the given entity UUID.
-     *
-     * @param entityUuid the entity UUID
-     * @return the bot, or null if the entity is not a bot
-     */
     @Nullable
     public TrainerBot getBotByEntityUUID(@Nonnull UUID entityUuid) {
         for (TrainerBot bot : activeBots.values()) {
@@ -349,12 +345,6 @@ public class BotManager {
         return null;
     }
 
-    /**
-     * Checks if a given entity UUID belongs to a trainer bot.
-     *
-     * @param entityUuid the entity UUID to check
-     * @return true if this entity is a trainer bot
-     */
     public boolean isBot(@Nonnull UUID entityUuid) {
         return getBotByEntityUUID(entityUuid) != null;
     }
@@ -373,33 +363,39 @@ public class BotManager {
         return new ArrayList<>(botsByName.keySet());
     }
 
+    // ─── Fill ───────────────────────────────────────────────────
+
     /**
-     * Fills a game with the specified number of bots.
+     * Spawns up to {@code count} bots into the arena, stopping early if the
+     * arena's free seats run out. There is no per-bot location parameter —
+     * each bot is connected via {@code Arena.connect}, so each lands in its
+     * own cage at its own team's spawn. (No more "11 bots in one block".)
      *
-     * @param arena        the arena
-     * @param location     the spawn location (ideally different per bot)
-     * @param count        number of bots to spawn
-     * @param difficulty   the difficulty level
-     * @param personalities optional personality names
-     * @return the number of bots successfully spawned
+     * @return number of bots actually spawned
      */
-    public int fillWithBots(@Nonnull Arena<?> arena, @Nonnull Location location, int count,
+    public int fillWithBots(@Nonnull Arena<?> arena, int count,
                             @Nonnull Difficulty difficulty,
                             @Nonnull List<String> personalities) {
+        if (!isSoloMode(arena)) {
+            plugin.getLogger().warning("Refusing fill in arena '" + arena.getServerName()
+                    + "': only 1-per-team modes are supported for now.");
+            return 0;
+        }
+
         int spawned = 0;
         for (int i = 0; i < count; i++) {
-            TrainerBot bot = spawnBot(arena, location, difficulty, personalities, null);
+            if (countAvailableSeats(arena) <= 0) {
+                plugin.getLogger().info("Fill stopped: arena " + arena.getServerName() + " is full.");
+                break;
+            }
+            TrainerBot bot = spawnBot(arena, difficulty, personalities, null);
             if (bot != null) spawned++;
         }
-        plugin.getLogger().info("Filled game with " + spawned + "/" + count + " bots.");
+        plugin.getLogger().info("Filled arena " + arena.getServerName()
+                + " with " + spawned + "/" + count + " bots.");
         return spawned;
     }
 
-    /**
-     * Generates a random personality list for a bot with conflict checking.
-     *
-     * @return a list of 1-3 non-conflicting random personality names
-     */
     @Nonnull
     public List<String> generateRandomPersonalities() {
         String[] allPersonalities = {
@@ -418,11 +414,10 @@ public class BotManager {
             String candidate = RandomUtil.randomElement(allPersonalities);
             if (result.contains(candidate)) continue;
 
-            // Check conflicts using PersonalityConflictTable
             boolean conflicts = false;
             for (String existing : result) {
-                if (PersonalityConflictTable
-                        .conflicts(Personality.valueOf(existing) , Personality.valueOf(candidate))) {
+                if (PersonalityConflictTable.conflicts(
+                        Personality.valueOf(existing), Personality.valueOf(candidate))) {
                     conflicts = true;
                     break;
                 }
@@ -432,10 +427,47 @@ public class BotManager {
             }
         }
 
-        if (result.isEmpty()) {
-            result.add("STRATEGIC");
-        }
-
+        if (result.isEmpty()) result.add("STRATEGIC");
         return result;
+    }
+
+    // ─── Helpers ────────────────────────────────────────────────
+
+    /**
+     * @return true if the arena is in a mode where each team holds 1 player
+     * (i.e. SkyWarsMode.SOLO). Other modes are soft-locked until the
+     * team-update lands.
+     */
+    public static boolean isSoloMode(@Nonnull Arena<?> arena) {
+        SkyWarsMode mode = arena.getMode();
+        return mode != null && mode.getTeamSize() == 1;
+    }
+
+    /**
+     * Counts how many team seats are still joinable in the arena. We use the
+     * existing {@code SkyWarsTeam.canJoin(int)} contract — same one
+     * {@code Arena.getAvailableTeam(player)} uses — so we never disagree with
+     * LSW on capacity.
+     */
+    public static int countAvailableSeats(@Nonnull Arena<?> arena) {
+        int seats = 0;
+        for (SkyWarsTeam team : arena.getTeams()) {
+            if (team.canJoin(1)) seats++;
+        }
+        return seats;
+    }
+
+    /**
+     * Returns a throwaway location to give to {@code NPC.spawn}. The NPC is
+     * teleported to its team's cage location by {@code Arena.connect} during
+     * the same tick, so this only matters for the few ticks of overlap.
+     *
+     * <p>We use the arena world's spawn — guaranteed to be loaded and inside
+     * the arena world bounds.</p>
+     */
+    @Nullable
+    private static Location pickCacheLocation(@Nonnull Arena<?> arena) {
+        if (arena.getWorld() == null) return null;
+        return arena.getWorld().getSpawnLocation();
     }
 }

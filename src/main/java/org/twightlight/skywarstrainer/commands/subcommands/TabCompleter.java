@@ -22,7 +22,7 @@ public class TabCompleter implements org.bukkit.command.TabCompleter {
     private static final List<String> SUBCOMMANDS = Arrays.asList(
             "spawn", "remove", "list", "difficulty", "personality",
             "stats", "debug", "fill", "pause", "teleport", "test",
-            "reload", "help", "learning"
+            "validatekeys", "reload", "help", "learning"
     );
 
     private static final List<String> DIFFICULTIES = Arrays.asList(
@@ -43,6 +43,11 @@ public class TabCompleter implements org.bukkit.command.TabCompleter {
     // ── NEW: Learning subcommand completions ──
     private static final List<String> LEARNING_SUBCOMMANDS = Arrays.asList(
             "status", "reset", "debug", "export", "pause", "resume"
+    );
+
+    // ── NEW: Validate keys provider completions ──
+    private static final List<String> PROVIDERS = Arrays.asList(
+            "OPENAI", "GEMINI", "ANTHROPIC", "CEREBRAS", "OPENROUTER"
     );
 
     public TabCompleter(@Nonnull SkyWarsTrainer plugin) {
@@ -124,7 +129,14 @@ public class TabCompleter implements org.bukkit.command.TabCompleter {
                     }
                     break;
 
-                // ── NEW: learning subcommand tab completion ──
+                // ── NEW: validatekeys tab completion ──
+                case "validatekeys":
+                    if (args.length == 2) {
+                        completions.addAll(filterStartsWith(PROVIDERS, partial));
+                    }
+                    break;
+
+                // ── Learning subcommand tab completion ──
                 case "learning":
                     if (args.length == 2) {
                         // /swt learning <subcommand>

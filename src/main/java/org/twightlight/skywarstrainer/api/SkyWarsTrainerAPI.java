@@ -53,21 +53,23 @@ public class SkyWarsTrainerAPI {
 
     @Nullable
     public TrainerBot spawnBot(@Nonnull org.twightlight.skywars.arena.Arena<?> arena,
-                               @Nonnull Location location,
                                @Nonnull Difficulty difficulty,
                                @Nonnull PersonalityProfile profile) {
         return plugin.getBotManager().spawnBot(
-                arena, location, difficulty, profile.toNameList(), null);
+                arena, difficulty, profile.toNameList(), null);
     }
 
     @Nullable
     public TrainerBot spawnBot(@Nonnull org.twightlight.skywars.arena.Arena<?> arena,
-                               @Nonnull Location location,
                                @Nonnull Difficulty difficulty,
                                @Nonnull PersonalityProfile profile,
                                @Nullable String name) {
         return plugin.getBotManager().spawnBot(
-                arena, location, difficulty, profile.toNameList(), name);
+                arena, difficulty, profile.toNameList(), name);
+    }
+
+    public BotBuilder builder() {
+        return new BotBuilder();
     }
 
     public void removeBot(@Nonnull TrainerBot bot) {
